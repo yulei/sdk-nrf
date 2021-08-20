@@ -9,6 +9,23 @@ Changelog
 
 All notable changes to this project are documented in this file.
 
+liblwm2m_carrier 0.21.0
+***********************
+
+Release for modem firmware version 1.3.1
+
+Certification status
+====================
+
+For certification status, see `Mobile network operator certifications`_.
+
+Changes
+=======
+
+* Added modem domain event types.
+* Removed logging from the os glue layer.
+
+
 liblwm2m_carrier 0.20.1
 ***********************
 

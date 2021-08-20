@@ -39,9 +39,9 @@ void lwm2m_carrier_thread_run(void)
 #endif
 
 	err = lwm2m_carrier_init(&config);
-	__ASSERT(err == 0, "Failed to initialize LwM2M carrier library");
 
 	if (err != 0) {
+		printk("Failed to initialize the LwM2M carrier library. Error %d\n", err);
 		return;
 	}
 
