@@ -552,7 +552,7 @@ int lwm2m_carrier_identity_read(uint16_t instance_id, uint16_t identity_type, ch
 int lwm2m_carrier_identity_write(uint16_t instance_id, uint16_t identity_type, const char *value);
 
 /**
- * @brief      Create a new instance of the Portfolio object.
+ * @brief Create a new instance of the Portfolio object.
  *
  * @param[in]  instance_id    The identifier to be used for the new instance.
  *
@@ -563,6 +563,43 @@ int lwm2m_carrier_identity_write(uint16_t instance_id, uint16_t identity_type, c
  */
 int lwm2m_carrier_portfolio_instance_create(uint16_t instance_id);
 
+/**
+ * @brief Set or update the latest location information provided by GPS.
+ *
+ * @param[in]  latitude    Latitude in degrees. Must be between -90.0 and 90.0.
+ * @param[in]  longitude   Longitude in degrees. Must be between -180.0 and 180.0.
+ * @param[in]  altitude    Altitude is meters over sea level.
+ * @param[in]  timestamp   Unix timestamp of the current GPS measurement. Must not be older than
+ *                         the previous timestamp passed to this function.
+ * @param[in]  uncertainty Positioning uncertainty given as a radius in meters.
+ *
+ * @retval  0      If the location data has been updated successfully.
+ * @retval -EINVAL If at least one input argument is incorrect.
+ */
+int lwm2m_carrier_location_set(double latitude, double longitude, float altitude,
+			       uint32_t timestamp, float uncertainty);
+
+/**
+ * @brief Set or update the latest velocity information provided by GPS.
+ *
+ * @note Optional float arguments shall be set to NAN if they are not available to the user.
+ *
+ * @param[in]  heading       Horizontal direction of movement in degrees clockwise from North.
+ *                           Valid range is 0 to 359.
+ * @param[in]  speed_h       Horizontal speed in meters per second. Must be non-negative.
+ * @param[in]  speed_v       Optional. Vertical speed in meters per second. Positive value indicates
+ *                           upward motion. Negative value indicates downward motion.
+ * @param[in]  uncertainty_h Optional. Horizontal uncertainty speed, i.e. maximal deviation from
+ *                           the true speed, given in meters per second. Must be non-negative.
+ * @param[in]  uncertainty_v Optional. Vertical uncertainty speed in meters per second.
+ *                           Must be non-negative.
+ *
+ * @retval  0      If the velocity data has been updated successfully.
+ * @retval -EINVAL If at least one input argument is incorrect.
+ * @retval -ENOMEM If it was not possible to allocate memory storage to hold the velocity data.
+ */
+int lwm2m_carrier_velocity_set(int heading, float speed_h, float speed_v, float uncertainty_h,
+			       float uncertainty_v);
 #ifdef __cplusplus
 }
 #endif

@@ -24,7 +24,9 @@ Changes
 
 * Added modem domain event types.
 * Removed logging from the os glue layer.
-
+* Added the connectivity object.
+* Increased +CEREG notification level from 2 to 4 for the library to receive Active-Time and Periodic-TAU.
+* Added the location object, including the API :c:func:`lwm2m_carrier_location_set` and :c:func:`lwm2m_carrier_velocity_set`.
 
 liblwm2m_carrier 0.20.1
 ***********************
