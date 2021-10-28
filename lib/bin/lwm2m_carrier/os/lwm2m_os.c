@@ -804,9 +804,9 @@ int lwm2m_os_pdn_ctx_destroy(uint8_t cid)
 	return pdn_ctx_destroy(cid);
 }
 
-int lwm2m_os_pdn_activate(uint8_t cid, int *esm)
+int lwm2m_os_pdn_activate(uint8_t cid, int *esm, enum lwm2m_os_pdn_fam *family)
 {
-	return pdn_activate(cid, esm, NULL);
+	return pdn_activate(cid, esm, (enum pdn_fam *)family);
 }
 
 int lwm2m_os_pdn_deactivate(uint8_t cid)
@@ -828,22 +828,6 @@ int lwm2m_os_pdn_default_callback_set(lwm2m_os_pdn_event_handler_t cb)
 {
 	return pdn_default_callback_set((pdn_event_handler_t)cb);
 }
-
-#ifndef ENOKEY
-#define ENOKEY 2001
-#endif
-
-#ifndef EKEYEXPIRED
-#define EKEYEXPIRED 2002
-#endif
-
-#ifndef EKEYREVOKED
-#define EKEYREVOKED 2003
-#endif
-
-#ifndef EKEYREJECTED
-#define EKEYREJECTED 2004
-#endif
 
 /* errno handling. */
 int lwm2m_os_nrf_errno(void)
@@ -911,14 +895,6 @@ int lwm2m_os_nrf_errno(void)
 		return NRF_EINPROGRESS;
 	case ECANCELED:
 		return NRF_ECANCELED;
-	case ENOKEY:
-		return NRF_ENOKEY;
-	case EKEYEXPIRED:
-		return NRF_EKEYEXPIRED;
-	case EKEYREVOKED:
-		return NRF_EKEYREVOKED;
-	case EKEYREJECTED:
-		return NRF_EKEYREJECTED;
 	case EMSGSIZE:
 		return NRF_EMSGSIZE;
 	default:

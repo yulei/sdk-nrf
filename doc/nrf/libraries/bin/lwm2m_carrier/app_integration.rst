@@ -48,17 +48,17 @@ You can provide the initialization parameter :c:type:`lwm2m_carrier_config_t` to
   * Expected to be set during self-testing part of the certification process.
   * This configuration is ignored if :kconfig:`CONFIG_LWM2M_CARRIER_USE_CUSTOM_BOOTSTRAP_URI` is set.
 
-* :kconfig:`CONFIG_LWM2M_CARRIER_USE_CUSTOM_BOOTSTRAP_URI`:
+* :kconfig:`CONFIG_LWM2M_CARRIER_USE_CUSTOM_SERVER_URI`:
 
-  * This configuration, together with :kconfig:`CONFIG_LWM2M_CARRIER_CUSTOM_BOOTSTRAP_URI` lets the LwM2M carrier library connect to a bootstrap server other than the normal carrier server, thereby enabling the generic mode.
+  * This configuration, together with :kconfig:`CONFIG_LWM2M_CARRIER_CUSTOM_SERVER_URI` lets the LwM2M carrier library connect to a bootstrap server other than the normal carrier server, thereby enabling the generic mode.
   * Expected to be set during self-testing, or if the end product is not to be certified with the applicable carriers. See :ref:`lwm2m_certification`.
   * If this configuration is set, :kconfig:`CONFIG_LWM2M_CARRIER_CERTIFICATION_MODE` is ignored.
 
-* :kconfig:`CONFIG_LWM2M_CARRIER_USE_CUSTOM_BOOTSTRAP_PSK`:
+* :kconfig:`CONFIG_LWM2M_CARRIER_USE_CUSTOM_PSK`:
 
-  * This configuration, together with :kconfig:`CONFIG_LWM2M_CARRIER_CUSTOM_BOOTSTRAP_PSK` can be set to use a non-default `Pre-Shared Key (PSK)`_.
+  * This configuration, together with :kconfig:`CONFIG_LWM2M_CARRIER_CUSTOM_PSK` can be set to use a non-default `Pre-Shared Key (PSK)`_.
   * If connecting to the normal carrier device management servers (normal operation), this configuration must not be set unless your carrier explicitly states to use a custom PSK, for example during self-testing.
-  * If the :kconfig:`CONFIG_LWM2M_CARRIER_CUSTOM_BOOTSTRAP_URI` option is set and the server requires a secure connection, a PSK is required.
+  * If the :kconfig:`CONFIG_LWM2M_CARRIER_CUSTOM_SERVER_URI` option is set and the server requires a secure connection, a PSK is required.
 
 * :kconfig:`CONFIG_LWM2M_CARRIER_USE_CUSTOM_APN`:
 

@@ -214,14 +214,20 @@ typedef struct {
  * @brief Structure holding LwM2M carrier library initialization parameters.
  */
 typedef struct {
-	/** URI of the bootstrap server, null-terminated string. */
-	const char *bootstrap_uri;
-	/** Pre-Shared Key for the bootstrap server, null-terminated hexadecimal string. */
+	/** URI of the LwM2M Bootstrap-Server or LwM2M Server, null-terminated string. */
+	const char *server_uri;
+	/** Configure if server_uri is a LwM2M Bootstrap-Server or a standard LwM2M Server. */
+	bool is_bootstrap_server;
+	/** Default server lifetime (in seconds), used when server_uri is a LwM2M Server. */
+	int32_t server_lifetime;
+	/** Pre-Shared Key for the LwM2M Server, null-terminated hexadecimal string. */
 	const char *psk;
 	/** Optional custom APN, null-terminated string. */
 	const char *apn;
 	/** Connect to certification servers if true, connect to production servers otherwise. */
 	bool certification_mode;
+	/** Disable bootstrap from Smartcard mode when this is enabled by the carrier. */
+	bool disable_bootstrap_from_smartcard;
 } lwm2m_carrier_config_t;
 
 /**
@@ -600,6 +606,7 @@ int lwm2m_carrier_location_set(double latitude, double longitude, float altitude
  */
 int lwm2m_carrier_velocity_set(int heading, float speed_h, float speed_v, float uncertainty_h,
 			       float uncertainty_v);
+
 #ifdef __cplusplus
 }
 #endif

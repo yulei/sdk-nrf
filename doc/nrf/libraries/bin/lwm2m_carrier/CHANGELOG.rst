@@ -22,10 +22,18 @@ For certification status, see `Mobile network operator certifications`_.
 Changes
 =======
 
-* Added modem domain event types.
+* Library can now be provided non-bootstrap Custom URI. Previously, only bootstrap custom URI was accepted.
+
+  * New Kconfig :c:kconfig:`LWM2M_CARRIER_IS_SERVER_BOOTSTRAP` indicates if the Custom URI is a bootstrap server.
+  * New Kconfig :c:kconfig:`LWM2M_CARRIER_SERVER_LIFETIME` sets the lifetime for the (non-bootstrap) LwM2M server.
+* Library will now read bootstrap information from Smartcard when applicable.
+
+  * New Kconfig :c:kconfig:`CONFIG_LWM2M_CARRIER_BOOTSTRAP_SMARTCARD can be used to disable this feature.
+* Added a new event :c:macro:`LWM2M_CARRIER_EVENT_MODEM_DOMAIN` to indicate modem domain events.
 * Removed logging from the os glue layer.
 * Added the connectivity object.
-* Increased +CEREG notification level from 2 to 4 for the library to receive Active-Time and Periodic-TAU.
+
+  * Increased +CEREG notification level from 2 to 4 for the library to receive Active-Time and Periodic-TAU.
 * Added the location object, including the API :c:func:`lwm2m_carrier_location_set` and :c:func:`lwm2m_carrier_velocity_set`.
 
 liblwm2m_carrier 0.20.1
