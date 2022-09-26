@@ -1,0 +1,11 @@
+identifier: nrf52_amk
+name: nRF52-AMK
+type: mcu
+arch: arm
+toolchain:
+  - zephyr
+  - gnuarmemb
+ram: 64
+flash: 512
+supported:
+  - ble
