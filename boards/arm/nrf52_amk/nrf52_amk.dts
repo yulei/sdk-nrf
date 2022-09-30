@@ -6,7 +6,7 @@
 
 /dts-v1/;
 #include <nordic/nrf52832_qfaa.dtsi>
-#include "nrf52_amk-pinctrl.dtsi"
+/*#include "nrf52_amk-pinctrl.dtsi"*/
 
 / {
 	model = "nRF52 AMK";
@@ -32,6 +32,7 @@
 	status = "okay";
 };
 
+/* 
 &uart0 {
 	status = "okay";
 	compatible = "nordic,nrf-uart";
@@ -48,6 +49,7 @@
 	pinctrl-1 = <&spi2_sleep>;
 	pinctrl-names = "default", "sleep";
 };
+*/
 
 &flash0 {
 	/*
