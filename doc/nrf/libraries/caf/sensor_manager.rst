@@ -1,4 +1,3 @@
-.. _caf_sensor_sampler:
 .. _caf_sensor_manager:
 
 CAF: Sensor manager module
@@ -47,11 +46,11 @@ To use the module, you must complete the following requirements:
       * :c:member:`sm_sensor_config.event_descr` - Sensor event description.
         The event description is used to identify the sensor in the application.
       * :c:member:`sm_sensor_config.chans` - Channel configuration.
-        This is an array of :c:struct:`sm_sampled_channel` struct that configures the sensor channel with the following information:
+        This is an array of :c:struct:`caf_sampled_channel` struct that configures the sensor channel with the following information:
 
-        * :c:member:`sm_sampled_channel.chan` - Sensor channel.
+        * :c:member:`caf_sampled_channel.chan` - Sensor channel.
           Depends on the particular sensor.
-        * :c:member:`sm_sampled_channel.data_cnt` - Number of values in :c:member:`sm_sampled_channel.chan`.
+        * :c:member:`caf_sampled_channel.data_cnt` - Number of values in :c:member:`caf_sampled_channel.chan`.
 
       * :c:member:`sm_sensor_config.chan_cnt` - Size of the :c:member:`sm_sensor_config.chans` array.
       * :c:member:`sm_sensor_config.sampling_period_ms` - Sensor sampling period, in milliseconds.
@@ -62,7 +61,7 @@ To use the module, you must complete the following requirements:
       .. code-block:: c
 
          #include <caf/sensor_manager.h>
-         static const struct sm_sampled_channel accel_chan[] = {
+         static const struct caf_sampled_channel accel_chan[] = {
                  {
                          .chan = SENSOR_CHAN_ACCEL_XYZ,
                          .data_cnt = 3,
@@ -125,7 +124,7 @@ To use the sensor trigger, complete the following steps:
 
         #include <caf/sensor_manager.h>
 
-        static const struct sm_sampled_channel accel_chan[] = {
+        static const struct caf_sampled_channel accel_chan[] = {
                 {
                         .chan = SENSOR_CHAN_ACCEL_XYZ,
                         .data_cnt = 3,
@@ -313,8 +312,20 @@ If the sensor's trigger functionality is configured, each time the trigger is ac
 
 Sending :c:struct:`wake_up_event` to other modules results in waking up the whole system.
 
-.. |sensor_manager| replace:: sensor manager module
-.. |only_configured_module_note| replace:: Only the configured module should include the configuration file.
-   Do not include the configuration file in other source files.
-.. |device_pm_note| replace:: Not all device power states might be supported by the sensor's device.
-   Check the sensor's driver implementation before configuring :c:member:`sm_sensor_config.suspend`.
+.. _sensor_sample_period:
+
+Changing sensor sample period
+=============================
+
+To change sensor sample period you have to send :c:struct:`set_sensor_period_event` with new period value in milliseconds.
+To identify which sensor sampling period you want to change, set the sensor description in :c:struct:`set_sensor_period_event`.
+The following code shows an example of changing accelerometer sampling to 400 ms:
+
+   .. code-block:: c
+
+        #include <caf/events/sensor_event.h>
+
+        struct set_sensor_period_event *event = new_set_sensor_period_event();
+        event->sampling_period = 400;
+        event->descr = "accel_sim_xyz";
+        APP_EVENT_SUBMIT(event);

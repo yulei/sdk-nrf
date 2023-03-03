@@ -33,6 +33,11 @@ The module controls LEDs defined by enumerators in :c:enum:`led_id`:
 
 For the complete description of peer management, see :ref:`nrf_desktop_ble_bond`.
 
+.. note::
+   If a configuration does not support Bluetooth (:kconfig:option:`CONFIG_CAF_BLE_COMMON_EVENTS` is disabled), the Bluetooth peer state will not be notified.
+   In that case, the Bluetooth peer state LED is set only once during the boot.
+   The set LED effect represents :c:enumerator:`LED_PEER_STATE_DISCONNECTED` state for the default peer.
+
 Module events
 *************
 
@@ -50,7 +55,8 @@ The |led_state| is enabled when you set the :kconfig:option:`CONFIG_CAF_LEDS` op
 You must also configure :ref:`caf_leds`, which is used as a sink module for ``led_state``.
 
 For every board that has this option enabled, you must define the module configuration.
-Do this in the :file:`led_state_def.h` file located in the board-specific directory in the application configuration directory.
+The configuration must be defined in the file named :ref:`CONFIG_DESKTOP_LED_STATE_DEF_PATH <config_desktop_app_options>` located in the board-specific directory in the application configuration directory.
+By default, the file is named as :file:`led_state_def.h`.
 
 The configuration consists of the following elements:
 
@@ -69,5 +75,3 @@ LED effect API
 .. doxygengroup:: led_effect_CAF
    :project: nrf
    :members:
-
-.. |led_state| replace:: LED state module

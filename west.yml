@@ -31,13 +31,15 @@ manifest:
       url-base: https://github.com/NordicSemiconductor
     - name: memfault
       url-base: https://github.com/memfault
+    - name: ant-nrfconnect
+      url-base: https://github.com/ant-nrfconnect
 
   # If not otherwise specified, the projects below should be obtained
   # from the ncs remote.
   defaults:
     remote: ncs
 
-  group-filter: [-homekit, -nrf-802154, -find-my]
+  group-filter: [-homekit, -nrf-802154, -find-my, -ant]
 
   # "projects" is a list of git repositories which make up the NCS
   # source code.
@@ -50,7 +52,7 @@ manifest:
     # https://developer.nordicsemi.com/nRF_Connect_SDK/doc/latest/zephyr/guides/modules.html
     - name: zephyr
       repo-path: sdk-zephyr
-      revision: v3.1.99-ncs1
+      revision: v3.2.99-ncs2
       import:
         # In addition to the zephyr repository itself, NCS also
         # imports the contents of zephyr/west.yml at the above
@@ -70,16 +72,15 @@ manifest:
           - cmsis
           - edtt
           - fatfs
-          - fff
           - hal_nordic
-          - hal_st
-          - liblc3codec
+          - hal_st # required for ST sensors (unrelated to STM32 MCUs)
+          - hal_wurthelektronik
+          - liblc3
           - libmetal
           - littlefs
           - loramac-node
           - lvgl
           - lz4
-          - mbedtls
           - mipi-sys-t
           - nanopb
           - net-tools
@@ -91,6 +92,7 @@ manifest:
           - tinycbor
           - tinycrypt
           - tf-m-tests
+          - uoscore-uedhoc
           - zcbor
           - zscilib
 
@@ -100,31 +102,27 @@ manifest:
     # changes.
     - name: sdk-hostap
       path: modules/lib/hostap
-      revision: 47399f055431513b5dfcd9d1fd1ec5dc5c96a252
+      revision: 73de50a279b35adf345eae35231813d0945991fd
     - name: mcuboot
       repo-path: sdk-mcuboot
-      revision: v1.9.99-ncs2
+      revision: v1.9.99-ncs4
       path: bootloader/mcuboot
-    - name: mbedtls-nrf
-      path: mbedtls
+    - name: mbedtls
+      path: modules/crypto/mbedtls
       repo-path: sdk-mbedtls
-      revision: v3.1.0-ncs1
+      revision: v3.1.0-ncs3
     - name: nrfxlib
       repo-path: sdk-nrfxlib
       path: nrfxlib
-      revision: v2.1.0
+      revision: v2.3.0
     - name: trusted-firmware-m
       repo-path: sdk-trusted-firmware-m
       path: modules/tee/tf-m/trusted-firmware-m
-      revision: v1.6.0-ncs1
-    - name: tfm-mcuboot # This is used by the trusted-firmware-m module.
-      repo-path: sdk-mcuboot
-      path: modules/tee/tfm-mcuboot
-      revision: v1.7.2-ncs2
+      revision: v1.6.0-ncs3
     - name: matter
       repo-path: sdk-connectedhomeip
       path: modules/lib/matter
-      revision: v2.1.0
+      revision: v2.3.0
       submodules:
         - name: nlio
           path: third_party/nlio/repo
@@ -137,23 +135,23 @@ manifest:
     - name: nrf-802154
       repo-path: sdk-nrf-802154
       path: nrf-802154
-      revision: v2.1.0
+      revision: v2.3.0
       groups:
-      - nrf-802154
+        - nrf-802154
     - name: cjson
       repo-path: sdk-cjson
       path: modules/lib/cjson
       revision: c6af068b7f05207b28d68880740e4b9ec1e4b50a
     - name: homekit
       repo-path: sdk-homekit
-      revision: v2.1.0
+      revision: v2.3.0
       groups:
-      - homekit
+        - homekit
     - name: find-my
       repo-path: sdk-find-my
-      revision: v2.1.0
+      revision: v2.3.0
       groups:
-      - find-my
+        - find-my
     - name: azure-sdk-for-c
       repo-path: azure-sdk-for-c
       path: modules/lib/azure-sdk-for-c
@@ -166,7 +164,7 @@ manifest:
       remote: throwtheswitch
     - name: memfault-firmware-sdk
       path: modules/lib/memfault-firmware-sdk
-      revision: 0.33.2
+      revision: 0.37.2
       remote: memfault
     - name: cirrus
       repo-path: sdk-mcu-drivers
@@ -175,7 +173,13 @@ manifest:
     - name: openthread
       repo-path: sdk-openthread
       path: modules/lib/openthread
-      revision: 0d19f9112101e87722ec80b3a247bc7a1c54b232
+      revision: 2060039bbfec52ac00f22a7cc3213c2ab1df138e
+    - name: ant
+      repo-path: sdk-ant
+      revision: 7df46a12ace258473c1f2b3b98de690b5799ac64
+      remote: ant-nrfconnect
+      groups:
+        - ant
 
   # West-related configuration for the nrf repository.
   self:

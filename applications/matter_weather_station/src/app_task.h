@@ -16,6 +16,10 @@
 #include "dfu_over_smp.h"
 #endif
 
+#if CONFIG_CHIP_FACTORY_DATA
+#include <platform/nrfconnect/FactoryDataProvider.h>
+#endif
+
 struct k_timer;
 
 class AppTask {
@@ -39,9 +43,6 @@ private:
 	void UpdateRelativeHumidityClusterState();
 	void UpdatePowerSourceClusterState();
 
-#ifdef CONFIG_MCUMGR_SMP_BT
-	static void RequestSMPAdvertisingStart(void);
-#endif
 	static void ButtonStateHandler(uint32_t buttonState, uint32_t hasChanged);
 	static void ButtonPushHandler();
 	static void ButtonReleaseHandler();
@@ -53,6 +54,10 @@ private:
 	static void ChipEventHandler(const chip::DeviceLayer::ChipDeviceEvent *event, intptr_t arg);
 
 	static AppTask sAppTask;
+
+#if CONFIG_CHIP_FACTORY_DATA
+	chip::DeviceLayer::FactoryDataProvider<chip::DeviceLayer::InternalFlashFactoryData> mFactoryDataProvider;
+#endif
 };
 
 inline AppTask &GetAppTask()

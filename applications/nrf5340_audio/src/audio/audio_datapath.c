@@ -1,45 +1,7 @@
-/*************************************************************************************************/
 /*
  *  Copyright (c) 2021, PACKETCRAFT, INC.
- *  All rights reserved.
- */
-/*************************************************************************************************/
-
-/*
- * Redistribution and use of the Audio subsystem for nRF5340 Software, in binary
- * and source code forms, with or without modification, are permitted provided
- * that the following conditions are met:
  *
- * 1. Redistributions of source code form must retain the above copyright
- *    notice, this list of conditions, and the following disclaimer.
- *
- * 2. Redistributions in binary code form, except as embedded into a Nordic
- *    Semiconductor ASA nRF53 chip or a software update for such product,
- *    must reproduce the above copyright notice, this list of conditions
- *    and the following disclaimer in the documentation and/or other materials
- *    provided with the distribution.
- *
- * 3. Neither the name of Packetcraft, Inc. nor Nordic Semiconductor ASA nor
- *    the names of its contributors may be used to endorse or promote products
- *    derived from this software without specific prior written permission.
- *
- * 4. This software, with or without modification, must only be used with a
- *    Nordic Semiconductor ASA nRF53 chip.
- *
- * 5. Any software provided in binary or source code form under this license
- *    must not be reverse engineered, decompiled, modified and/or disassembled.
- *
- * THIS SOFTWARE IS PROVIDED BY PACKETCRAFT, INC. AND NORDIC SEMICONDUCTOR ASA
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO,
- * THE IMPLIED WARRANTIES OF MERCHANTABILITY, NONINFRINGEMENT, AND FITNESS FOR
- * A PARTICULAR PURPOSE ARE HEREBY DISCLAIMED. IN NO EVENT SHALL PACKETCRAFT, INC.,
- * NORDIC SEMICONDUCTOR ASA, OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
- * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
- * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
- * PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
- * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
+ *  SPDX-License-Identifier: LicenseRef-PCFT
  */
 
 #include "audio_datapath.h"
@@ -64,7 +26,7 @@
 #include "streamctrl.h"
 
 #include <zephyr/logging/log.h>
-LOG_MODULE_REGISTER(audio_datapath, CONFIG_LOG_AUDIO_DATAPATH_LEVEL);
+LOG_MODULE_REGISTER(audio_datapath, CONFIG_AUDIO_DATAPATH_LOG_LEVEL);
 
 /*
  * Terminology
@@ -611,88 +573,94 @@ static void audio_datapath_i2s_blk_complete(uint32_t frame_start_ts, uint32_t *r
 	/********** I2S TX **********/
 	static uint8_t *tx_buf;
 
-	if (tx_buf_released != NULL) {
-		/* Double buffered index */
-		uint32_t next_out_blk_idx = NEXT_IDX(ctrl_blk.out.cons_blk_idx);
+	if (IS_ENABLED(CONFIG_STREAM_BIDIRECTIONAL) || (CONFIG_AUDIO_DEV == HEADSET)) {
+		if (tx_buf_released != NULL) {
+			/* Double buffered index */
+			uint32_t next_out_blk_idx = NEXT_IDX(ctrl_blk.out.cons_blk_idx);
 
-		if (next_out_blk_idx != ctrl_blk.out.prod_blk_idx) {
-			/* Only increment if not in underrun condition */
-			ctrl_blk.out.cons_blk_idx = next_out_blk_idx;
-			if (underrun_condition) {
-				underrun_condition = false;
-				LOG_WRN("Data received, total underruns: %d",
-					ctrl_blk.out.total_blk_underruns);
-			}
-
-			tx_buf = (uint8_t *)&ctrl_blk.out
-					 .fifo[next_out_blk_idx * BLK_MONO_SIZE_OCTETS];
-
-		} else {
-			if (stream_state_get() == STATE_STREAMING) {
-				underrun_condition = true;
-				ctrl_blk.out.total_blk_underruns++;
-
-				if ((ctrl_blk.out.total_blk_underruns %
-				     UNDERRUN_LOG_INTERVAL_BLKS) == 0) {
-					LOG_WRN("In I2S TX underrun condition, total: %d",
+			if (next_out_blk_idx != ctrl_blk.out.prod_blk_idx) {
+				/* Only increment if not in underrun condition */
+				ctrl_blk.out.cons_blk_idx = next_out_blk_idx;
+				if (underrun_condition) {
+					underrun_condition = false;
+					LOG_WRN("Data received, total underruns: %d",
 						ctrl_blk.out.total_blk_underruns);
 				}
+
+				tx_buf = (uint8_t *)&ctrl_blk.out
+						 .fifo[next_out_blk_idx * BLK_MONO_SIZE_OCTETS];
+
+			} else {
+				if (stream_state_get() == STATE_STREAMING) {
+					underrun_condition = true;
+					ctrl_blk.out.total_blk_underruns++;
+
+					if ((ctrl_blk.out.total_blk_underruns %
+					     UNDERRUN_LOG_INTERVAL_BLKS) == 0) {
+						LOG_WRN("In I2S TX underrun condition, total: %d",
+							ctrl_blk.out.total_blk_underruns);
+					}
+				}
+
+				/*
+				 * No data available in out.fifo
+				 * use alternative buffers
+				 */
+				ret = alt_buffer_get((void **)&tx_buf);
+				ERR_CHK(ret);
+
+				memset(tx_buf, 0, BLK_STEREO_SIZE_OCTETS);
 			}
 
-			/* No data available in out.fifo
-			 * use alternative buffers
-			 */
-			ret = alt_buffer_get((void **)&tx_buf);
-			ERR_CHK(ret);
-
-			memset(tx_buf, 0, BLK_STEREO_SIZE_OCTETS);
-		}
-
-		if (tone_active) {
-			tone_mix(tx_buf);
+			if (tone_active) {
+				tone_mix(tx_buf);
+			}
 		}
 	}
 
 	/********** I2S RX **********/
-	uint32_t *rx_buf;
+	static uint32_t *rx_buf;
 	static int prev_ret;
 
-	/* Lock last filled buffer into message queue */
-	if (rx_buf_released != NULL) {
-		ret = data_fifo_block_lock(ctrl_blk.in.fifo, (void **)&rx_buf_released,
-					   BLOCK_SIZE_BYTES);
+	if (IS_ENABLED(CONFIG_STREAM_BIDIRECTIONAL) || (CONFIG_AUDIO_DEV == GATEWAY)) {
+		/* Lock last filled buffer into message queue */
+		if (rx_buf_released != NULL) {
+			ret = data_fifo_block_lock(ctrl_blk.in.fifo, (void **)&rx_buf_released,
+						   BLOCK_SIZE_BYTES);
 
-		ERR_CHK_MSG(ret, "Unable to lock block RX");
-	}
+			ERR_CHK_MSG(ret, "Unable to lock block RX");
+		}
 
-	/* Get new empty buffer to send to I2S HW */
-	ret = data_fifo_pointer_first_vacant_get(ctrl_blk.in.fifo, (void **)&rx_buf, K_NO_WAIT);
-	if (ret == 0 && prev_ret == -ENOMEM) {
-		LOG_WRN("I2S RX continuing stream");
-		prev_ret = ret;
-	}
-
-	/* If RX FIFO is filled up */
-	if (ret == -ENOMEM) {
-		void *data;
-		size_t size;
-
-		if (ret != prev_ret) {
-			LOG_WRN("I2S RX overrun. Single msg");
+		/* Get new empty buffer to send to I2S HW */
+		ret = data_fifo_pointer_first_vacant_get(ctrl_blk.in.fifo, (void **)&rx_buf,
+							 K_NO_WAIT);
+		if (ret == 0 && prev_ret == -ENOMEM) {
+			LOG_WRN("I2S RX continuing stream");
 			prev_ret = ret;
 		}
 
-		ret = data_fifo_pointer_last_filled_get(ctrl_blk.in.fifo, &data, &size, K_NO_WAIT);
-		ERR_CHK(ret);
+		/* If RX FIFO is filled up */
+		if (ret == -ENOMEM) {
+			void *data;
+			size_t size;
 
-		ret = data_fifo_block_free(ctrl_blk.in.fifo, &data);
-		ERR_CHK(ret);
+			if (ret != prev_ret) {
+				LOG_WRN("I2S RX overrun. Single msg");
+				prev_ret = ret;
+			}
 
-		ret = data_fifo_pointer_first_vacant_get(ctrl_blk.in.fifo, (void **)&rx_buf,
-							 K_NO_WAIT);
+			ret = data_fifo_pointer_last_filled_get(ctrl_blk.in.fifo, &data, &size,
+								K_NO_WAIT);
+			ERR_CHK(ret);
+
+			data_fifo_block_free(ctrl_blk.in.fifo, &data);
+
+			ret = data_fifo_pointer_first_vacant_get(ctrl_blk.in.fifo, (void **)&rx_buf,
+								 K_NO_WAIT);
+		}
+
+		ERR_CHK_MSG(ret, "RX failed to get block");
 	}
-
-	ERR_CHK_MSG(ret, "RX failed to get block");
 
 	/*** Data exchange ***/
 	audio_i2s_set_next_buf(tx_buf, rx_buf);
@@ -712,29 +680,33 @@ static void audio_datapath_i2s_start(void)
 	uint32_t *rx_buf_two = NULL;
 
 	/* TX */
-#if (CONFIG_STREAM_BIDIRECTIONAL || (CONFIG_AUDIO_DEV == HEADSET))
-	ctrl_blk.out.cons_blk_idx = PREV_IDX(ctrl_blk.out.cons_blk_idx);
-	tx_buf_one =
-		(uint8_t *)&ctrl_blk.out.fifo[ctrl_blk.out.cons_blk_idx * BLK_STEREO_NUM_SAMPS];
+	if (IS_ENABLED(CONFIG_STREAM_BIDIRECTIONAL) || (CONFIG_AUDIO_DEV == HEADSET)) {
+		ctrl_blk.out.cons_blk_idx = PREV_IDX(ctrl_blk.out.cons_blk_idx);
+		tx_buf_one = (uint8_t *)&ctrl_blk.out
+				     .fifo[ctrl_blk.out.cons_blk_idx * BLK_STEREO_NUM_SAMPS];
 
-	ctrl_blk.out.cons_blk_idx = PREV_IDX(ctrl_blk.out.cons_blk_idx);
-	tx_buf_two =
-		(uint8_t *)&ctrl_blk.out.fifo[ctrl_blk.out.cons_blk_idx * BLK_STEREO_NUM_SAMPS];
-#endif /* (CONFIG_STREAM_BIDIRECTIONAL || (CONFIG_AUDIO_DEV == HEADSET)) */
-
-	/* RX */
-	uint32_t alloced_cnt;
-	uint32_t locked_cnt;
-
-	ret = data_fifo_num_used_get(ctrl_blk.in.fifo, &alloced_cnt, &locked_cnt);
-	if (alloced_cnt || locked_cnt || ret) {
-		ERR_CHK_MSG(-ENOMEM, "Fifo is not empty!");
+		ctrl_blk.out.cons_blk_idx = PREV_IDX(ctrl_blk.out.cons_blk_idx);
+		tx_buf_two = (uint8_t *)&ctrl_blk.out
+				     .fifo[ctrl_blk.out.cons_blk_idx * BLK_STEREO_NUM_SAMPS];
 	}
 
-	ret = data_fifo_pointer_first_vacant_get(ctrl_blk.in.fifo, (void **)&rx_buf_one, K_NO_WAIT);
-	ERR_CHK_MSG(ret, "RX failed to get block");
-	ret = data_fifo_pointer_first_vacant_get(ctrl_blk.in.fifo, (void **)&rx_buf_two, K_NO_WAIT);
-	ERR_CHK_MSG(ret, "RX failed to get block");
+	/* RX */
+	if (IS_ENABLED(CONFIG_STREAM_BIDIRECTIONAL) || (CONFIG_AUDIO_DEV == GATEWAY)) {
+		uint32_t alloced_cnt;
+		uint32_t locked_cnt;
+
+		ret = data_fifo_num_used_get(ctrl_blk.in.fifo, &alloced_cnt, &locked_cnt);
+		if (alloced_cnt || locked_cnt || ret) {
+			ERR_CHK_MSG(-ENOMEM, "Fifo is not empty!");
+		}
+
+		ret = data_fifo_pointer_first_vacant_get(ctrl_blk.in.fifo, (void **)&rx_buf_one,
+							 K_NO_WAIT);
+		ERR_CHK_MSG(ret, "RX failed to get block");
+		ret = data_fifo_pointer_first_vacant_get(ctrl_blk.in.fifo, (void **)&rx_buf_two,
+							 K_NO_WAIT);
+		ERR_CHK_MSG(ret, "RX failed to get block");
+	}
 
 	/* Start I2S */
 	audio_i2s_start(tx_buf_one, rx_buf_one);
@@ -769,6 +741,7 @@ void audio_datapath_pres_delay_us_get(uint32_t *delay_us)
 void audio_datapath_just_in_time_check_and_adjust(uint32_t sdu_ref_us)
 {
 	static int32_t count;
+	int ret;
 
 	uint32_t curr_frame_ts = audio_sync_timer_curr_time_get();
 	int diff = curr_frame_ts - sdu_ref_us;
@@ -779,7 +752,12 @@ void audio_datapath_just_in_time_check_and_adjust(uint32_t sdu_ref_us)
 
 	if (diff < JUST_IN_TIME_US - JUST_IN_TIME_THRESHOLD_US ||
 	    diff > JUST_IN_TIME_US + JUST_IN_TIME_THRESHOLD_US) {
-		audio_system_fifo_rx_block_drop();
+		ret = audio_system_fifo_rx_block_drop();
+		if (ret) {
+			LOG_WRN("Not able to drop FIFO RX block");
+			return;
+		}
+
 		count = 0;
 	}
 }
@@ -838,7 +816,8 @@ void audio_datapath_stream_out(const uint8_t *buf, size_t size, uint32_t sdu_ref
 					     CONFIG_AUDIO_FRAME_DURATION_US;
 			}
 		} else {
-			LOG_INF("sdu_ref_us not from consecutive frames");
+			LOG_INF("sdu_ref_us not from consecutive frames (diff: %d us)",
+				sdu_ref_delta_us);
 			sdu_ref_not_consecutive = true;
 		}
 	}

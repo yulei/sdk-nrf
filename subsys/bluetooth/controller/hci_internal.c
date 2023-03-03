@@ -19,10 +19,6 @@
 #include "hci_internal.h"
 #include "ecdh.h"
 
-#define BT_DBG_ENABLED IS_ENABLED(CONFIG_BT_DEBUG_HCI_DRIVER)
-#define LOG_MODULE_NAME sdc_hci_internal
-#include "common/log.h"
-
 #define CMD_COMPLETE_MIN_SIZE (BT_HCI_EVT_HDR_SIZE \
 				+ sizeof(struct bt_hci_evt_cmd_complete) \
 				+ sizeof(struct bt_hci_evt_cc_status))
@@ -32,6 +28,8 @@ static struct
 	bool occurred; /**< Set in only one execution context */
 	uint8_t raw_event[BT_BUF_EVT_RX_SIZE];
 } cmd_complete_or_status;
+
+static hci_internal_user_cmd_handler_t user_cmd_handler;
 
 static bool command_generates_command_complete_event(uint16_t hci_opcode)
 {
@@ -44,7 +42,12 @@ static bool command_generates_command_complete_event(uint16_t hci_opcode)
 	case SDC_HCI_OPCODE_CMD_LE_READ_REMOTE_FEATURES:
 	case SDC_HCI_OPCODE_CMD_LE_ENABLE_ENCRYPTION:
 	case SDC_HCI_OPCODE_CMD_LE_EXT_CREATE_CONN:
+	case SDC_HCI_OPCODE_CMD_LE_EXT_CREATE_CONN_V2:
 	case SDC_HCI_OPCODE_CMD_LE_PERIODIC_ADV_CREATE_SYNC:
+	case SDC_HCI_OPCODE_CMD_LE_REQUEST_PEER_SCA:
+	case SDC_HCI_OPCODE_CMD_LE_READ_REMOTE_TRANSMIT_POWER_LEVEL:
+	case SDC_HCI_OPCODE_CMD_VS_CONN_UPDATE:
+	case SDC_HCI_OPCODE_CMD_VS_WRITE_REMOTE_TX_POWER:
 	case BT_HCI_OP_LE_P256_PUBLIC_KEY:
 	case BT_HCI_OP_LE_GENERATE_DHKEY:
 		return false;
@@ -106,6 +109,10 @@ static bool is_host_using_legacy_and_extended_commands(uint16_t hci_opcode)
 	case SDC_HCI_OPCODE_CMD_LE_CLEAR_PERIODIC_ADV_LIST:
 	case SDC_HCI_OPCODE_CMD_LE_READ_PERIODIC_ADV_LIST_SIZE:
 #endif
+#if defined(CONFIG_BT_PER_ADV_SYNC_TRANSFER_RECEIVER)
+	case SDC_HCI_OPCODE_CMD_LE_SET_PERIODIC_ADV_SYNC_TRANSFER_PARAMS:
+	case SDC_HCI_OPCODE_CMD_LE_SET_DEFAULT_PERIODIC_ADV_SYNC_TRANSFER_PARAMS:
+#endif /* CONFIG_BT_PER_ADV_SYNC_TRANSFER_RECEIVER */
 		if (type_of_adv_cmd_used_since_reset == ADV_COMMAND_TYPE_NONE) {
 			type_of_adv_cmd_used_since_reset = ADV_COMMAND_TYPE_EXTENDED;
 			return false;
@@ -221,6 +228,7 @@ static void supported_commands(sdc_hci_ip_supported_commands_t *cmds)
 	cmds->hci_le_set_advertising_data = 1;
 	cmds->hci_le_set_scan_response_data = 1;
 	cmds->hci_le_set_advertising_enable = 1;
+	cmds->hci_le_set_data_related_address_changes = 1;
 #endif
 
 #if defined(CONFIG_BT_OBSERVER)
@@ -324,6 +332,11 @@ static void supported_commands(sdc_hci_ip_supported_commands_t *cmds)
 	cmds->hci_le_set_periodic_advertising_data = 1;
 	cmds->hci_le_set_periodic_advertising_enable = 1;
 #endif /* CONFIG_BT_PER_ADV*/
+#if defined(CONFIG_BT_CTLR_SDC_PAWR_ADV)
+	cmds->hci_le_set_periodic_advertising_subevent_data = 1;
+	cmds->hci_le_extended_create_connection_v2 = 1;
+	cmds->hci_le_set_periodic_advertising_parameters_v2 = 1;
+#endif /* CONFIG_BT_CTLR_SDC_PAWR_ADV */
 #endif /* CONFIG_BT_BROADCASTER */
 
 #if defined(CONFIG_BT_OBSERVER)
@@ -344,6 +357,17 @@ static void supported_commands(sdc_hci_ip_supported_commands_t *cmds)
 	cmds->hci_le_set_periodic_advertising_receive_enable = 1;
 #endif
 #endif
+
+#if defined(CONFIG_BT_CTLR_SYNC_TRANSFER_SENDER)
+	cmds->hci_le_periodic_advertising_sync_transfer = 1;
+	cmds->hci_le_periodic_advertising_set_info_transfer = 1;
+#endif
+
+#if defined(CONFIG_BT_CTLR_SYNC_TRANSFER_RECEIVER)
+	cmds->hci_le_set_periodic_advertising_sync_transfer_parameters = 1;
+	cmds->hci_le_set_default_periodic_advertising_sync_transfer_parameters = 1;
+#endif
+
 	cmds->hci_le_read_transmit_power = 1;
 
 #if defined(CONFIG_BT_CTLR_PRIVACY)
@@ -351,14 +375,34 @@ static void supported_commands(sdc_hci_ip_supported_commands_t *cmds)
 #endif
 
 #if defined(CONFIG_BT_CTLR_DF_ADV_CTE_TX)
+	cmds->hci_le_set_connectionless_cte_transmit_parameters = 1;
+	cmds->hci_le_set_connectionless_cte_transmit_enable = 1;
+#endif
+
+#if defined(CONFIG_BT_CTLR_DF_CONN_CTE_RSP)
+	cmds->hci_le_connection_cte_response_enable = 1;
+	cmds->hci_le_set_connection_cte_transmit_parameters = 1;
+#endif
+
+#if defined(CONFIG_BT_CTLR_DF_CONN_CTE_RSP) || defined(CONFIG_BT_CTLR_DF_ADV_CTE_TX)
 	/* NOTE: The DTM commands are *not* supported by the SoftDevice
 	 * controller. See doc/nrf/known_issues.rst.
 	 */
 	cmds->hci_le_transmitter_test_v3 = 1;
+#endif
 
-	cmds->hci_le_set_connectionless_cte_transmit_parameters = 1;
-	cmds->hci_le_set_connectionless_cte_transmit_enable = 1;
+#if defined(CONFIG_BT_CTLR_DF)
 	cmds->hci_le_read_antenna_information = 1;
+#endif
+
+#if defined(CONFIG_BT_CTLR_LE_POWER_CONTROL)
+	cmds->hci_le_enhanced_read_transmit_power_level = 1;
+	cmds->hci_le_read_remote_transmit_power_level = 1;
+	cmds->hci_le_set_transmit_power_reporting_enable = 1;
+#endif
+
+#if defined(CONFIG_BT_CTLR_SCA_UPDATE)
+	cmds->hci_le_request_peer_sca = 1;
 #endif
 
 #if (defined(CONFIG_BT_HCI_RAW) && defined(CONFIG_BT_TINYCRYPT_ECC)) || defined(CONFIG_BT_CTLR_ECDH)
@@ -399,6 +443,9 @@ static void vs_supported_commands(sdc_hci_vs_supported_vs_commands_t *cmds)
 	cmds->conn_event_extend = 1;
 	cmds->qos_conn_event_report_enable = 1;
 	cmds->event_length_set = 1;
+#if defined(CONFIG_BT_CTLR_LE_POWER_CONTROL)
+	cmds->write_remote_tx_power = 1;
+#endif
 }
 #endif	/* CONFIG_BT_HCI_VS */
 
@@ -410,51 +457,74 @@ static void supported_features(sdc_hci_ip_lmp_features_t *features)
 	features->le_supported = 1;
 }
 
-static void le_supported_features(sdc_hci_le_le_features_t *features)
+static void le_supported_features(sdc_hci_cmd_le_read_local_supported_features_return_t *features)
 {
 	memset(features, 0, sizeof(*features));
 
-	features->le_encryption = 1;
-	features->extended_reject_indication = 1;
-	features->slave_initiated_features_exchange = 1;
-	features->le_ping = 1;
+	features->params.le_encryption = 1;
+	features->params.extended_reject_indication = 1;
+	features->params.slave_initiated_features_exchange = 1;
+	features->params.le_ping = 1;
 
 #ifdef CONFIG_BT_CTLR_DATA_LENGTH
-	features->le_data_packet_length_extension = 1;
+	features->params.le_data_packet_length_extension = 1;
 #endif
 
 #ifdef CONFIG_BT_CTLR_PRIVACY
-	features->ll_privacy = 1;
+	features->params.ll_privacy = 1;
 #endif
 
 #ifdef CONFIG_BT_CTLR_EXT_SCAN_FP
-	features->extended_scanner_filter_policies = 1;
+	features->params.extended_scanner_filter_policies = 1;
 #endif
 
 #ifdef CONFIG_BT_CTLR_PHY_2M
-	features->le_2m_phy = 1;
+	features->params.le_2m_phy = 1;
 #endif
 
 #ifdef CONFIG_BT_CTLR_PHY_CODED
-	features->le_coded_phy = 1;
+	features->params.le_coded_phy = 1;
 #endif
 
 #ifdef CONFIG_BT_CTLR_ADV_EXT
-	features->le_extended_advertising = 1;
+	features->params.le_extended_advertising = 1;
 #endif
 
 #if defined(CONFIG_BT_CTLR_ADV_PERIODIC) || defined(CONFIG_BT_CTLR_SYNC_PERIODIC)
-	features->le_periodic_advertising = 1;
+	features->params.le_periodic_advertising = 1;
+#ifdef CONFIG_BT_CTLR_SYNC_TRANSFER_SENDER
+	features->params.periodic_advertising_sync_transfer_sender = 1;
+#endif
+#ifdef CONFIG_BT_CTLR_SYNC_TRANSFER_RECEIVER
+	features->params.periodic_advertising_sync_transfer_recipient = 1;
+#endif
 #endif
 
 #if defined(CONFIG_BT_CTLR_DF_ADV_CTE_TX)
-	features->connectionless_cte_transmitter = 1;
+	features->params.connectionless_cte_transmitter = 1;
 #endif
 
-	features->channel_selection_algorithm_2 = 1;
+	features->params.channel_selection_algorithm_2 = 1;
+
+#if defined(CONFIG_BT_CTLR_LE_POWER_CONTROL)
+	features->params.le_power_control_request = 1;
+	features->params.le_power_change_indication = 1;
+#endif
 
 #if defined(CONFIG_BT_CTLR_ADV_PERIODIC_ADI_SUPPORT)
-	features->periodic_advertising_adi_support = 1;
+	features->params.periodic_advertising_adi_support = 1;
+#endif
+
+#if defined(CONFIG_BT_CTLR_DF_CONN_CTE_RSP)
+	features->params.connection_cte_response = 1;
+#endif
+
+#if defined(CONFIG_BT_CTLR_SCA_UPDATE)
+	features->params.sleep_clock_accuracy_updates = 1;
+#endif
+
+#if defined(CONFIG_BT_CTLR_SDC_PAWR_ADV)
+	features->params.periodic_advertising_with_responses_advertiser = 1;
 #endif
 }
 
@@ -519,6 +589,16 @@ static void le_read_supported_states(uint8_t *buf)
 	states1 &= ~(BIT(22) | BIT(23));
 	*buf = states1;
 	*(buf + 4) = states2;
+}
+
+int hci_internal_user_cmd_handler_register(const hci_internal_user_cmd_handler_t handler)
+{
+	if (user_cmd_handler) {
+		return -EAGAIN;
+	}
+
+	user_cmd_handler = handler;
+	return 0;
 }
 
 #if defined(CONFIG_BT_CONN)
@@ -678,6 +758,9 @@ static uint8_t le_controller_cmd_put(uint8_t const * const cmd,
 
 	case SDC_HCI_OPCODE_CMD_LE_SET_ADV_ENABLE:
 		return sdc_hci_cmd_le_set_adv_enable((void *)cmd_params);
+
+	case SDC_HCI_OPCODE_CMD_LE_SET_DATA_RELATED_ADDRESS_CHANGES:
+		return sdc_hci_cmd_le_set_data_related_address_changes((void *)cmd_params);
 #endif
 
 #if defined(CONFIG_BT_OBSERVER)
@@ -929,10 +1012,91 @@ static uint8_t le_controller_cmd_put(uint8_t const * const cmd,
 
 	case SDC_HCI_OPCODE_CMD_LE_SET_CONNLESS_CTE_TRANSMIT_ENABLE:
 		return sdc_hci_cmd_le_set_connless_cte_transmit_enable((void *)cmd_params);
+#endif
 
+#if defined(CONFIG_BT_CTLR_DF_CONN_CTE_RSP)
+	case SDC_HCI_OPCODE_CMD_LE_SET_CONN_CTE_TRANSMIT_PARAMS:
+		*param_length_out += sizeof(sdc_hci_cmd_le_set_conn_cte_transmit_params_return_t);
+		return sdc_hci_cmd_le_set_conn_cte_transmit_params((void *)cmd_params,
+								   (void *)event_out_params);
+
+	case SDC_HCI_OPCODE_CMD_LE_CONN_CTE_RESPONSE_ENABLE:
+		*param_length_out += sizeof(sdc_hci_cmd_le_conn_cte_response_enable_return_t);
+		return sdc_hci_cmd_le_conn_cte_response_enable((void *)cmd_params,
+							       (void *)event_out_params);
+#endif
+
+#if defined(CONFIG_BT_CTLR_DF)
 	case SDC_HCI_OPCODE_CMD_LE_READ_ANTENNA_INFORMATION:
 		*param_length_out += sizeof(sdc_hci_cmd_le_read_antenna_information_return_t);
 		return sdc_hci_cmd_le_read_antenna_information((void *)event_out_params);
+#endif
+
+#if defined(CONFIG_BT_CTLR_LE_POWER_CONTROL)
+	case SDC_HCI_OPCODE_CMD_LE_ENHANCED_READ_TRANSMIT_POWER_LEVEL:
+		*param_length_out +=
+			sizeof(sdc_hci_cmd_le_enhanced_read_transmit_power_level_return_t);
+		return sdc_hci_cmd_le_enhanced_read_transmit_power_level((void *)cmd_params,
+									 (void *)event_out_params);
+
+	case SDC_HCI_OPCODE_CMD_LE_READ_REMOTE_TRANSMIT_POWER_LEVEL:
+		return sdc_hci_cmd_le_read_remote_transmit_power_level((void *)cmd_params);
+
+	case SDC_HCI_OPCODE_CMD_LE_SET_TRANSMIT_POWER_REPORTING_ENABLE:
+		*param_length_out +=
+			sizeof(sdc_hci_cmd_le_set_transmit_power_reporting_enable_return_t);
+		return sdc_hci_cmd_le_set_transmit_power_reporting_enable((void *)cmd_params,
+									  (void *)event_out_params);
+
+	case SDC_HCI_OPCODE_CMD_LE_READ_RF_PATH_COMPENSATION:
+		*param_length_out += sizeof(sdc_hci_cmd_le_read_rf_path_compensation_return_t);
+		return sdc_hci_cmd_le_read_rf_path_compensation((void *)event_out_params);
+
+	case SDC_HCI_OPCODE_CMD_LE_WRITE_RF_PATH_COMPENSATION:
+		return sdc_hci_cmd_le_write_rf_path_compensation((void *)cmd_params);
+#endif
+
+#if defined(CONFIG_BT_CTLR_SYNC_TRANSFER_SENDER)
+	case SDC_HCI_OPCODE_CMD_LE_PERIODIC_ADV_SYNC_TRANSFER:
+		*param_length_out += sizeof(sdc_hci_cmd_le_periodic_adv_sync_transfer_return_t);
+		return sdc_hci_cmd_le_periodic_adv_sync_transfer((void *)cmd_params,
+								 (void *)event_out_params);
+
+	case SDC_HCI_OPCODE_CMD_LE_PERIODIC_ADV_SET_INFO_TRANSFER:
+		*param_length_out +=
+			sizeof(sdc_hci_cmd_le_periodic_adv_set_info_transfer_return_t);
+		return sdc_hci_cmd_le_periodic_adv_set_info_transfer((void *)cmd_params,
+								     (void *)event_out_params);
+#endif
+
+#if defined(CONFIG_BT_CTLR_SYNC_TRANSFER_RECEIVER)
+	case SDC_HCI_OPCODE_CMD_LE_SET_PERIODIC_ADV_SYNC_TRANSFER_PARAMS:
+		*param_length_out +=
+			sizeof(sdc_hci_cmd_le_set_periodic_adv_sync_transfer_params_return_t);
+		return sdc_hci_cmd_le_set_periodic_adv_sync_transfer_params(
+			(void *)cmd_params, (void *)event_out_params);
+
+	case SDC_HCI_OPCODE_CMD_LE_SET_DEFAULT_PERIODIC_ADV_SYNC_TRANSFER_PARAMS:
+		return sdc_hci_cmd_le_set_default_periodic_adv_sync_transfer_params(
+			(void *)cmd_params);
+#endif
+
+#if defined(CONFIG_BT_CTLR_SCA_UPDATE)
+	case SDC_HCI_OPCODE_CMD_LE_REQUEST_PEER_SCA:
+		return sdc_hci_cmd_le_request_peer_sca((void *)cmd_params);
+#endif
+
+#if defined(CONFIG_BT_CTLR_SDC_PAWR_ADV)
+	case SDC_HCI_OPCODE_CMD_LE_EXT_CREATE_CONN_V2:
+		return sdc_hci_cmd_le_ext_create_conn_v2((void *)cmd_params);
+	case SDC_HCI_OPCODE_CMD_LE_SET_PERIODIC_ADV_PARAMS_V2:
+		*param_length_out += sizeof(sdc_hci_cmd_le_set_periodic_adv_params_v2_return_t);
+		return sdc_hci_cmd_le_set_periodic_adv_params_v2((void *)cmd_params,
+								 (void *)event_out_params);
+	case SDC_HCI_OPCODE_CMD_LE_SET_PERIODIC_ADV_SUBEVENT_DATA:
+		*param_length_out += sizeof(sdc_hci_cmd_le_set_periodic_adv_subevent_data_return_t);
+		return sdc_hci_cmd_le_set_periodic_adv_subevent_data((void *)cmd_params,
+								     (void *)event_out_params);
 #endif
 
 	default:
@@ -971,6 +1135,10 @@ static uint8_t vs_cmd_put(uint8_t const * const cmd,
 	case SDC_HCI_OPCODE_CMD_VS_ZEPHYR_WRITE_BD_ADDR:
 		return sdc_hci_cmd_vs_zephyr_write_bd_addr((void *)cmd_params);
 
+	case SDC_HCI_OPCODE_CMD_VS_ZEPHYR_READ_CHIP_TEMP:
+		*param_length_out += sizeof(sdc_hci_cmd_vs_zephyr_read_chip_temp_return_t);
+		return sdc_hci_cmd_vs_zephyr_read_chip_temp((void *)event_out_params);
+
 #if defined(CONFIG_BT_CTLR_TX_PWR_DYNAMIC_CONTROL)
 	case SDC_HCI_OPCODE_CMD_VS_ZEPHYR_WRITE_TX_POWER:
 		*param_length_out += sizeof(sdc_hci_cmd_vs_zephyr_write_tx_power_return_t);
@@ -1006,6 +1174,14 @@ static uint8_t vs_cmd_put(uint8_t const * const cmd,
 	case SDC_HCI_OPCODE_CMD_VS_PERIPHERAL_LATENCY_MODE_SET:
 		return sdc_hci_cmd_vs_peripheral_latency_mode_set((void *)cmd_params);
 #endif
+#if defined(CONFIG_BT_BROADCASTER)
+	case SDC_HCI_OPCODE_CMD_VS_SET_ADV_RANDOMNESS:
+		return sdc_hci_cmd_vs_set_adv_randomness((void *)cmd_params);
+#endif
+#if defined(CONFIG_BT_CTLR_LE_POWER_CONTROL)
+	case SDC_HCI_OPCODE_CMD_VS_WRITE_REMOTE_TX_POWER:
+		return sdc_hci_cmd_vs_write_remote_tx_power((void *)cmd_params);
+#endif
 	default:
 		return BT_HCI_ERR_UNKNOWN_CMD;
 	}
@@ -1014,52 +1190,65 @@ static uint8_t vs_cmd_put(uint8_t const * const cmd,
 
 static void cmd_put(uint8_t *cmd_in, uint8_t * const raw_event_out)
 {
-	uint8_t status;
+	uint8_t status = BT_HCI_ERR_UNKNOWN_CMD;
 	uint16_t opcode = sys_get_le16(cmd_in);
+	bool generate_command_status_event;
 
 	/* Assume command complete */
 	uint8_t return_param_length = sizeof(struct bt_hci_evt_cmd_complete)
 				      + sizeof(struct bt_hci_evt_cc_status);
 
-	switch (BT_OGF(opcode)) {
-#if defined(CONFIG_BT_CONN)
-	case BT_OGF_LINK_CTRL:
-		status = link_control_cmd_put(cmd_in);
-		break;
-#endif
-	case BT_OGF_BASEBAND:
-		status = controller_and_baseband_cmd_put(cmd_in,
-							 raw_event_out,
-							 &return_param_length);
-		break;
-	case BT_OGF_INFO:
-		status = info_param_cmd_put(cmd_in,
-					    raw_event_out,
-					    &return_param_length);
-		break;
-	case BT_OGF_STATUS:
-		status = status_param_cmd_put(cmd_in,
-					      raw_event_out,
-					      &return_param_length);
-		break;
-	case BT_OGF_LE:
-		status = le_controller_cmd_put(cmd_in,
-					       raw_event_out,
-					       &return_param_length);
-		break;
-#if defined(CONFIG_BT_HCI_VS)
-	case BT_OGF_VS:
-		status = vs_cmd_put(cmd_in,
-				    raw_event_out,
-				    &return_param_length);
-		break;
-#endif
-	default:
-		status = BT_HCI_ERR_UNKNOWN_CMD;
-		break;
+	if (user_cmd_handler) {
+		status = user_cmd_handler(cmd_in,
+					  raw_event_out,
+					  &return_param_length,
+					  &generate_command_status_event);
 	}
 
-	if (!command_generates_command_complete_event(opcode) ||
+	if (status == BT_HCI_ERR_UNKNOWN_CMD) {
+
+		switch (BT_OGF(opcode)) {
+#if defined(CONFIG_BT_CONN)
+		case BT_OGF_LINK_CTRL:
+			status = link_control_cmd_put(cmd_in);
+			break;
+#endif
+		case BT_OGF_BASEBAND:
+			status = controller_and_baseband_cmd_put(cmd_in,
+								 raw_event_out,
+								 &return_param_length);
+			break;
+		case BT_OGF_INFO:
+			status = info_param_cmd_put(cmd_in,
+						    raw_event_out,
+						    &return_param_length);
+			break;
+		case BT_OGF_STATUS:
+			status = status_param_cmd_put(cmd_in,
+						      raw_event_out,
+						      &return_param_length);
+			break;
+		case BT_OGF_LE:
+			status = le_controller_cmd_put(cmd_in,
+						       raw_event_out,
+						       &return_param_length);
+			break;
+#if defined(CONFIG_BT_HCI_VS)
+		case BT_OGF_VS:
+			status = vs_cmd_put(cmd_in,
+					    raw_event_out,
+					    &return_param_length);
+			break;
+#endif
+		default:
+			status = BT_HCI_ERR_UNKNOWN_CMD;
+			break;
+		}
+
+		generate_command_status_event = !command_generates_command_complete_event(opcode);
+	}
+
+	if (generate_command_status_event ||
 	    (status == BT_HCI_ERR_UNKNOWN_CMD))	{
 		encode_command_status(raw_event_out, opcode, status);
 	} else {
@@ -1116,22 +1305,6 @@ int hci_internal_cmd_put(uint8_t *cmd_in)
 	}
 
 	return 0;
-}
-
-int hci_internal_evt_get(uint8_t *evt_out)
-{
-	if (cmd_complete_or_status.occurred) {
-		struct bt_hci_evt_hdr *evt_hdr = (void *)&cmd_complete_or_status.raw_event[0];
-
-		memcpy(evt_out,
-		       &cmd_complete_or_status.raw_event[0],
-		       evt_hdr->len + BT_HCI_EVT_HDR_SIZE);
-		cmd_complete_or_status.occurred = false;
-
-		return 0;
-	}
-
-	return sdc_hci_evt_get(evt_out);
 }
 
 int hci_internal_msg_get(uint8_t *msg_out, sdc_hci_msg_type_t *msg_type_out)

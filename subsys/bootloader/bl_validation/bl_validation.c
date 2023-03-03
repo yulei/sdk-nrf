@@ -10,6 +10,10 @@
 #include <zephyr/kernel.h>
 #include <bl_storage.h>
 
+/* The 15 bit version is encoded into the most significant bits of
+ * the 16 bit monotonic_counter, and the 1 bit slot is encoded
+ * into the least significant bit.
+ */
 
 int set_monotonic_version(uint16_t version, uint16_t slot)
 {
@@ -17,26 +21,72 @@ int set_monotonic_version(uint16_t version, uint16_t slot)
 	__ASSERT(slot <= 1, "Slot must be either 0 or 1.\r\n");
 	printk("Setting monotonic counter (version: %d, slot: %d)\r\n",
 		version, slot);
-	int err = set_monotonic_counter((version << 1) | !slot);
 
-	if (num_monotonic_counter_slots() == 0) {
-		printk("Monotonic version counter is disabled.\r\n");
-	} else if (err != 0) {
-		printk("set_monotonic_counter() error: %d\n\r", err);
+	uint16_t num_cnt_slots;
+	int err;
+
+	err = num_monotonic_counter_slots(BL_MONOTONIC_COUNTERS_DESC_NSIB, &num_cnt_slots);
+	if (err != 0) {
+		printk("Failed during reading of the number of the counter slots, error: %d\r\n",
+		       err);
+		return err;
 	}
+
+	if (num_cnt_slots == 0) {
+		printk("Monotonic version counter is disabled.\r\n");
+		return -EINVAL;
+	}
+
+	err = set_monotonic_counter(BL_MONOTONIC_COUNTERS_DESC_NSIB, (version << 1) | !slot);
+	if (err != 0) {
+		printk("Failed during setting the monotonic counter, error: %d\r\n", err);
+	}
+
 	return err;
 }
 
-uint16_t get_monotonic_version(uint16_t *slot_out)
+int get_monotonic_version(uint16_t *version_out)
 {
-	uint16_t monotonic_version = get_monotonic_counter();
+	uint16_t monotonic_version_and_slot;
+	int err;
 
-	if (slot_out != NULL) {
-		*slot_out = !(monotonic_version & 1);
+	if (version_out == NULL) {
+		return -EINVAL;
 	}
-	return monotonic_version >> 1;
+
+	err = get_monotonic_counter(BL_MONOTONIC_COUNTERS_DESC_NSIB, &monotonic_version_and_slot);
+	if (err) {
+		return err;
+	}
+
+	*version_out = monotonic_version_and_slot >> 1;
+
+	return err;
 }
 
+int get_monotonic_slot(uint16_t *slot_out)
+{
+	uint16_t monotonic_version_and_slot;
+	int err;
+
+	if (slot_out == NULL) {
+		return -EINVAL;
+	}
+
+	err = get_monotonic_counter(BL_MONOTONIC_COUNTERS_DESC_NSIB, &monotonic_version_and_slot);
+	if (err) {
+		return err;
+	}
+
+	uint16_t inverted_slot = monotonic_version_and_slot & 1U;
+
+	/* We store the slot inverted to allow updating the counter from
+	 * slot 1 to the favoured slot 0.
+	 */
+	*slot_out = inverted_slot == 0U ? 1U : 0U;
+
+	return 0;
+}
 
 #ifndef CONFIG_BL_VALIDATE_FW_EXT_API_UNUSED
 #ifdef CONFIG_BL_VALIDATE_FW_EXT_API_REQUIRED
@@ -171,13 +221,13 @@ static bool validate_signature(const uint32_t fw_src_address, const uint32_t fw_
 	/* Some key data storage backends require word sized reads, hence
 	 * we need to ensure word alignment for 'key_data'
 	 */
-	__aligned(4) uint8_t key_data[CONFIG_SB_PUBLIC_KEY_HASH_LEN];
+	__aligned(4) uint8_t key_data[SB_PUBLIC_KEY_HASH_LEN];
 
 	for (uint32_t key_data_idx = 0; key_data_idx < num_public_keys_read();
 			key_data_idx++) {
-		int read_retval = public_key_data_read(key_data_idx,
-				key_data, CONFIG_SB_PUBLIC_KEY_HASH_LEN);
-		if (read_retval != CONFIG_SB_PUBLIC_KEY_HASH_LEN) {
+		int read_retval = public_key_data_read(key_data_idx, key_data);
+
+		if (read_retval != SB_PUBLIC_KEY_HASH_LEN) {
 			if (read_retval == -EINVAL) {
 				PRINT("Key %d has been invalidated, try next.\n\r",
 					key_data_idx);
@@ -191,7 +241,7 @@ static bool validate_signature(const uint32_t fw_src_address, const uint32_t fw_
 
 		PRINT("Verifying signature against key %d.\n\r", key_data_idx);
 		PRINT("Hash: 0x%02x...%02x\r\n", key_data[0],
-			key_data[CONFIG_SB_PUBLIC_KEY_HASH_LEN-1]);
+			key_data[SB_PUBLIC_KEY_HASH_LEN-1]);
 		int retval = rot_verify(fw_val_info->public_key,
 					key_data,
 					fw_val_info->signature,
@@ -288,9 +338,28 @@ static bool validate_firmware(uint32_t fw_dst_address, uint32_t fw_src_address,
 		return false;
 	}
 
-	if (fwinfo->version < get_monotonic_version(NULL)) {
+	uint16_t stored_version;
+
+	int err = get_monotonic_version(&stored_version);
+
+	if (err) {
+		PRINT("Cannot read the firmware version. %d\n\r", err);
+		PRINT("We assume this is due to the firmware version not being enabled.\n\r");
+
+		/*
+		 * Errors in reading the firmware version are assumed to be
+		 * due to the firmware version not being enabled. When the
+		 * firmware version is disabled we want no version checking to
+		 * be done so we set the version to 0 as this version is not
+		 * permitted in fwinfo and will therefore pass all version
+		 * checks.
+		 */
+		stored_version = 0;
+	}
+
+	if (fwinfo->version < stored_version) {
 		PRINT("Firmware version (%u) is smaller than monotonic counter (%u).\n\r",
-			fwinfo->version, get_monotonic_version(NULL));
+			fwinfo->version, stored_version);
 		return false;
 	}
 

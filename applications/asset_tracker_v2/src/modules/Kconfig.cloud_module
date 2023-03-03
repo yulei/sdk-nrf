@@ -15,10 +15,12 @@ if CLOUD_MODULE
 CLOUD_SERVICE_SELECTOR := choice
 
 # nRF Cloud A-GPS is enabled by default when building for all supported cloud transport services.
-# A-GPS takes precedence if both A-GPS and P-GPS are enabled at the same time. Therefore, A-GPS is
-# disabled when enabling P-GPS.
+# For LwM2M builds, A-GPS is disabled if P-GPS is enabled.
+# This is because the two methods are currently mutually exclusive for LwM2M builds.
+# For the other cloud configurations, A-GPS and P-GPS can coexist.
 config NRF_CLOUD_AGPS
-	depends on GNSS_MODULE
+	depends on LOCATION_MODULE
+	default n if NRF_CLOUD_PGPS && LWM2M_INTEGRATION
 	default y
 
 # Enable MQTT clean session by default. This is to ensure that the configured cloud MQTT service
@@ -29,6 +31,12 @@ config MQTT_CLEAN_SESSION
 # Kconfig options that are specific to the nRF Cloud MQTT transport service library.
 if NRF_CLOUD_MQTT
 
+config NRF_CLOUD_SEND_DEVICE_STATUS_SIM
+	default y
+
+config NRF_CLOUD_DEVICE_STATUS_ENCODE_VOLTAGE
+	default n
+
 choice NRF_CLOUD_SEND_SOCKET
 	default NRF_CLOUD_SEND_TIMEOUT
 endchoice
@@ -37,7 +45,7 @@ choice NRF_CLOUD_CLIENT_ID_SRC
 	default NRF_CLOUD_CLIENT_ID_SRC_RUNTIME
 endchoice
 
-config NRF_CLOUD_CELL_POS
+config NRF_CLOUD_LOCATION
 	default y if !BOARD_QEMU_X86
 
 endif # NRF_CLOUD_MQTT

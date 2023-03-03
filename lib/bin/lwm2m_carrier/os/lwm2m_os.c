@@ -12,21 +12,19 @@
 #include <zephyr/kernel.h>
 #include <string.h>
 #include <nrf_modem.h>
-#include <modem/lte_lc.h>
 #include <modem/pdn.h>
 #include <modem/nrf_modem_lib.h>
-#include <modem/modem_key_mgmt.h>
 #include <modem/sms.h>
 #include <net/download_client.h>
-#include <storage/flash_map.h>
-#include <sys/reboot.h>
-#include <sys/__assert.h>
-#include <sys/util.h>
-#include <random/rand32.h>
-#include <toolchain.h>
-#include <fs/nvs.h>
-#include <logging/log.h>
-#include <logging/log_ctrl.h>
+#include <zephyr/storage/flash_map.h>
+#include <zephyr/sys/reboot.h>
+#include <zephyr/sys/__assert.h>
+#include <zephyr/sys/util.h>
+#include <zephyr/random/rand32.h>
+#include <zephyr/toolchain.h>
+#include <zephyr/fs/nvs.h>
+#include <zephyr/logging/log.h>
+#include <zephyr/logging/log_ctrl.h>
 #include <nrf_errno.h>
 #include <modem/at_monitor.h>
 
@@ -47,10 +45,12 @@ static struct nvs_fs fs = {
 	.flash_device = NVS_FLASH_DEVICE,
 };
 
-K_THREAD_STACK_ARRAY_DEFINE(lwm2m_os_work_q_client_stack, LWM2M_OS_MAX_WORK_QS, 4096);
+K_THREAD_STACK_ARRAY_DEFINE(lwm2m_os_work_q_client_stack, LWM2M_OS_MAX_WORK_QS,
+			    CONFIG_LWM2M_CARRIER_WORKQ_STACK_SIZE);
 static struct k_work_q lwm2m_os_work_qs[LWM2M_OS_MAX_WORK_QS];
 
-K_THREAD_STACK_ARRAY_DEFINE(lwm2m_os_thread_stack, LWM2M_OS_MAX_THREAD_COUNT, 600);
+K_THREAD_STACK_ARRAY_DEFINE(lwm2m_os_thread_stack, LWM2M_OS_MAX_THREAD_COUNT,
+			    CONFIG_LWM2M_CARRIER_THREAD_STACK_SIZE);
 static struct k_thread lwm2m_os_threads[LWM2M_OS_MAX_THREAD_COUNT];
 
 static struct k_sem lwm2m_os_sems[LWM2M_OS_MAX_SEM_COUNT];
@@ -140,7 +140,7 @@ int lwm2m_os_sem_init(lwm2m_os_sem_t **sem, unsigned int initial_count, unsigned
 
 		*sem = (lwm2m_os_sem_t *)&lwm2m_os_sems[lwm2m_os_sems_used++];
 	} else {
-		__ASSERT(PART_OF_ARRAY(lwm2m_os_sems, (struct k_sem *)sem),
+		__ASSERT(PART_OF_ARRAY(lwm2m_os_sems, (struct k_sem *)*sem),
 			 "Uninitialised semaphore");
 	}
 
@@ -209,7 +209,7 @@ static void work_handler(struct k_work *work)
 	struct k_work_delayable *delayed_work = CONTAINER_OF(work, struct k_work_delayable, work);
 	struct lwm2m_work *lwm2m_work = CONTAINER_OF(delayed_work, struct lwm2m_work, work_item);
 
-	lwm2m_work->handler(lwm2m_work);
+	lwm2m_work->handler((lwm2m_os_timer_t *)lwm2m_work);
 }
 
 /* Delayed work queue functions */
@@ -256,7 +256,7 @@ lwm2m_os_timer_t *lwm2m_os_timer_get(lwm2m_os_timer_handler_t handler)
 		k_work_init_delayable(&work->work_item, work_handler);
 	}
 
-	return work;
+	return (lwm2m_os_timer_t *)work;
 }
 
 void lwm2m_os_timer_release(lwm2m_os_timer_t *timer)
@@ -375,19 +375,23 @@ int lwm2m_os_nrf_modem_init(void)
 	switch (nrf_err) {
 	case 0:
 		break;
-	case MODEM_DFU_RESULT_OK:
+	case NRF_MODEM_DFU_RESULT_OK:
 		LOG_INF("Modem firmware update successful.");
 		LOG_INF("Modem will run the new firmware after reboot.");
 		break;
-	case MODEM_DFU_RESULT_UUID_ERROR:
-	case MODEM_DFU_RESULT_AUTH_ERROR:
+	case NRF_MODEM_DFU_RESULT_UUID_ERROR:
+	case NRF_MODEM_DFU_RESULT_AUTH_ERROR:
 		LOG_ERR("Modem firmware update failed.");
 		LOG_ERR("Modem will run non-updated firmware on reboot.");
 		break;
-	case MODEM_DFU_RESULT_HARDWARE_ERROR:
-	case MODEM_DFU_RESULT_INTERNAL_ERROR:
+	case NRF_MODEM_DFU_RESULT_HARDWARE_ERROR:
+	case NRF_MODEM_DFU_RESULT_INTERNAL_ERROR:
 		LOG_ERR("Modem firmware update failed.");
 		LOG_ERR("Fatal error.");
+		break;
+	case NRF_MODEM_DFU_RESULT_VOLTAGE_LOW:
+		LOG_ERR("Modem firmware update cancelled.");
+		LOG_ERR("Please reboot once you have sufficient power for the DFU.");
 		break;
 	default:
 		LOG_ERR("Could not initialize modem library.");
@@ -563,6 +567,9 @@ int lwm2m_os_download_file_size_get(size_t *size)
 	return download_client_file_size_get(&http_downloader, size);
 }
 
+#if defined(CONFIG_LTE_LINK_CONTROL)
+#include <modem/lte_lc.h>
+
 /* LTE LC module abstractions. */
 
 size_t lwm2m_os_lte_modes_get(int32_t *modes)
@@ -614,13 +621,78 @@ void lwm2m_os_lte_mode_request(int32_t prefer)
 
 	(void)lte_lc_system_mode_set(mode, preference);
 }
+#else
+#include <nrf_modem_at.h>
+
+size_t lwm2m_os_lte_modes_get(int32_t *modes)
+{
+	int err, ltem_mode, nbiot_mode, gps_mode, preference;
+
+	/* It's expected to have all 4 arguments matched */
+	err = nrf_modem_at_scanf("AT%XSYSTEMMODE?", "%%XSYSTEMMODE: %d,%d,%d,%d",
+				 &ltem_mode, &nbiot_mode, &gps_mode, &preference);
+	if (err != 4) {
+		LOG_ERR("Failed to get system mode, error: %d", err);
+		return 0;
+	}
+
+	if (ltem_mode && nbiot_mode) {
+		modes[0] = LWM2M_OS_LTE_MODE_CAT_M1;
+		modes[1] = LWM2M_OS_LTE_MODE_CAT_NB1;
+		return 2;
+	} else if (ltem_mode) {
+		modes[0] = LWM2M_OS_LTE_MODE_CAT_M1;
+		return 1;
+	} else if (nbiot_mode) {
+		modes[0] = LWM2M_OS_LTE_MODE_CAT_NB1;
+		return 1;
+	}
+
+	return 0;
+}
+
+void lwm2m_os_lte_mode_request(int32_t prefer)
+{
+	int err, ltem_mode, nbiot_mode, gps_mode, preference;
+	static int application_preference;
+
+	/* It's expected to have all 4 arguments matched */
+	err = nrf_modem_at_scanf("AT%XSYSTEMMODE?", "%%XSYSTEMMODE: %d,%d,%d,%d",
+				 &ltem_mode, &nbiot_mode, &gps_mode, &preference);
+	if (err != 4) {
+		LOG_ERR("Failed to get system mode, error: %d", err);
+		return;
+	}
+
+	switch (prefer) {
+	case LWM2M_OS_LTE_MODE_CAT_M1:
+		application_preference = preference;
+		preference = 1;
+		break;
+	case LWM2M_OS_LTE_MODE_CAT_NB1:
+		application_preference = preference;
+		preference = 2;
+		break;
+	case LWM2M_OS_LTE_MODE_NONE:
+		preference = application_preference;
+		break;
+	}
+
+	err = nrf_modem_at_printf("AT%%XSYSTEMMODE=%d,%d,%d,%d",
+				  ltem_mode, nbiot_mode, gps_mode, preference);
+	if (err) {
+		LOG_ERR("Could not send AT command, error: %d", err);
+	}
+}
+#endif
 
 /* PDN abstractions */
 
 BUILD_ASSERT(
 	(int)LWM2M_OS_PDN_FAM_IPV4 == (int)PDN_FAM_IPV4 &&
 	(int)LWM2M_OS_PDN_FAM_IPV6 == (int)PDN_FAM_IPV6 &&
-	(int)LWM2M_OS_PDN_FAM_IPV4V6 == (int)PDN_FAM_IPV4V6,
+	(int)LWM2M_OS_PDN_FAM_IPV4V6 == (int)PDN_FAM_IPV4V6 &&
+	(int)LWM2M_OS_PDN_FAM_NONIP == (int)PDN_FAM_NONIP,
 	"Incompatible enums"
 );
 BUILD_ASSERT(
@@ -679,36 +751,6 @@ int lwm2m_os_nrf_errno(void)
 	return errno;
 }
 
-int lwm2m_os_sec_psk_exists(uint32_t sec_tag, bool *exists)
-{
-	return modem_key_mgmt_exists(sec_tag, MODEM_KEY_MGMT_CRED_TYPE_PSK, exists);
-}
-
-int lwm2m_os_sec_psk_write(uint32_t sec_tag, const void *buf, uint16_t len)
-{
-	return modem_key_mgmt_write(sec_tag, MODEM_KEY_MGMT_CRED_TYPE_PSK, buf, len);
-}
-
-int lwm2m_os_sec_psk_delete(uint32_t sec_tag)
-{
-	return modem_key_mgmt_delete(sec_tag, MODEM_KEY_MGMT_CRED_TYPE_PSK);
-}
-
-int lwm2m_os_sec_identity_exists(uint32_t sec_tag, bool *exists)
-{
-	return modem_key_mgmt_exists(sec_tag, MODEM_KEY_MGMT_CRED_TYPE_IDENTITY, exists);
-}
-
-int lwm2m_os_sec_identity_write(uint32_t sec_tag, const void *buf, uint16_t len)
-{
-	return modem_key_mgmt_write(sec_tag, MODEM_KEY_MGMT_CRED_TYPE_IDENTITY, buf, len);
-}
-
-int lwm2m_os_sec_identity_delete(uint32_t sec_tag)
-{
-	return modem_key_mgmt_delete(sec_tag, MODEM_KEY_MGMT_CRED_TYPE_IDENTITY);
-}
-
 /* Application firmware upgrade abstractions */
 
 #if CONFIG_DFU_TARGET_MCUBOOT
@@ -717,7 +759,7 @@ int lwm2m_os_sec_identity_delete(uint32_t sec_tag)
 #include <dfu/dfu_target_mcuboot.h>
 #include <dfu/dfu_target_stream.h>
 #include <pm_config.h>
-#include <sys/crc.h>
+#include <zephyr/sys/crc.h>
 
 static bool dfu_started;
 static bool dfu_in_progress;

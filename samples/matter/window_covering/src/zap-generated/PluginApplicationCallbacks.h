@@ -19,16 +19,27 @@
 
 #pragma once
 
-#include <app-common/zap-generated/callbacks/PluginCallbacks.h>
+void MatterIdentifyPluginServerInitCallback();
+void MatterDescriptorPluginServerInitCallback();
+void MatterAccessControlPluginServerInitCallback();
+void MatterBasicInformationPluginServerInitCallback();
+void MatterOtaSoftwareUpdateRequestorPluginServerInitCallback();
+void MatterGeneralCommissioningPluginServerInitCallback();
+void MatterNetworkCommissioningPluginServerInitCallback();
+void MatterGeneralDiagnosticsPluginServerInitCallback();
+void MatterSoftwareDiagnosticsPluginServerInitCallback();
+void MatterThreadNetworkDiagnosticsPluginServerInitCallback();
+void MatterAdministratorCommissioningPluginServerInitCallback();
+void MatterOperationalCredentialsPluginServerInitCallback();
+void MatterGroupKeyManagementPluginServerInitCallback();
+void MatterWindowCoveringPluginServerInitCallback();
 
 #define MATTER_PLUGINS_INIT                                                                                            \
 	MatterIdentifyPluginServerInitCallback();                                                                      \
 	MatterDescriptorPluginServerInitCallback();                                                                    \
 	MatterAccessControlPluginServerInitCallback();                                                                 \
-	MatterBasicPluginServerInitCallback();                                                                         \
-	MatterOtaSoftwareUpdateProviderPluginClientInitCallback();                                                     \
+	MatterBasicInformationPluginServerInitCallback();                                                              \
 	MatterOtaSoftwareUpdateRequestorPluginServerInitCallback();                                                    \
-	MatterPowerSourcePluginServerInitCallback();                                                                   \
 	MatterGeneralCommissioningPluginServerInitCallback();                                                          \
 	MatterNetworkCommissioningPluginServerInitCallback();                                                          \
 	MatterGeneralDiagnosticsPluginServerInitCallback();                                                            \
@@ -37,6 +48,4 @@
 	MatterAdministratorCommissioningPluginServerInitCallback();                                                    \
 	MatterOperationalCredentialsPluginServerInitCallback();                                                        \
 	MatterGroupKeyManagementPluginServerInitCallback();                                                            \
-	MatterFixedLabelPluginServerInitCallback();                                                                    \
-	MatterUserLabelPluginServerInitCallback();                                                                     \
 	MatterWindowCoveringPluginServerInitCallback();

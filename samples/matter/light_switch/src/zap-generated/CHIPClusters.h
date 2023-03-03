@@ -31,6 +31,7 @@ namespace chip
 {
 namespace Controller
 {
+
 	class DLL_EXPORT IdentifyCluster : public ClusterBase {
 	public:
 		IdentifyCluster(Messaging::ExchangeManager &exchangeManager, const SessionHandle &session,
@@ -61,6 +62,16 @@ namespace Controller
 		~OnOffCluster() {}
 	};
 
+	class DLL_EXPORT LevelControlCluster : public ClusterBase {
+	public:
+		LevelControlCluster(Messaging::ExchangeManager &exchangeManager, const SessionHandle &session,
+				    EndpointId endpoint)
+			: ClusterBase(exchangeManager, session, app::Clusters::LevelControl::Id, endpoint)
+		{
+		}
+		~LevelControlCluster() {}
+	};
+
 	class DLL_EXPORT OtaSoftwareUpdateProviderCluster : public ClusterBase {
 	public:
 		OtaSoftwareUpdateProviderCluster(Messaging::ExchangeManager &exchangeManager,
@@ -69,16 +80,6 @@ namespace Controller
 		{
 		}
 		~OtaSoftwareUpdateProviderCluster() {}
-	};
-
-	class DLL_EXPORT ColorControlCluster : public ClusterBase {
-	public:
-		ColorControlCluster(Messaging::ExchangeManager &exchangeManager, const SessionHandle &session,
-				    EndpointId endpoint)
-			: ClusterBase(exchangeManager, session, app::Clusters::ColorControl::Id, endpoint)
-		{
-		}
-		~ColorControlCluster() {}
 	};
 
 } // namespace Controller

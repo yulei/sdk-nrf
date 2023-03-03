@@ -77,6 +77,10 @@ if (CONFIG_IPC_SERVICE AND CONFIG_SOC_NRF5340_CPUAPP)
   ncs_add_partition_manager_config(pm.yml.rpmsg_nrf53)
 endif()
 
+if (CONFIG_SECURE_BOOT_STORAGE)
+  ncs_add_partition_manager_config(pm.yml.secure_boot_storage)
+endif()
+
 if (CONFIG_PCD_APP)
   ncs_add_partition_manager_config(pm.yml.pcd)
 endif()
@@ -87,6 +91,9 @@ endif()
 
 if (CONFIG_TRUSTED_EXECUTION_NONSECURE OR CONFIG_TRUSTED_EXECUTION_SECURE)
   ncs_add_partition_manager_config(pm.yml.trustzone)
+  if (CONFIG_BOOTLOADER_MCUBOOT)
+    ncs_add_partition_manager_config(pm.yml.mcuboot)
+  endif()
 endif()
 
 if (CONFIG_MEMFAULT_NCS_INTERNAL_FLASH_BACKED_COREDUMP)
@@ -97,12 +104,20 @@ if(CONFIG_NRF_CLOUD_PGPS_STORAGE_PARTITION)
   ncs_add_partition_manager_config(pm.yml.pgps)
 endif()
 
+if(CONFIG_DFU_TARGET_FULL_MODEM_USE_EXT_PARTITION)
+  ncs_add_partition_manager_config(pm.yml.fmfu)
+endif()
+
 if (CONFIG_EMDS)
   ncs_add_partition_manager_config(pm.yml.emds)
 endif()
 
 if (CONFIG_BT_FAST_PAIR_REGISTRATION_DATA)
   ncs_add_partition_manager_config(pm.yml.bt_fast_pair)
+endif()
+
+if (CONFIG_NRF_MODEM_LIB_TRACE_BACKEND_FLASH)
+  ncs_add_partition_manager_config(pm.yml.modem_trace)
 endif()
 
 # We are using partition manager if we are a child image or if we are

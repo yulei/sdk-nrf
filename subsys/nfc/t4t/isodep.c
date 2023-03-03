@@ -269,6 +269,13 @@ static int ats_parse(const uint8_t *data, size_t len)
 	/* Check if ATS contains historical bytes. */
 	if (index < len) {
 		t4t_isodep.tag.historical_len = len - index;
+		/* Maximum parsing length of the historical bytes is limited to 15
+		 * NFC Forum Digital Specification 2.0 14.6.2.
+		 */
+		if (t4t_isodep.tag.historical_len > NFC_T4T_ISODEP_HIST_MAX_LEN) {
+			t4t_isodep.tag.historical_len = NFC_T4T_ISODEP_HIST_MAX_LEN;
+		}
+
 		memcpy(t4t_isodep.tag.historical, &data[index],
 		       t4t_isodep.tag.historical_len);
 	}
@@ -875,7 +882,14 @@ int nfc_t4t_isodep_transmit(const uint8_t *data, size_t data_len)
 			LOG_DBG("Wait %d ms before sending first frame after ATS Response",
 				delay);
 
-			return k_work_reschedule(&isodep_work, K_MSEC(delay));
+			int ret = k_work_reschedule(&isodep_work, K_MSEC(delay));
+
+			if (ret < 0) {
+				return ret;
+			}
+
+			__ASSERT_NO_MSG(ret == 1);
+			return 0;
 		}
 	}
 

@@ -9,34 +9,30 @@
 #include <errno.h>
 #include <nrf.h>
 #include <assert.h>
-#include <pm_config.h>
 #include <nrfx_nvmc.h>
+#include <pm_config.h>
 
+#define TYPE_COUNTERS 1 /* Type referring to counter collection. */
+#define COUNTER_DESC_VERSION 1 /* Counter description value for firmware version. */
 
-/** The first data structure in the bootloader storage. It has unknown length
- *  since 'key_data' is repeated. This data structure is immediately followed by
- *  struct counter_collection.
- */
-struct bl_storage_data {
-	uint32_t s0_address;
-	uint32_t s1_address;
-	uint32_t num_public_keys; /* Number of entries in 'key_data' list. */
-	struct {
-		uint32_t valid;
-		uint8_t hash[CONFIG_SB_PUBLIC_KEY_HASH_LEN];
-	} key_data[1];
-};
+#ifdef CONFIG_SB_NUM_VER_COUNTER_SLOTS
+BUILD_ASSERT(CONFIG_SB_NUM_VER_COUNTER_SLOTS % 2 == 0,
+			 "CONFIG_SB_NUM_VER_COUNTER_SLOTS must be an even number");
+#endif
 
-/** A single monotonic counter. It consists of a description value, a 'type',
- *  to know what this counter counts. Further, it has a number of slots
- *  allocated to it. Each time the counter is updated, a new slot is written.
- *  This way, the counter can be updated without erasing anything. This is
+/** This library implements monotonic counters where each time the counter
+ *  is increased, a new slot is written.
+ *  This way, the counter can be updated without erase. This is, among other things,
  *  necessary so the counter can be used in the OTP section of the UICR
  *  (available on e.g. nRF91 and nRF53).
  */
 struct monotonic_counter {
-	uint16_t description; /* Counter description. What the counter is used for. See COUNTER_DESC_*. */
-	uint16_t num_counter_slots; /* Number of entries in 'counter_slots' list. */
+	/* Counter description. What the counter is used for. See
+	 * BL_MONOTONIC_COUNTERS_DESC_x.
+	 */
+	uint16_t description;
+	/* Number of entries in 'counter_slots' list. */
+	uint16_t num_counter_slots;
 	uint16_t counter_slots[1];
 };
 
@@ -51,15 +47,9 @@ struct counter_collection {
 	struct monotonic_counter counters[1];
 };
 
-#define TYPE_COUNTERS 1 /* Type referring to counter collection. */
-#define COUNTER_DESC_VERSION 1 /* Counter description value for firmware version. */
-
-static const struct bl_storage_data *p_bl_storage_data =
-	(struct bl_storage_data *)PM_PROVISION_ADDRESS;
-
 uint32_t s0_address_read(void)
 {
-	uint32_t addr = p_bl_storage_data->s0_address;
+	uint32_t addr = BL_STORAGE->s0_address;
 
 	__DSB(); /* Because of nRF9160 Erratum 7 */
 	return addr;
@@ -67,7 +57,7 @@ uint32_t s0_address_read(void)
 
 uint32_t s1_address_read(void)
 {
-	uint32_t addr = p_bl_storage_data->s1_address;
+	uint32_t addr = BL_STORAGE->s1_address;
 
 	__DSB(); /* Because of nRF9160 Erratum 7 */
 	return addr;
@@ -75,7 +65,7 @@ uint32_t s1_address_read(void)
 
 uint32_t num_public_keys_read(void)
 {
-	uint32_t num_pk = p_bl_storage_data->num_public_keys;
+	uint32_t num_pk = BL_STORAGE->num_public_keys;
 
 	__DSB(); /* Because of nRF9160 Erratum 7 */
 	return num_pk;
@@ -86,24 +76,22 @@ uint32_t num_public_keys_read(void)
 
 static bool key_is_valid(uint32_t key_idx)
 {
-	bool ret = (p_bl_storage_data->key_data[key_idx].valid != INVALID_VAL);
+	bool ret = (BL_STORAGE->key_data[key_idx].valid != INVALID_VAL);
 
 	__DSB(); /* Because of nRF9160 Erratum 7 */
 	return ret;
 }
 
-static uint16_t read_halfword(const uint16_t *ptr);
-
 int verify_public_keys(void)
 {
 	for (uint32_t n = 0; n < num_public_keys_read(); n++) {
 		if (key_is_valid(n)) {
-			const uint16_t *p_key_n = (const uint16_t *)
-					p_bl_storage_data->key_data[n].hash;
-			size_t hash_len_u16 = (CONFIG_SB_PUBLIC_KEY_HASH_LEN/2);
-
-			for (uint32_t i = 0; i < hash_len_u16; i++) {
-				if (read_halfword(&p_key_n[i]) == 0xFFFF) {
+			for (uint32_t i = 0; i < SB_PUBLIC_KEY_HASH_LEN / 2; i++) {
+				const uint16_t *hash_as_halfwords =
+					(const uint16_t *)BL_STORAGE->key_data[n].hash;
+				uint16_t halfword = nrfx_nvmc_otp_halfword_read(
+					(uint32_t)&hash_as_halfwords[i]);
+				if (halfword == 0xFFFF) {
 					return -EHASHFF;
 				}
 			}
@@ -112,66 +100,36 @@ int verify_public_keys(void)
 	return 0;
 }
 
-/**
- * Helper procedure for public_key_data_read()
- *
- * Copies @p src into @p dst. Reads from @p src are done 32 bits at a
- * time. Writes to @p dst are done a byte at a time.
- *
- * @param dst destination buffer
- * @param src source buffer
- * @param size number of *bytes* in src to copy into dst
- */
-static void public_key_copy32(uint8_t *dst, const uint32_t *src, size_t size)
+int public_key_data_read(uint32_t key_idx, uint8_t *p_buf)
 {
-	while (size) {
-		uint32_t val = *src++;
-
-		*dst++ = val & 0xFF;
-		*dst++ = (val >> 8U) & 0xFF;
-		*dst++ = (val >> 16U) & 0xFF;
-		*dst++ = (val >> 24U) & 0xFF;
-
-		size -= 4;
-	}
-}
-
-int public_key_data_read(uint32_t key_idx, uint8_t *p_buf, size_t buf_size)
-{
-	const uint8_t *p_key;
+	const volatile uint8_t *p_key;
 
 	if (!key_is_valid(key_idx)) {
 		return -EINVAL;
-	}
-
-	if (buf_size < CONFIG_SB_PUBLIC_KEY_HASH_LEN) {
-		return -ENOMEM;
 	}
 
 	if (key_idx >= num_public_keys_read()) {
 		return -EFAULT;
 	}
 
-	p_key = p_bl_storage_data->key_data[key_idx].hash;
+	p_key = BL_STORAGE->key_data[key_idx].hash;
 
 	/* Ensure word alignment, since the data is stored in memory region
 	 * with word sized read limitation. Perform both build time and run
 	 * time asserts to catch the issue as soon as possible.
 	 */
-	BUILD_ASSERT(CONFIG_SB_PUBLIC_KEY_HASH_LEN % 4 == 0);
 	BUILD_ASSERT(offsetof(struct bl_storage_data, key_data) % 4 == 0);
 	__ASSERT(((uint32_t)p_key % 4 == 0), "Key address is not word aligned");
 
-	public_key_copy32(p_buf, (const uint32_t *)p_key, CONFIG_SB_PUBLIC_KEY_HASH_LEN);
-	__DSB(); /* Because of nRF9160 Erratum 7 */
+	otp_copy32(p_buf, (volatile uint32_t *restrict)p_key, SB_PUBLIC_KEY_HASH_LEN);
 
-	return CONFIG_SB_PUBLIC_KEY_HASH_LEN;
+	return SB_PUBLIC_KEY_HASH_LEN;
 }
 
 void invalidate_public_key(uint32_t key_idx)
 {
-	const uint32_t *invalidation_token =
-			&p_bl_storage_data->key_data[key_idx].valid;
+	const volatile uint32_t *invalidation_token =
+			&BL_STORAGE->key_data[key_idx].valid;
 
 	if (*invalidation_token != INVALID_VAL) {
 		/* Write if not already written. */
@@ -180,58 +138,14 @@ void invalidate_public_key(uint32_t key_idx)
 	}
 }
 
-
-/** Function for reading a half-word (2 byte value) from OTP.
- *
- * @details The flash in OTP supports only aligned 4 byte read operations.
- *          This function reads the encompassing 4 byte word, and returns the
- *          requested half-word.
- *
- * @param[in]  ptr  Address to read.
- *
- * @return value
- */
-static uint16_t read_halfword(const uint16_t *ptr)
-{
-	bool top_half = ((uint32_t)ptr % 4); /* Addr not div by 4 */
-	uint32_t target_addr = (uint32_t)ptr & ~3; /* Floor address */
-	uint32_t val32 = *(uint32_t *)target_addr;
-	__DSB(); /* Because of nRF9160 Erratum 7 */
-
-	return (top_half ? (val32 >> 16) : val32) & 0x0000FFFF;
-}
-
-
-/** Function for writing a half-word (2 byte value) to OTP.
- *
- * @details The flash in OTP supports only aligned 4 byte write operations.
- *          This function writes to the encompassing 4 byte word, masking the
- *          other half-word with 0xFFFF so it is left untouched.
- *
- * @param[in]  ptr  Address to write to.
- * @param[in]  val  Value to write into @p ptr.
- */
-static void write_halfword(const uint16_t *ptr, uint16_t val)
-{
-	bool top_half = (uint32_t)ptr % 4; /* Addr not div by 4 */
-	uint32_t target_addr = (uint32_t)ptr & ~3; /* Floor address */
-
-	uint32_t val32 = (uint32_t)val | 0xFFFF0000;
-	uint32_t val32_shifted = ((uint32_t)val << 16) | 0x0000FFFF;
-
-	nrfx_nvmc_word_write(target_addr, top_half ? val32_shifted : val32);
-}
-
-
 /** Get the counter_collection data structure in the provision data. */
 static const struct counter_collection *get_counter_collection(void)
 {
-	struct counter_collection *collection = (struct counter_collection *)
-		&p_bl_storage_data->key_data[num_public_keys_read()];
-	return read_halfword(&collection->type) == TYPE_COUNTERS
+	const struct counter_collection *collection = (struct counter_collection *)
+		&BL_STORAGE->key_data[num_public_keys_read()];
+	return nrfx_nvmc_otp_halfword_read((uint32_t)&collection->type) == TYPE_COUNTERS
 		? collection : NULL;
 }
-
 
 /** Get one of the (possibly multiple) counters in the provision data.
  *
@@ -247,10 +161,12 @@ static const struct monotonic_counter *get_counter_struct(uint16_t description)
 
 	const struct monotonic_counter *current = counters->counters;
 
-	for (size_t i = 0; i < read_halfword(&counters->num_counters); i++) {
-		uint16_t num_slots = read_halfword(&current->num_counter_slots);
+	for (size_t i = 0; i < nrfx_nvmc_otp_halfword_read(
+		(uint32_t)&counters->num_counters); i++) {
+		uint16_t num_slots = nrfx_nvmc_otp_halfword_read(
+					(uint32_t)&current->num_counter_slots);
 
-		if (read_halfword(&current->description) == description) {
+		if (nrfx_nvmc_otp_halfword_read((uint32_t)&current->description) == description) {
 			return current;
 		}
 
@@ -260,37 +176,53 @@ static const struct monotonic_counter *get_counter_struct(uint16_t description)
 	return NULL;
 }
 
-
-uint16_t num_monotonic_counter_slots(void)
+int num_monotonic_counter_slots(uint16_t counter_desc, uint16_t *counter_slots)
 {
-	const struct monotonic_counter *counter
-			= get_counter_struct(COUNTER_DESC_VERSION);
-	uint16_t num_slots = 0;
+	const struct monotonic_counter *counter = get_counter_struct(counter_desc);
 
-	if (counter != NULL) {
-		num_slots = read_halfword(&counter->num_counter_slots);
+	if (counter == NULL || counter_slots == NULL) {
+		return -EINVAL;
 	}
-	return num_slots != 0xFFFF ? num_slots : 0;
-}
 
+	uint16_t num_slots = nrfx_nvmc_otp_halfword_read((uint32_t)&counter->num_counter_slots);
+
+	if (num_slots == 0xFFFF) {
+		/* We consider the 0xFFFF as invalid since it is the default value of the OTP */
+		*counter_slots = 0;
+		return -EINVAL;
+	}
+
+	*counter_slots = num_slots;
+	return 0;
+}
 
 /** Function for getting the current value and the first free slot.
  *
- * @param[out]  free_slot  Pointer to the first free slot. Can be NULL.
+ * @param[in]   counter_desc  Counter description
+ * @param[out]  counter_value The current value of the requested counter.
+ * @param[out]  free_slot     Pointer to the first free slot. Can be NULL.
  *
- * @return The current value of the counter (the highest value before the first
- *         free slot).
+ * @retval 0        Success
+ * @retval -EINVAL  Cannot find counters with description @p counter_desc or the pointer to
+ *                  @p counter_value is NULL.
  */
-static uint16_t get_counter(const uint16_t **free_slot)
+static int get_counter(uint16_t counter_desc, uint16_t *counter_value, const uint16_t **free_slot)
 {
 	uint16_t highest_counter = 0;
 	const uint16_t *addr = NULL;
-	const uint16_t *slots =
-			get_counter_struct(COUNTER_DESC_VERSION)->counter_slots;
-	uint16_t num_slots = num_monotonic_counter_slots();
+	const struct monotonic_counter *counter_obj = get_counter_struct(counter_desc);
+	const uint16_t *slots;
+	uint16_t num_counter_slots;
 
-	for (uint32_t i = 0; i < num_slots; i++) {
-		uint16_t counter = ~read_halfword(&slots[i]);
+	if (counter_obj == NULL || counter_value == NULL) {
+		return -EINVAL;
+	}
+
+	slots = counter_obj->counter_slots;
+	num_counter_slots = nrfx_nvmc_otp_halfword_read((uint32_t)&counter_obj->num_counter_slots);
+
+	for (uint32_t i = 0; i < num_counter_slots; i++) {
+		uint16_t counter = ~nrfx_nvmc_otp_halfword_read((uint32_t)&slots[i]);
 
 		if (counter == 0) {
 			addr = &slots[i];
@@ -304,22 +236,28 @@ static uint16_t get_counter(const uint16_t **free_slot)
 	if (free_slot != NULL) {
 		*free_slot = addr;
 	}
-	return highest_counter;
+
+	*counter_value = highest_counter;
+	return 0;
 }
 
-
-uint16_t get_monotonic_counter(void)
+int get_monotonic_counter(uint16_t counter_desc, uint16_t *counter_value)
 {
-	return get_counter(NULL);
+	return get_counter(counter_desc, counter_value, NULL);
 }
 
-
-int set_monotonic_counter(uint16_t new_counter)
+int set_monotonic_counter(uint16_t counter_desc, uint16_t new_counter)
 {
 	const uint16_t *next_counter_addr;
-	uint16_t counter = get_counter(&next_counter_addr);
+	uint16_t current_cnt_value;
+	int err;
 
-	if (new_counter <= counter) {
+	err = get_counter(counter_desc, &current_cnt_value, &next_counter_addr);
+	if (err != 0) {
+		return err;
+	}
+
+	if (new_counter <= current_cnt_value) {
 		/* Counter value must increase. */
 		return -EINVAL;
 	}
@@ -329,6 +267,6 @@ int set_monotonic_counter(uint16_t new_counter)
 		return -ENOMEM;
 	}
 
-	write_halfword(next_counter_addr, ~new_counter);
+	nrfx_nvmc_halfword_write((uint32_t)next_counter_addr, ~new_counter);
 	return 0;
 }

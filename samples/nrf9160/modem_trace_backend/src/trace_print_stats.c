@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
-#include <zephyr.h>
+#include <zephyr/kernel.h>
 #include <sys/errno.h>
 #include <debug/cpu_load.h>
 #include <modem/trace_backend.h>
@@ -105,3 +105,9 @@ int trace_backend_write(const void *data, size_t len)
 
 	return (int)len;
 }
+
+struct nrf_modem_lib_trace_backend trace_backend = {
+	.init = trace_backend_init,
+	.deinit = trace_backend_deinit,
+	.write = trace_backend_write,
+};

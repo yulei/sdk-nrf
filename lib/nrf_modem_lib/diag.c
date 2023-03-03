@@ -1,4 +1,10 @@
-#include <zephyr/zephyr.h>
+/*
+ * Copyright (c) 2022 Nordic Semiconductor ASA
+ *
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
+ */
+
+#include <zephyr/kernel.h>
 #include <zephyr/init.h>
 #include <zephyr/sys/sys_heap.h>
 #include <zephyr/sys/heap_listener.h>
@@ -21,6 +27,11 @@ static struct k_work_delayable diag_work;
 
 int nrf_modem_lib_diag_stats_get(struct nrf_modem_lib_diag_stats *stats)
 {
+	/* Prevent runtime stats get of uninitialized heap which causes unresponsiveness. */
+	if (!nrf_modem_is_initialized()) {
+		return -EPERM;
+	}
+
 	if (!stats) {
 		return -EFAULT;
 	}

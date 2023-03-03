@@ -4,12 +4,12 @@
  * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
-#include <ztest.h>
+#include <zephyr/ztest.h>
 #include <errno.h>
-#include <zephyr.h>
-#include <storage/flash_map.h>
-#include <drivers/flash.h>
-#include <sys/crc.h>
+#include <zephyr/kernel.h>
+#include <zephyr/storage/flash_map.h>
+#include <zephyr/drivers/flash.h>
+#include <zephyr/sys/crc.h>
 #include <dk_buttons_and_leds.h>
 #include <emds_flash.h>
 
@@ -153,12 +153,12 @@ static int fs_init(void)
 	size_t emds_flash_size = 0;
 	uint16_t cnt = 0;
 
-	rc = flash_area_open(FLASH_AREA_ID(emds_storage), &m_fa);
+	rc = flash_area_open(FIXED_PARTITION_ID(emds_storage), &m_fa);
 	if (rc) {
 		return rc;
 	}
 
-	rc = flash_area_get_sectors(FLASH_AREA_ID(emds_storage), &sector_cnt,
+	rc = flash_area_get_sectors(FIXED_PARTITION_ID(emds_storage), &sector_cnt,
 				    &hw_flash_sector);
 
 	if (rc == -ENODEV) {

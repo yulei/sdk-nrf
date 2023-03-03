@@ -26,8 +26,8 @@ extern "C" {
 
 /** Structure describing Bluetooth advertising state. */
 struct bt_le_adv_prov_adv_state {
-	/** Number of Bluetooth bonds of Bluetooth local identity used for advertising. */
-	size_t bond_cnt;
+	/** Information if the advertising device is looking for a new peer. */
+	bool pairing_mode;
 
 	/** Instead of instantly stopping Bluetooth advertising, the advertising may enter grace
 	 * period (if requested by at least one of the providers). During the grace period
@@ -35,6 +35,17 @@ struct bt_le_adv_prov_adv_state {
 	 * The boolean informs about advertising in grace period.
 	 */
 	bool in_grace_period;
+
+	/** Information if RPA (Resolvable Private Address) was rotated since the last advertising
+	 * data update. Advertising data that contain random values should be re-generated together
+	 * with RPA rotation to prevent compromising privacy.
+	 */
+	bool rpa_rotated;
+
+	/** Information if new advertising session is about to start. If set to false, the
+	 * previously started advertising session is continued.
+	 */
+	bool new_adv_session;
 };
 
 /** Structure describing feedback reported by advertising providers. */

@@ -9,7 +9,7 @@
  * Zephyr OS layer of the Wi-Fi driver.
  */
 
-#include <zephyr/zephyr.h>
+#include <zephyr/kernel.h>
 #include <zephyr/init.h>
 #include <zephyr/sys/printk.h>
 #include <zephyr/logging/log.h>
@@ -54,6 +54,8 @@ struct zep_work_item *work_alloc(void)
 		LOG_ERR("%s: Reached maximum work items", __func__);
 		return NULL;
 	}
+
+	zep_work_item[free_work_index].in_use = true;
 
 	return &zep_work_item[free_work_index];
 }

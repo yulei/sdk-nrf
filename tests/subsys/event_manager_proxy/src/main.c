@@ -3,16 +3,16 @@
  *
  * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
-#include <ztest.h>
+#include <zephyr/ztest.h>
 
 #include <app_event_manager.h>
 #include <event_manager_proxy.h>
 
+#include "test_config.h"
 #include "common_utils.h"
 #include "simple.h"
 #include "data.h"
 #include "test_events.h"
-
 
 void test_initialization(void)
 {
@@ -34,7 +34,7 @@ void test_initialization(void)
 	ret = event_manager_proxy_start();
 	zassert_ok(ret, "Cannot start event manager proxy (%d)", ret);
 
-	ret = event_manager_proxy_wait_for_remotes(K_SECONDS(1));
+	ret = event_manager_proxy_wait_for_remotes(K_SECONDS(REMOTE_START_TIMEOUT_S));
 	zassert_ok(ret, "Error when waiting for remote (%d)", ret);
 }
 

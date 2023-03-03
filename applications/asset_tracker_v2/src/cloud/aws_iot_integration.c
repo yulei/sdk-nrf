@@ -1,7 +1,13 @@
+/*
+ * Copyright (c) 2022 Nordic Semiconductor ASA
+ *
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
+ */
+
 #include "cloud/cloud_wrapper.h"
 #include <zephyr/kernel.h>
 #include <net/aws_iot.h>
-#include <nrf_modem_at.h>
+#include <hw_id.h>
 
 #define MODULE aws_iot_integration
 
@@ -291,16 +297,16 @@ int cloud_wrap_init(cloud_wrap_evt_handler_t event_handler)
 	int err;
 
 #if !defined(CONFIG_CLOUD_CLIENT_ID_USE_CUSTOM)
-	char imei_buf[20 + sizeof("OK\r\n")];
+	char hw_id_buf[HW_ID_LEN];
 
-	/* Retrieve device IMEI from modem. */
-	err = nrf_modem_at_cmd(imei_buf, sizeof(imei_buf), "AT+CGSN");
+	err = hw_id_get(hw_id_buf, ARRAY_SIZE(hw_id_buf));
+
 	if (err) {
-		LOG_ERR("Not able to retrieve device IMEI from modem");
+		LOG_ERR("Failed to retrieve device ID");
 		return err;
 	}
 
-	strncpy(client_id_buf, imei_buf, sizeof(client_id_buf) - 1);
+	strncpy(client_id_buf, hw_id_buf, sizeof(client_id_buf) - 1);
 
 	/* Explicitly null terminate client_id_buf to be sure that we carry a
 	 * null terminated buffer after strncpy().
@@ -411,7 +417,8 @@ int cloud_wrap_state_send(char *buf, size_t len, bool ack, uint32_t id)
 	return 0;
 }
 
-int cloud_wrap_data_send(char *buf, size_t len, bool ack, uint32_t id, char *path_list[])
+int cloud_wrap_data_send(char *buf, size_t len, bool ack, uint32_t id,
+			 const struct lwm2m_obj_path path_list[])
 {
 	ARG_UNUSED(path_list);
 
@@ -455,7 +462,8 @@ int cloud_wrap_batch_send(char *buf, size_t len, bool ack, uint32_t id)
 	return 0;
 }
 
-int cloud_wrap_ui_send(char *buf, size_t len, bool ack, uint32_t id, char *path_list[])
+int cloud_wrap_ui_send(char *buf, size_t len, bool ack, uint32_t id,
+		       const struct lwm2m_obj_path path_list[])
 {
 	ARG_UNUSED(path_list);
 
@@ -478,10 +486,8 @@ int cloud_wrap_ui_send(char *buf, size_t len, bool ack, uint32_t id, char *path_
 	return 0;
 }
 
-int cloud_wrap_neighbor_cells_send(char *buf, size_t len, bool ack, uint32_t id, char *path_list[])
+int cloud_wrap_cloud_location_send(char *buf, size_t len, bool ack, uint32_t id)
 {
-	ARG_UNUSED(path_list);
-
 	int err;
 	struct aws_iot_data msg = {
 		.ptr = buf,
@@ -501,7 +507,7 @@ int cloud_wrap_neighbor_cells_send(char *buf, size_t len, bool ack, uint32_t id,
 	return 0;
 }
 
-int cloud_wrap_agps_request_send(char *buf, size_t len, bool ack, uint32_t id, char *path_list[])
+int cloud_wrap_agps_request_send(char *buf, size_t len, bool ack, uint32_t id)
 {
 	int err;
 	struct aws_iot_data msg = {

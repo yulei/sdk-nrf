@@ -29,6 +29,12 @@ LOG_MODULE_REGISTER(lwm2m_security, CONFIG_LWM2M_CLIENT_UTILS_LOG_LEVEL);
 #define SERVER_SHORT_SERVER_ID 0
 #define SERVER_LIFETIME_ID 1
 
+enum security_mode {
+	SEC_MODE_PSK = 0,
+	SEC_MODE_CERTIFICATE = 2,
+	SEC_MODE_NO_SEC = 3,
+};
+
 static struct modem_mode_change mm;
 
 int lwm2m_modem_mode_cb(enum lte_lc_func_mode new_mode, void *user_data)
@@ -67,6 +73,7 @@ int lwm2m_modem_mode_cb(enum lte_lc_func_mode new_mode, void *user_data)
 
 static bool have_permanently_stored_keys;
 static int bootstrap_settings_loaded_inst = -1;
+static bool loading_in_progress;
 
 static int write_credential_type(int sec_obj_inst, int sec_tag, int res_id,
 				 enum modem_key_mgmt_cred_type type)
@@ -74,15 +81,25 @@ static int write_credential_type(int sec_obj_inst, int sec_tag, int res_id,
 	int ret;
 	void *cred = NULL;
 	uint16_t cred_len;
-	uint8_t cred_flags;
-	char pathstr[sizeof("0/0/0")];
 	char psk_hex[65];
 
-	snprintk(pathstr, sizeof(pathstr), "0/%d/%d", sec_obj_inst, res_id);
-	ret = lwm2m_engine_get_res_buf(pathstr, &cred, NULL, &cred_len,  &cred_flags);
+	ret = lwm2m_get_res_buf(&LWM2M_OBJ(0, sec_obj_inst, res_id), &cred, NULL, &cred_len,  NULL);
 	if (ret < 0) {
-		LOG_ERR("Unable to get resource data for '%s'", pathstr);
+		LOG_ERR("Unable to get resource data for '%d/%d/%d'", 0, sec_obj_inst, res_id);
 		return ret;
+	}
+
+	if (cred_len == 0) {
+		bool exist;
+
+		ret = modem_key_mgmt_exists(sec_tag, type, &exist);
+		if (ret) {
+			return ret;
+		}
+		if (exist) {
+			return -EEXIST;
+		}
+		return -ENOENT;
 	}
 
 	/* Convert binary PSK key to hex format, which is expect by modem */
@@ -104,22 +121,139 @@ static int write_credential_type(int sec_obj_inst, int sec_tag, int res_id,
 	return 0;
 }
 
+static int write_sec_obj_to_sec_tag(int sec_obj_inst, int sec_tag, int mode)
+{
+	int ret;
+
+	if (mode == SEC_MODE_PSK) {
+		ret = write_credential_type(sec_obj_inst, sec_tag, SECURITY_CLIENT_PK_ID,
+					    MODEM_KEY_MGMT_CRED_TYPE_IDENTITY);
+		if (ret) {
+			goto out;
+		}
+
+		ret = write_credential_type(sec_obj_inst, sec_tag, SECURITY_SECRET_KEY_ID,
+					    MODEM_KEY_MGMT_CRED_TYPE_PSK);
+		if (ret) {
+			goto out;
+		}
+	} else if (mode == SEC_MODE_CERTIFICATE) {
+		/* Don't fail if we already have a given data in the modem and we did not receive
+		 * that as part of bootstrap. It might have been written as part of EST process.
+		 */
+		ret = write_credential_type(sec_obj_inst, sec_tag, SECURITY_SERVER_PK_ID,
+					    MODEM_KEY_MGMT_CRED_TYPE_CA_CHAIN);
+		if (ret && ret != -EEXIST) {
+			goto out;
+		}
+		ret = write_credential_type(sec_obj_inst, sec_tag, SECURITY_CLIENT_PK_ID,
+					    MODEM_KEY_MGMT_CRED_TYPE_PUBLIC_CERT);
+		if (ret && ret != -EEXIST) {
+			goto out;
+		}
+		ret = write_credential_type(sec_obj_inst, sec_tag, SECURITY_SECRET_KEY_ID,
+					    MODEM_KEY_MGMT_CRED_TYPE_PRIVATE_CERT);
+		if (ret && ret != -EEXIST) {
+			goto out;
+		}
+	} else {
+		ret = -ENOTSUP;
+	}
+out:
+	LOG_DBG("write_sec_obj_to_sec_tag(%d, %d, %d) ret = %d", sec_obj_inst, sec_tag, mode, ret);
+	return ret;
+}
+
+static int sec_mode(int sec_obj_inst)
+{
+	uint8_t mode;
+	int ret;
+
+	ret = lwm2m_get_u8(&LWM2M_OBJ(0, sec_obj_inst, SECURITY_MODE_ID), &mode);
+	if (ret < 0) {
+		return ret;
+	}
+	return mode;
+}
+
 static bool sec_obj_has_credentials(int sec_obj_inst)
 {
 	int ret;
 	void *cred = NULL;
 	uint16_t cred_len;
-	uint8_t cred_flags;
-	char pathstr[sizeof("0/0/0")];
+	int mode;
+	struct lwm2m_obj_path path;
 
-	snprintk(pathstr, sizeof(pathstr), "0/%d/%d", sec_obj_inst, SECURITY_SECRET_KEY_ID);
-	ret = lwm2m_engine_get_res_buf(pathstr, &cred, NULL, &cred_len, &cred_flags);
-	if (ret < 0) {
-		LOG_ERR("Unable to get resource data for '%s'", pathstr);
+	mode = sec_mode(sec_obj_inst);
+	if (mode < 0) {
+		return false;
+	}
+	if (mode != SEC_MODE_CERTIFICATE && mode != SEC_MODE_PSK) {
 		return false;
 	}
 
+	path = LWM2M_OBJ(0, sec_obj_inst, SECURITY_CLIENT_PK_ID);
+	ret = lwm2m_get_res_buf(&path, &cred, NULL, &cred_len, NULL);
+	if (ret < 0) {
+		goto fail;
+	}
+	if (cred_len == 0) {
+		return false;
+	}
+
+	path.res_id = SECURITY_SECRET_KEY_ID;
+	ret = lwm2m_get_res_buf(&path, &cred, NULL, &cred_len, NULL);
+	if (ret < 0) {
+		goto fail;
+	}
+
 	return cred_len != 0;
+fail:
+	LOG_ERR("Unable to get resource data for '%d/%d/%d', rc = %d", path.obj_id,
+		path.obj_inst_id, path.res_id, ret);
+	return false;
+}
+
+static bool modem_has_credentials(int sec_tag, int mode)
+{
+	bool exist;
+	int ret;
+
+	if (mode == SEC_MODE_CERTIFICATE) {
+		bool val1, val2, val3;
+
+		ret = modem_key_mgmt_exists(sec_tag, MODEM_KEY_MGMT_CRED_TYPE_CA_CHAIN, &val1);
+		if (ret < 0) {
+			return false;
+		}
+		ret = modem_key_mgmt_exists(sec_tag, MODEM_KEY_MGMT_CRED_TYPE_PUBLIC_CERT, &val2);
+		if (ret < 0) {
+			return false;
+		}
+		ret = modem_key_mgmt_exists(sec_tag, MODEM_KEY_MGMT_CRED_TYPE_PRIVATE_CERT, &val3);
+		if (ret < 0) {
+			return false;
+		}
+		exist = val1 && val2 && val3;
+	} else if (mode == SEC_MODE_PSK) {
+		bool val1, val2;
+
+		ret = modem_key_mgmt_exists(sec_tag, MODEM_KEY_MGMT_CRED_TYPE_PSK, &val1);
+		if (ret < 0) {
+			return false;
+		}
+
+		ret = modem_key_mgmt_exists(sec_tag, MODEM_KEY_MGMT_CRED_TYPE_IDENTITY, &val2);
+		if (ret < 0) {
+			return false;
+		}
+		exist = val1 && val2;
+	} else if (mode == SEC_MODE_NO_SEC) {
+		return true;
+	} else {
+		return false;
+	}
+	return exist;
 }
 
 static int load_credentials_to_modem(struct lwm2m_ctx *ctx)
@@ -127,6 +261,7 @@ static int load_credentials_to_modem(struct lwm2m_ctx *ctx)
 	int ret;
 	bool exist;
 	bool has_credentials;
+	int mode;
 
 	if (ctx->bootstrap_mode) {
 		ctx->tls_tag = CONFIG_LWM2M_CLIENT_UTILS_BOOTSTRAP_TLS_TAG;
@@ -134,12 +269,12 @@ static int load_credentials_to_modem(struct lwm2m_ctx *ctx)
 		ctx->tls_tag = CONFIG_LWM2M_CLIENT_UTILS_SERVER_TLS_TAG;
 	}
 
-	ret = modem_key_mgmt_exists(ctx->tls_tag, MODEM_KEY_MGMT_CRED_TYPE_PSK, &exist);
-	if (ret < 0) {
-		LOG_ERR("modem_key_mgmt_exists() failed %d", ret);
-		return ret;
+	mode = sec_mode(ctx->sec_obj_inst);
+	if (mode < 0) {
+		return mode;
 	}
 
+	exist = modem_has_credentials(ctx->tls_tag, mode);
 	has_credentials = sec_obj_has_credentials(ctx->sec_obj_inst);
 
 	/* If we have credentials already in modem, and we have loaded settings from the flash
@@ -153,7 +288,7 @@ static int load_credentials_to_modem(struct lwm2m_ctx *ctx)
 		return 0;
 	}
 
-	if (!exist && !has_credentials) {
+	if (!has_credentials) {
 		LOG_ERR("No security credentials provisioned");
 		return -ENOENT;
 	}
@@ -169,15 +304,9 @@ static int load_credentials_to_modem(struct lwm2m_ctx *ctx)
 		k_sleep(K_SECONDS(ret));
 	}
 
-	ret = write_credential_type(ctx->sec_obj_inst, ctx->tls_tag, SECURITY_CLIENT_PK_ID,
-				    MODEM_KEY_MGMT_CRED_TYPE_IDENTITY);
-	if (ret) {
-		goto out;
-	}
-
-	ret = write_credential_type(ctx->sec_obj_inst, ctx->tls_tag, SECURITY_SECRET_KEY_ID,
-				    MODEM_KEY_MGMT_CRED_TYPE_PSK);
-	if (ret) {
+	ret = write_sec_obj_to_sec_tag(ctx->sec_obj_inst, ctx->tls_tag, mode);
+	if (ret < 0) {
+		LOG_ERR("Failed to write credentials to modem, err %d", ret);
 		goto out;
 	}
 
@@ -187,21 +316,15 @@ static int load_credentials_to_modem(struct lwm2m_ctx *ctx)
 	 */
 	if (bootstrap_settings_loaded_inst != -1 &&
 	    sec_obj_has_credentials(bootstrap_settings_loaded_inst)) {
-		ret = write_credential_type(bootstrap_settings_loaded_inst,
-					    CONFIG_LWM2M_CLIENT_UTILS_BOOTSTRAP_TLS_TAG,
-					    SECURITY_CLIENT_PK_ID,
-					    MODEM_KEY_MGMT_CRED_TYPE_IDENTITY);
-		if (ret) {
+		int bs_mode = sec_mode(bootstrap_settings_loaded_inst);
+
+		ret = write_sec_obj_to_sec_tag(bootstrap_settings_loaded_inst,
+					       CONFIG_LWM2M_CLIENT_UTILS_BOOTSTRAP_TLS_TAG,
+					       bs_mode);
+		if (ret < 0) {
+			LOG_ERR("Failed to write Boostrap credentials to modem, err %d", ret);
 			goto out;
 		}
-
-		ret = write_credential_type(bootstrap_settings_loaded_inst,
-					    CONFIG_LWM2M_CLIENT_UTILS_BOOTSTRAP_TLS_TAG,
-					    SECURITY_SECRET_KEY_ID, MODEM_KEY_MGMT_CRED_TYPE_PSK);
-		if (ret) {
-			goto out;
-		}
-
 		/* Prevent rewriting the same key on next reconnect or next boostrap */
 		bootstrap_settings_loaded_inst = -1;
 	}
@@ -231,8 +354,6 @@ out:
 
 #if defined(CONFIG_LWM2M_RD_CLIENT_SUPPORT_BOOTSTRAP)
 
-static bool loading_in_progress = true;
-
 static bool object_instance_exist(int obj, int inst)
 {
 	struct lwm2m_obj_path path = {
@@ -257,6 +378,7 @@ static int set(const char *key, size_t len_rd, settings_read_cb read_cb, void *c
 	uint8_t flags;
 	struct lwm2m_obj_path path;
 	int ret;
+	uint8_t level;
 
 	if (!key) {
 		return -ENOENT;
@@ -265,43 +387,43 @@ static int set(const char *key, size_t len_rd, settings_read_cb read_cb, void *c
 	LOG_DBG("Loading \"%s\"", key);
 
 	ret = lwm2m_string_to_path(key, &path, '/');
+
 	if (ret) {
 		return ret;
 	}
 
+	level = path.level;
+	path.level = LWM2M_PATH_LEVEL_OBJECT_INST;
+
 	/* Create object instance, if it does not exist */
 	if (!object_instance_exist(path.obj_id, path.obj_inst_id)) {
-		char o_path[LWM2M_MAX_PATH_STR_LEN];
-
-		ret = lwm2m_path_to_string(o_path, sizeof(o_path), &path,
-					   LWM2M_PATH_LEVEL_OBJECT_INST);
-		if (ret < 0) {
-			return -EIO;
-		}
-		ret = lwm2m_engine_create_obj_inst(o_path);
+		ret = lwm2m_create_object_inst(&path);
 		if (ret) {
-			LOG_ERR("Failed to create object instance %s", o_path);
+			LOG_ERR("Failed to create object instance %d/%d", path.obj_id,
+				path.obj_inst_id);
 			return ret;
 		}
 	}
 
-	if (lwm2m_engine_get_res_buf((char *)key, &buf, &len, NULL, &flags) != 0) {
+	path.level = level;
+
+	if (lwm2m_get_res_buf(&path, &buf, &len, NULL, &flags) != 0) {
 		LOG_ERR("Failed to get data pointer");
 		return -ENOENT;
 	}
 
-	len = read_cb(cb_arg, buf, len);
+	len = read_cb(cb_arg, buf, len_rd);
 	if (len <= 0) {
 		LOG_ERR("Failed to read data");
 		return -ENOENT;
 	}
 
-	lwm2m_engine_set_res_data_len((char *)key,  len + 1);
+	lwm2m_set_res_data_len(&path,  len);
 
 	if (path.obj_id == LWM2M_OBJECT_SECURITY_ID && path.res_id == SECURITY_BOOTSTRAP_FLAG_ID) {
 		bool is_bootstrap;
 
-		lwm2m_engine_get_bool(key, &is_bootstrap);
+		lwm2m_get_bool(&path, &is_bootstrap);
 		if (is_bootstrap) {
 			bootstrap_settings_loaded_inst = path.obj_inst_id;
 		}
@@ -370,7 +492,6 @@ static int write_cb_srv(uint16_t obj_inst_id, uint16_t res_id, uint16_t res_inst
 
 static void register_write_cb(int obj, int inst, int res)
 {
-	char path[sizeof("/0/0/10")];
 	lwm2m_engine_set_data_cb_t cb;
 
 	if (obj == LWM2M_OBJECT_SECURITY_ID) {
@@ -379,8 +500,7 @@ static void register_write_cb(int obj, int inst, int res)
 		cb = write_cb_srv;
 	}
 
-	snprintk(path, sizeof(path), "%d/%d/%d", obj, inst, res);
-	lwm2m_engine_register_post_write_callback(path, cb);
+	lwm2m_register_post_write_callback(&LWM2M_OBJ(obj, inst, res), cb);
 }
 
 static int server_deleted(uint16_t id)
@@ -419,33 +539,12 @@ static int security_created(uint16_t id)
 	register_write_cb(LWM2M_OBJECT_SECURITY_ID, id, SECURITY_CLIENT_PK_ID);
 	register_write_cb(LWM2M_OBJECT_SECURITY_ID, id, SECURITY_SERVER_PK_ID);
 	register_write_cb(LWM2M_OBJECT_SECURITY_ID, id, SECURITY_SHORT_SERVER_ID);
-
-	/* Empty the PSK key as data length of uninitialized opaque resources is not zero */
-	char path[sizeof("/0/0/10")];
-
-	snprintk(path, sizeof(path), "%d/%d/%d", LWM2M_OBJECT_SECURITY_ID, id,
-		 SECURITY_SECRET_KEY_ID);
-	lwm2m_engine_set_opaque(path, NULL, 0);
 	return 0;
 }
 
 static bool server_keys_exist_in_modem(void)
 {
-	int ret;
-	bool exist;
-
-	ret = modem_key_mgmt_exists(CONFIG_LWM2M_CLIENT_UTILS_SERVER_TLS_TAG,
-				    MODEM_KEY_MGMT_CRED_TYPE_PSK, &exist);
-	if (ret || !exist) {
-		return false;
-	}
-
-	ret = modem_key_mgmt_exists(CONFIG_LWM2M_CLIENT_UTILS_SERVER_TLS_TAG,
-				    MODEM_KEY_MGMT_CRED_TYPE_IDENTITY, &exist);
-	if (ret || !exist) {
-		return false;
-	}
-	return true;
+	return modem_has_credentials(CONFIG_LWM2M_CLIENT_UTILS_SERVER_TLS_TAG, SEC_MODE_PSK);
 }
 
 bool lwm2m_security_needs_bootstrap(void)
@@ -467,9 +566,9 @@ static int init_default_security_obj(struct lwm2m_ctx *ctx, char *endpoint)
 	uint16_t server_url_len;
 
 	/* Server URL */
-	ret = lwm2m_engine_get_res_buf(LWM2M_PATH(LWM2M_OBJECT_SECURITY_ID, 0,
-						   SECURITY_SERVER_URI_ID),
-					(void **)&server_url, &server_url_len, NULL, NULL);
+	ret = lwm2m_get_res_buf(&LWM2M_OBJ(LWM2M_OBJECT_SECURITY_ID, 0,
+					   SECURITY_SERVER_URI_ID),
+				(void **)&server_url, &server_url_len, NULL, NULL);
 	if (ret < 0) {
 		return ret;
 	}
@@ -477,34 +576,108 @@ static int init_default_security_obj(struct lwm2m_ctx *ctx, char *endpoint)
 	server_url_len = snprintk(server_url, server_url_len, "%s",
 				  CONFIG_LWM2M_CLIENT_UTILS_SERVER);
 
-	lwm2m_engine_set_res_data_len(LWM2M_PATH(LWM2M_OBJECT_SECURITY_ID, 0,
-						 SECURITY_SERVER_URI_ID), server_url_len + 1);
+	lwm2m_set_res_data_len(&LWM2M_OBJ(LWM2M_OBJECT_SECURITY_ID, 0,
+					  SECURITY_SERVER_URI_ID), server_url_len + 1);
 
-	/* Security Mode */
-	lwm2m_engine_set_u8(LWM2M_PATH(LWM2M_OBJECT_SECURITY_ID, 0, SECURITY_MODE_ID),
-			    IS_ENABLED(CONFIG_LWM2M_DTLS_SUPPORT) ? 0 : 3);
-#if defined(CONFIG_LWM2M_DTLS_SUPPORT)
-	/* Empty the PSK key as data length of uninitialized opaque resources is not zero */
-	lwm2m_engine_set_opaque(LWM2M_PATH(LWM2M_OBJECT_SECURITY_ID, 0, SECURITY_SECRET_KEY_ID),
-				NULL, 0);
-	lwm2m_engine_set_string(LWM2M_PATH(LWM2M_OBJECT_SECURITY_ID, 0, SECURITY_CLIENT_PK_ID),
-				endpoint);
-#endif /* CONFIG_LWM2M_DTLS_SUPPORT */
+	/* Security Mode, default to PSK with key written by application */
+	if (IS_ENABLED(CONFIG_LWM2M_DTLS_SUPPORT)) {
+		lwm2m_security_set_psk(0, NULL, 0, false, endpoint);
+	} else {
+		lwm2m_set_u8(&LWM2M_OBJ(LWM2M_OBJECT_SECURITY_ID, 0, SECURITY_MODE_ID),
+			     SEC_MODE_NO_SEC);
+	}
 
 #if defined(CONFIG_LWM2M_RD_CLIENT_SUPPORT_BOOTSTRAP)
 	/* Mark 1st instance of security object as a bootstrap server */
-	lwm2m_engine_set_u8("0/0/1", 1);
+	lwm2m_set_u8(&LWM2M_OBJ(0, 0, 1), 1);
 #else
 	/* Security and Server object need matching Short Server ID value. */
-	lwm2m_engine_set_u16("0/0/10", 101);
-	lwm2m_engine_set_u16("1/0/0", 101);
+	lwm2m_set_u16(&LWM2M_OBJ(0, 0, 10), 101);
+	lwm2m_set_u16(&LWM2M_OBJ(1, 0, 0), 101);
 #endif
 	return 0;
 }
 
+static int lwm2m_security_set_opaque_res(uint16_t sec_obj_inst, uint16_t resource, const void *buf,
+					 int len)
+{
+	if (buf && len) {
+		return lwm2m_set_opaque(&LWM2M_OBJ(0, sec_obj_inst, resource), (void *) buf, len);
+	} else {
+		return lwm2m_set_res_data_len(&LWM2M_OBJ(0, sec_obj_inst, resource), 0);
+	}
+}
+
+static int lwm2m_security_set(uint16_t sec_obj_inst, uint8_t mode, const void *pubkey,
+			      int pubkeylen, const void *serverkey, int serverkeylen,
+			      const void *secretkey, int secretkeylen)
+{
+	int rc;
+
+	rc = lwm2m_security_set_opaque_res(sec_obj_inst, SECURITY_MODE_ID, &mode, sizeof(mode));
+	if (rc) {
+		return rc;
+	}
+
+	rc = lwm2m_security_set_opaque_res(sec_obj_inst, SECURITY_CLIENT_PK_ID, pubkey, pubkeylen);
+	if (rc) {
+		return rc;
+	}
+
+	rc = lwm2m_security_set_opaque_res(sec_obj_inst, SECURITY_SERVER_PK_ID, serverkey,
+					   serverkeylen);
+	if (rc) {
+		return rc;
+	}
+
+	rc = lwm2m_security_set_opaque_res(sec_obj_inst, SECURITY_SECRET_KEY_ID, secretkey,
+					   secretkeylen);
+	return rc;
+}
+
+int lwm2m_security_set_psk(uint16_t sec_obj_inst, const void *psk, int psk_len, bool psk_is_hex,
+			   const char *psk_id)
+{
+	char buf[1 + psk_len / 2];
+
+	if (!IS_ENABLED(CONFIG_LWM2M_DTLS_SUPPORT)) {
+		return -ENOTSUP;
+	}
+
+	if (psk && psk_len && psk_is_hex) {
+		/* Need to skip the nul terminator from string */
+		size_t len = hex2bin(psk, psk_len - 1, buf, sizeof(buf));
+
+		if (len <= 0) {
+			return -EINVAL;
+		}
+
+		psk_len = len;
+		psk = buf;
+	}
+
+	return lwm2m_security_set(sec_obj_inst, SEC_MODE_PSK, psk_id, strlen(psk_id) + 1, NULL, 0,
+			      psk, psk_len);
+}
+
+int lwm2m_security_set_certificate(uint16_t sec_obj_inst, const void *cert, int cert_len,
+				   const void *private_key, int key_len, const void *ca_chain,
+				   int ca_len)
+{
+	if (!IS_ENABLED(CONFIG_LWM2M_DTLS_SUPPORT)) {
+		return -ENOTSUP;
+	}
+	return lwm2m_security_set(sec_obj_inst, SEC_MODE_CERTIFICATE, cert, cert_len, ca_chain,
+				  ca_len, private_key, key_len);
+}
+
 int lwm2m_init_security(struct lwm2m_ctx *ctx, char *endpoint, struct modem_mode_change *mmode)
 {
+#if defined(CONFIG_LWM2M_DTLS_SUPPORT)
+
 	have_permanently_stored_keys = false;
+	bootstrap_settings_loaded_inst = -1;
+	loading_in_progress = false;
 
 	/* Restore the default if not a callback function */
 	if (!mmode) {
@@ -515,28 +688,25 @@ int lwm2m_init_security(struct lwm2m_ctx *ctx, char *endpoint, struct modem_mode
 		mm.user_data = mmode->user_data;
 	}
 
-#if defined(CONFIG_LWM2M_DTLS_SUPPORT)
 	ctx->tls_tag = IS_ENABLED(CONFIG_LWM2M_RD_CLIENT_SUPPORT_BOOTSTRAP) ?
 			       CONFIG_LWM2M_CLIENT_UTILS_BOOTSTRAP_TLS_TAG :
 				     CONFIG_LWM2M_CLIENT_UTILS_SERVER_TLS_TAG;
 	ctx->load_credentials = load_credentials_to_modem;
-
-#endif /* CONFIG_LWM2M_DTLS_SUPPORT */
 
 #if defined(CONFIG_LWM2M_RD_CLIENT_SUPPORT_BOOTSTRAP)
 	/* If bootstrap is enabled, we should delete the default server instance,
 	 * because it is the bootstrap server that creates it for us.
 	 * Then on a next boot, we load it from flash.
 	 */
-	lwm2m_engine_delete_obj_inst("1/0");
+	lwm2m_delete_object_inst(&LWM2M_OBJ(1, 0));
 
 	/* Bootsrap server might delete or create our security&server object,
 	 * so I need to be aware of those.
 	 */
-	lwm2m_engine_register_create_callback(LWM2M_OBJECT_SECURITY_ID, security_created);
-	lwm2m_engine_register_delete_callback(LWM2M_OBJECT_SECURITY_ID, security_deleted);
-	lwm2m_engine_register_create_callback(LWM2M_OBJECT_SERVER_ID, server_created);
-	lwm2m_engine_register_delete_callback(LWM2M_OBJECT_SERVER_ID, server_deleted);
+	lwm2m_register_create_callback(LWM2M_OBJECT_SECURITY_ID, security_created);
+	lwm2m_register_delete_callback(LWM2M_OBJECT_SECURITY_ID, security_deleted);
+	lwm2m_register_create_callback(LWM2M_OBJECT_SERVER_ID, server_created);
+	lwm2m_register_delete_callback(LWM2M_OBJECT_SERVER_ID, server_deleted);
 
 	int ret = settings_subsys_init();
 
@@ -560,12 +730,13 @@ int lwm2m_init_security(struct lwm2m_ctx *ctx, char *endpoint, struct modem_mode
 	if (have_permanently_stored_keys && bootstrap_settings_loaded_inst > 0) {
 		/* I don't need the default security instance 0 anymore */
 		loading_in_progress = true;
-		lwm2m_engine_delete_obj_inst("0/0");
+		lwm2m_delete_object_inst(&LWM2M_OBJ(0, 0));
 		loading_in_progress = false;
 		return 0;
 	}
 
 #endif /* CONFIG_LWM2M_RD_CLIENT_SUPPORT_BOOTSTRAP */
+#endif /* CONFIG_LWM2M_DTLS_SUPPORT */
 
 	return init_default_security_obj(ctx, endpoint);
 }

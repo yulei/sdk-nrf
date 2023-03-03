@@ -14,25 +14,15 @@ menuconfig BT_FAST_PAIR
 if BT_FAST_PAIR
 
 config BT_FAST_PAIR_EXT_PN
-	bool
+	bool "Fast Pair Personalized Name extension"
+	default y
+	select BT_FAST_PAIR_GATT_SERVICE_ADDITIONAL_DATA
 	select BT_FAST_PAIR_STORAGE_EXT_PN
 	help
 	  Enable Fast Pair Personalized Name extension.
 
-	  The feature is not fully supported. Fast Pair Service's Additional
-	  Data characteristic is not implemented.
-
 rsource "fp_crypto/Kconfig.fp_crypto"
 rsource "fp_storage/Kconfig.fp_storage"
-
-config BT_RPA_TIMEOUT
-	default 3600
-	help
-	  The Bluetooth Core Specification v5.2 (Vol. 4, Part E, 7.8.45) allows for time range
-	  between 1 second and 3600 seconds. In case of Fast Pair we should avoid RPA address
-	  rotation when device is Fast Pair discoverable. If not discoverable, the RPA address
-	  rotation should be done together with Fast Pair payload update (responsibility of
-	  sample/application).
 
 config BT_DIS
 	default y
@@ -79,6 +69,12 @@ config BT_FAST_PAIR_GATT_SERVICE
 
 if BT_FAST_PAIR_GATT_SERVICE
 
+config BT_GATT_AUTO_SEC_REQ
+	default n
+	help
+	  Disable automatic security re-establishment request as a peripheral
+	  to allow Fast Pair Seeker to control the security re-establishment.
+
 config BT_L2CAP_TX_MTU
 	default 83
 	help
@@ -99,6 +95,11 @@ config BT_CTLR_DATA_LENGTH_MAX
 	help
 	  If Fast Pair is enabled, use MTU value of 83 (recommended by the specification).
 
+config BT_FAST_PAIR_GATT_SERVICE_ADDITIONAL_DATA
+	bool
+	help
+	  Add Fast Pair Service's Additional Data GATT characteristic.
+
 endif # BT_FAST_PAIR_GATT_SERVICE
 
 config BT_FAST_PAIR_REGISTRATION_DATA
@@ -107,6 +108,12 @@ config BT_FAST_PAIR_REGISTRATION_DATA
 	select PM_SINGLE_IMAGE
 	help
 	  Add Fast Pair registration data source files.
+
+config BT_FAST_PAIR_BATTERY
+	bool
+	default y
+	help
+	  Add Fast Pair battery module source files.
 
 module = BT_FAST_PAIR
 module-str = Fast Pair Service

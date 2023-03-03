@@ -3,6 +3,10 @@
 Firmware architecture
 #####################
 
+.. contents::
+   :local:
+   :depth: 2
+
 The Asset Tracker v2 application has a modular structure, where each module has a defined scope of responsibility.
 The application makes use of the :ref:`app_event_manager` to distribute events between modules in the system.
 The Application Event Manager is used for all the communication between the modules.
@@ -26,7 +30,7 @@ The application comprises of the following modules:
 * :ref:`asset_tracker_v2_data_module`
 * :ref:`asset_tracker_v2_cloud_module`
 * :ref:`asset_tracker_v2_sensor_module`
-* :ref:`asset_tracker_v2_gnss_module`
+* :ref:`asset_tracker_v2_location_module`
 * :ref:`asset_tracker_v2_ui_module`
 * :ref:`asset_tracker_v2_util_module`
 * :ref:`asset_tracker_v2_debug_module`

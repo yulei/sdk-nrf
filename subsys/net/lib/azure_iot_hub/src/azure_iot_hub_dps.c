@@ -11,12 +11,12 @@
 
 #include <net/azure_iot_hub.h>
 #include <net/azure_iot_hub_dps.h>
+#include <net/mqtt_helper.h>
 
 #include <azure/az_core.h>
 #include <azure/az_iot.h>
 
 #include "azure_iot_hub_dps_private.h"
-#include "azure_iot_hub_mqtt.h"
 
 #include <zephyr/logging/log.h>
 
@@ -203,18 +203,18 @@ AZ_DPS_STATIC int dps_save_hostname(char *hostname_ptr, size_t hostname_len)
 	size_t buf_hostname_len = MIN(sizeof(assigned_hub_buf) - 1, hostname_len);
 
 	memcpy(assigned_hub_buf, hostname_ptr,  buf_hostname_len);
-	assigned_hub_buf[hostname_len] = '\0';
+	assigned_hub_buf[buf_hostname_len] = '\0';
 
 	dps_reg_ctx.assigned_hub = az_span_create(assigned_hub_buf, buf_hostname_len);
 
 	err = settings_save_one(DPS_SETTINGS_KEY "/" DPS_SETTINGS_HOSTNAME_LEN_KEY,
-				&hostname_len, sizeof(hostname_len));
+				&buf_hostname_len, sizeof(buf_hostname_len));
 	if (err) {
 		return err;
 	}
 
 	err = settings_save_one(DPS_SETTINGS_KEY "/" DPS_SETTINGS_HOSTNAME_KEY,
-				assigned_hub_buf, hostname_len);
+				assigned_hub_buf, buf_hostname_len);
 	if (err) {
 		return err;
 	}
@@ -238,13 +238,13 @@ AZ_DPS_STATIC int dps_save_device_id(char *device_id_ptr, size_t device_id_len)
 	dps_reg_ctx.assigned_device_id = az_span_create(assigned_device_id_buf, buf_device_id_len);
 
 	err = settings_save_one(DPS_SETTINGS_KEY "/" DPS_SETTINGS_DEVICE_ID_LEN_KEY,
-				&device_id_len, sizeof(device_id_len));
+				&buf_device_id_len, sizeof(buf_device_id_len));
 	if (err) {
 		return err;
 	}
 
 	err = settings_save_one(DPS_SETTINGS_KEY "/" DPS_SETTINGS_DEVICE_ID_KEY,
-				assigned_device_id_buf, device_id_len);
+				assigned_device_id_buf, buf_device_id_len);
 	if (err) {
 		return err;
 	}
@@ -708,7 +708,7 @@ AZ_DPS_STATIC int provisioning_client_init(struct mqtt_helper_conn_params *conn_
 	return 0;
 }
 
-AZ_DPS_STATIC void on_publish(struct azure_iot_hub_buf topic, struct azure_iot_hub_buf payload)
+AZ_DPS_STATIC void on_publish(struct mqtt_helper_buf topic, struct mqtt_helper_buf payload)
 {
 	az_span topic_span = az_span_create(topic.ptr, topic.size);
 	az_span payload_span = az_span_create(payload.ptr, payload.size);
@@ -833,7 +833,6 @@ int azure_iot_hub_dps_start(void)
 	char user_name_buf[CONFIG_AZURE_IOT_HUB_DPS_USER_NAME_BUFFER_SIZE];
 	static bool initial_load_done;
 	struct mqtt_helper_conn_params conn_params = {
-		.port = CONFIG_AZURE_IOT_HUB_PORT,
 		.hostname = {
 			.ptr = CONFIG_AZURE_IOT_HUB_DPS_HOSTNAME,
 			.size = sizeof(CONFIG_AZURE_IOT_HUB_DPS_HOSTNAME) - 1,
@@ -925,7 +924,7 @@ int azure_iot_hub_dps_hostname_get(struct azure_iot_hub_buf *buf)
 	size_t hostname_len = az_span_size(dps_reg_ctx.assigned_hub);
 	char *hostname_ptr = az_span_ptr(dps_reg_ctx.assigned_hub);
 
-	LOG_DBG("hostname_ptr: %p, hostname_len: %d", hostname_ptr, hostname_len);
+	LOG_DBG("hostname_ptr: %p, hostname_len: %d", (void *)hostname_ptr, hostname_len);
 
 	if (buf == NULL) {
 		return -EINVAL;
@@ -947,7 +946,7 @@ int azure_iot_hub_dps_device_id_get(struct azure_iot_hub_buf *buf)
 	size_t dev_id_len = az_span_size(dps_reg_ctx.assigned_device_id);
 	char *dev_id_ptr = az_span_ptr(dps_reg_ctx.assigned_device_id);
 
-	LOG_DBG("dev_id_ptr: %p, dev_id_len: %d", dev_id_ptr, dev_id_len);
+	LOG_DBG("dev_id_ptr: %p, dev_id_len: %d", (void *)dev_id_ptr, dev_id_len);
 
 	if (buf == NULL) {
 		return -EINVAL;

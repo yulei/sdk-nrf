@@ -29,40 +29,58 @@ config BT_MESH_SILVAIR_ENOCEAN_AUTO_COMMISSION
 	help
 	  Automatically commission/decommission EnOcean switches.
 
-config BT_MESH_SILVAIR_ENOCEAN_TICK_TIME
-	int "Tick time"
-	default 100
-	help
-	  Interval between sending of successive delta increments/decrements
-	  as long as a button is pressed, in milliseconds.
+endif
 
-config BT_MESH_SILVAIR_ENOCEAN_DELTA
-	int "Delta increment/decrement size"
-	default 2520
+config BT_MESH_DM_CLI
+	bool "Distance Measurement Client"
+	select BT_MESH_VENDOR_MODELS
+	select EXPERIMENTAL
+	depends on DM_MODULE
 	help
-	  Delta value increment/decrement size used when sending delta_set
-	  messages while a button is held down.
+	  Enable Distance Measurement Client model.
 
-config BT_MESH_SILVAIR_ENOCEAN_WAIT_TIME
-	int "Wait time"
-	default 400
+config BT_MESH_DM_SRV
+	bool "Distance Measurement Server"
+	select BT_MESH_VENDOR_MODELS
+	select EXPERIMENTAL
+	depends on DM_MODULE
+	depends on NEWLIB_LIBC
 	help
-	  Time for which button must be held to start sending delta_set messages,
-	  in milliseconds.
+	  Enable Distance Measurement Server model.
 
-config BT_MESH_SILVAIR_ENOCEAN_DELTA_TIMEOUT
-	int "Delta timeout"
-	default 6000
-	help
-	  Maximum amount of time, in milliseconds, for which delta_set messages
-	  are sent while a button is held down.
+if BT_MESH_DM_SRV
 
-config BT_MESH_SILVAIR_ENOCEAN_DELTA_TRANSITION_TIME
-	int "Transition time for Delta Set messages"
-	default 200
+config BT_MESH_DM_SRV_DEFAULT_TTL
+	int "Default distance measurement Time to Live"
+	default 0
 	help
-	  Transition time, in milliseconds, for Delta Set messages or -1 to use
-	  transition time from the Generic Default Transition Time server.
+	  Default Time to Live for distance measurement attempt.
+	  The value of '1' is an invalid value and shall not be used.
+
+config BT_MESH_DM_SRV_DEFAULT_TIMEOUT
+	int "Default distance measurement timeout"
+	default 20
+	range 10 100
+	help
+	  Default timeout for distance measurement attempt, in 100 milliseconds steps.
+
+config BT_MESH_DM_SRV_REFLECTOR_DELAY
+	int "Reflector start delay"
+	default 0
+	help
+	  Distance measurement reflector role start delay in milliseconds.
+
+config BT_MESH_DM_SRV_INITIATOR_RANGING_WINDOW_US
+	int "Ranging window for the initiator in micro seconds"
+	default 50000
+	help
+	  Ranging window for the initiator in micro seconds.
+
+config BT_MESH_DM_SRV_REFLECTOR_RANGING_WINDOW_US
+	int "Ranging window for the reflector in micro seconds"
+	default 70000
+	help
+	  Ranging window for the reflector in micro seconds.
 
 endif
 

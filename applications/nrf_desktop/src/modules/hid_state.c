@@ -519,7 +519,11 @@ static bool key_value_set(struct items *items, uint16_t usage_id, int16_t value)
 	/* Report equal to zero brings no change. This should never happen. */
 	__ASSERT_NO_MSG(value != 0);
 
-	p_item = bsearch(&usage_id,
+	struct item i = {
+		.usage_id = usage_id,
+	};
+
+	p_item = bsearch(&i,
 			 (uint8_t *)items->item,
 			 ARRAY_SIZE(items->item),
 			 sizeof(items->item[0]),
@@ -1615,7 +1619,7 @@ static bool app_event_handler(const struct app_event_header *aeh)
 				cast_hid_report_subscription_event(aeh));
 	}
 
-	if (is_ble_peer_event(aeh)) {
+	if (IS_ENABLED(CONFIG_CAF_BLE_COMMON_EVENTS) && is_ble_peer_event(aeh)) {
 		return handle_ble_peer_event(cast_ble_peer_event(aeh));
 	}
 
@@ -1635,7 +1639,9 @@ static bool app_event_handler(const struct app_event_header *aeh)
 }
 
 APP_EVENT_LISTENER(MODULE, app_event_handler);
+#ifdef CONFIG_CAF_BLE_COMMON_EVENTS
 APP_EVENT_SUBSCRIBE(MODULE, ble_peer_event);
+#endif /* CONFIG_CAF_BLE_COMMON_EVENTS */
 APP_EVENT_SUBSCRIBE(MODULE, usb_hid_event);
 #ifdef CONFIG_DESKTOP_HID_REPORT_KEYBOARD_SUPPORT
 APP_EVENT_SUBSCRIBE(MODULE, hid_report_event);

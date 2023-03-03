@@ -24,6 +24,9 @@ config BT_LL_SOFTDEVICE
 	select BT_CTLR_ADV_EXT_SUPPORT
 	select BT_CTLR_ADV_PERIODIC_SUPPORT
 	select BT_CTLR_SYNC_PERIODIC_SUPPORT
+	select BT_CTLR_SYNC_TRANSFER_SENDER_SUPPORT
+	select BT_CTLR_SYNC_TRANSFER_RECEIVER_SUPPORT
+	select BT_CTLR_SCA_UPDATE_SUPPORT
 	select BT_CTLR_PHY_2M_SUPPORT if HAS_HW_NRF_RADIO_BLE_2M
 	select BT_CTLR_PHY_CODED_SUPPORT if HAS_HW_NRF_RADIO_BLE_CODED
 	select BT_HAS_HCI_VS
@@ -62,7 +65,7 @@ config BT_RX_STACK_SIZE
 	int
 	depends on BT_HCI_HOST || BT_RECV_BLOCKING
 	default 512 if BT_HCI_RAW
-	default 2048 if BT_MESH
+	default 2400 if BT_MESH
 	default 2200 if BT_SETTINGS
 	default 1536 if BT_SMP
 	default 1024
@@ -166,20 +169,20 @@ config BT_CTLR_SDC_RX_PRIO
 	int
 	default BT_DRIVER_RX_HIGH_PRIO
 
-config BT_CTLR_SDC_RX_STACK_SIZE
-	int "Size of the receive thread stack"
-	default 1024
-	help
-	  Size of the receiving thread stack, used to retrieve HCI events and
-	  data from the controller.
-
 # CONFIG_BT_CTLR_DF is declared in Zephyr and also here for a second time,
 # to avoid BT_CTLR_DF_SUPPORT dependency.
 config BT_CTLR_DF
-	bool "Connectionless CTE Transmitter feature"
+	bool "Enable CTE Transmitter support"
 	help
-	  Enable support for Bluetooth v5.1 Connectionless CTE Transmitter
-	  feature in controller.
+	  Enable support for the Bluetooth v5.1 Connectionless CTE Transmitter
+	  and the Connection CTE transmitter features in the controller.
+
+config BT_CTLR_DF_CONN_CTE_RSP
+	bool "Connection CTE Response feature"
+	depends on BT_CTLR_DF_CONN_CTE_TX
+	help
+	  Enable support for Bluetooth v5.1 Connection CTE Response feature
+	  in controller.
 
 # As CONFIG_BT_CTLR_ADV_EXT_PDU_EXTRA_DATA_MEMORY is defined for the Zephyr LL
 # only, and BT_CLTR_DF_ADV_CTE_TX expects it existence, we define it as an empty
@@ -198,6 +201,8 @@ choice BT_LL_SOFTDEVICE_VARIANT
 						     MPSL_CX_BT_1WIRE || \
 						     MPSL_CX_BT_3WIRE || \
 						     BT_CTLR_SYNC_PERIODIC || \
+						     BT_CTLR_SCA_UPDATE || \
+						     BT_CTLR_SDC_PAWR_ADV || \
 						     SOC_NRF5340_CPUNET)
 	default BT_LL_SOFTDEVICE_CENTRAL if BT_OBSERVER
 	default BT_LL_SOFTDEVICE_PERIPHERAL if BT_BROADCASTER
@@ -227,6 +232,12 @@ config BT_LL_SOFTDEVICE_MULTIROLE
 	  by the linker.
 
 endchoice
+
+config BT_SDC_ADDITIONAL_MEMORY
+	int "Allocates additional memory to the SDC memory pool"
+	default 0
+	help
+	  This is for testing and internal use only.
 
 if BT_CTLR_ECDH
 choice BT_CTLR_ECDH_LIB
@@ -285,5 +296,67 @@ config BT_CTLR_SDC_CX_ADV_CLOSE_ADV_EVT_ON_DENIAL
 endchoice
 endif # MPSL_CX && BT_BROADCASTER
 
+config BT_CTLR_LE_POWER_CONTROL
+	bool "LE Power Control [EXPERIMENTAL]"
+	select EXPERIMENTAL
+	help
+	  Enable support for LE Power Control feature that defined in the Bluetooth
+	  Core specification, Version 5.3 | Vol 6, Part B, Section 4.6.31.
+
+config BT_UNINIT_MPSL_ON_DISABLE
+	bool "Uninitializes MPSL on BT disable"
+	depends on MPSL_DYNAMIC_INTERRUPTS
+	help
+	  This option unitializes MPSL on BT disable. HCI driver close calls
+	  mpsl_lib_uninit, which releases all peripherals and allows the user to
+	  override any interrupt handlers used by MPSL.
+
+config BT_CTLR_SDC_PAWR_ADV
+	bool "LE Periodic Advertising with Responses Advertising State [EXPERIMENTAL]"
+	select EXPERIMENTAL
+	depends on BT_PER_ADV
+	depends on BT_CTLR_SYNC_TRANSFER_SENDER
+	help
+	  Enable support for Periodic Advertising with Respsonses - Advertiser.
+
+if BT_CTLR_SDC_PAWR_ADV
+config BT_CTLR_SDC_PAWR_ADV_COUNT
+	int "Periodic Advertising with Responses - Advertiser sets"
+	range 0 10
+	default 1
+	help
+	  Maximum number of concurrent Periodic Advertising with Responses
+	  advertisers supported.
+
+config BT_CTLR_SDC_PERIODIC_ADV_RSP_TX_BUFFER_COUNT
+	int "Number of PAwR advertiser TX buffers"
+	range 1 128
+	default 1
+	help
+	  Maximum number of subevent indications that can be buffered at a time.
+	  When using a larger value the controller will send data requests for more
+	  subevents at a time.
+
+config BT_CTLR_SDC_PERIODIC_ADV_RSP_TX_MAX_DATA_SIZE
+	int "Maximum size of PawR advertiser TX buffers"
+	range 1 249
+	default 73
+	help
+	  Maximum size of subevent indications. Decreasing this will reduce memory
+	  usage and increase scheduling performance. The controller will disallow
+	  sending a subevent indication with a larger payload.
+
+config BT_CTLR_SDC_PERIODIC_ADV_RSP_RX_BUFFER_COUNT
+	int "Number of PAwR advertiser RX buffers"
+	range 0 255
+	default 2
+	help
+	  Maximum number of periodic advertising response reports that can be
+	  buffered at a time. This should be increased when a short response slot
+	  spacing is used so that the controller is able to buffer all responses
+	  until the host is able to pull the periodic advertising response reports.
+
+	  A value of 0 will disable reception of subevent responses.
+endif
 endmenu
 endif  # BT_LL_SOFTDEVICE

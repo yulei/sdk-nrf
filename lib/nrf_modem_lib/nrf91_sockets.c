@@ -10,7 +10,7 @@
  * @brief nrf91 socket offload provider
  */
 
-#include <nrf_modem_limits.h>
+#include <nrf_modem.h>
 #include <nrf_modem_os.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -44,6 +44,7 @@
 static struct nrf_sock_ctx {
 	int nrf_fd; /* nRF socket descriptior. */
 	struct k_mutex *lock; /* Mutex associated with the socket. */
+	struct k_poll_signal poll; /* poll() signal. */
 } offload_ctx[NRF_MODEM_MAX_SOCKET_COUNT];
 
 static K_MUTEX_DEFINE(ctx_lock);
@@ -228,13 +229,6 @@ static int z_to_nrf_optname(int z_in_level, int z_in_optname,
 	return retval;
 }
 
-static int nrf_to_z_addrinfo_flags(int flags)
-{
-	/* Flags not implemented.*/
-	ARG_UNUSED(flags);
-	return 0;
-}
-
 static void z_to_nrf_addrinfo_hints(const struct zsock_addrinfo *z_in,
 				   struct nrf_addrinfo *nrf_out)
 {
@@ -255,7 +249,7 @@ static int nrf_to_z_addrinfo(struct zsock_addrinfo *z_out,
 {
 	z_out->ai_next = NULL;
 	z_out->ai_canonname = NULL; /* TODO Do proper content copy. */
-	z_out->ai_flags = nrf_to_z_addrinfo_flags(nrf_in->ai_flags);
+	z_out->ai_flags = nrf_in->ai_flags;
 	z_out->ai_socktype = nrf_in->ai_socktype;
 
 	z_out->ai_family = nrf_in->ai_family;
@@ -278,7 +272,7 @@ static int nrf_to_z_addrinfo(struct zsock_addrinfo *z_out,
 		nrf_to_z_ipv6(z_out->ai_addr,
 			(const struct nrf_sockaddr_in6 *)nrf_in->ai_addr);
 	} else {
-		return -EPROTONOSUPPORT;
+		return -EAFNOSUPPORT;
 	}
 
 	return 0;
@@ -306,6 +300,7 @@ static int nrf91_socket_offload_accept(void *obj, struct sockaddr *addr,
 	struct nrf_sockaddr_in6 nrf_addr;
 	nrf_socklen_t nrf_addrlen;
 
+	/* `z_reserve_fd()` can fail */
 	if (fd < 0) {
 		return -1;
 	}
@@ -347,6 +342,7 @@ static int nrf91_socket_offload_accept(void *obj, struct sockaddr *addr,
 			nrf_to_z_ipv6(
 			    addr, (const struct nrf_sockaddr_in6 *)&nrf_addr);
 		} else {
+			errno = ENOTSUP;
 			goto error;
 		}
 	}
@@ -357,7 +353,7 @@ static int nrf91_socket_offload_accept(void *obj, struct sockaddr *addr,
 	return fd;
 
 error:
-	if (new_sd != -1) {
+	if (new_sd >= 0) {
 		nrf_close(new_sd);
 	}
 
@@ -388,14 +384,10 @@ static int nrf91_socket_offload_bind(void *obj, const struct sockaddr *addr,
 		retval = nrf_bind(sd, (const struct nrf_sockaddr *)&ipv6,
 				  sizeof(struct nrf_sockaddr_in6));
 	} else {
-		goto error;
+		errno = EAFNOSUPPORT;
+		retval = -1;
 	}
 
-	return retval;
-
-error:
-	retval = -1;
-	errno = ENOTSUP;
 	return retval;
 }
 
@@ -427,17 +419,8 @@ static int nrf91_socket_offload_connect(void *obj, const struct sockaddr *addr,
 	} else {
 		/* Pass in raw to library as it is non-IP address. */
 		retval = nrf_connect(sd, (void *)addr, addrlen);
-		if (retval < 0) {
-			/* Not supported by library. */
-			goto error;
-		}
 	}
 
-	return retval;
-
-error:
-	retval = -1;
-	errno = ENOTSUP;
 	return retval;
 }
 
@@ -448,7 +431,7 @@ static int nrf91_socket_offload_setsockopt(void *obj, int level, int optname,
 	int retval;
 	int nrf_level = level;
 	int nrf_optname;
-	struct nrf_timeval nrf_timeo;
+	struct nrf_timeval nrf_timeo = { 0 };
 	void *nrf_optval = (void *)optval;
 	nrf_socklen_t nrf_optlen = optlen;
 
@@ -458,11 +441,13 @@ static int nrf91_socket_offload_setsockopt(void *obj, int level, int optname,
 	}
 
 	if ((level == SOL_SOCKET) && ((optname == SO_RCVTIMEO) ||
-		(optname == SO_SNDTIMEO))) {
-		nrf_timeo.tv_sec = ((struct timeval *)optval)->tv_sec;
-		nrf_timeo.tv_usec = ((struct timeval *)optval)->tv_usec;
-		nrf_optval = &nrf_timeo;
-		nrf_optlen = sizeof(struct nrf_timeval);
+				      (optname == SO_SNDTIMEO))) {
+		if (optval != NULL) {
+			nrf_timeo.tv_sec = ((struct timeval *)optval)->tv_sec;
+			nrf_timeo.tv_usec = ((struct timeval *)optval)->tv_usec;
+			nrf_optval = &nrf_timeo;
+			nrf_optlen = sizeof(struct nrf_timeval);
+		}
 	} else if ((level == SOL_TLS) && (optname == TLS_SESSION_CACHE)) {
 		nrf_optlen = sizeof(nrf_sec_session_cache_t);
 	}
@@ -481,8 +466,9 @@ static int nrf91_socket_offload_getsockopt(void *obj, int level, int optname,
 	int nrf_level = level;
 	int nrf_optname;
 	struct nrf_timeval nrf_timeo = {0, 0};
+	nrf_socklen_t nrf_timeo_size = sizeof(struct nrf_timeval);
 	void *nrf_optval = optval;
-	nrf_socklen_t nrf_optlen = (nrf_socklen_t)*optlen;
+	nrf_socklen_t *nrf_optlen = (nrf_socklen_t *)optlen;
 
 	if (z_to_nrf_optname(level, optname, &nrf_optname) < 0) {
 		errno = ENOPROTOOPT;
@@ -492,15 +478,17 @@ static int nrf91_socket_offload_getsockopt(void *obj, int level, int optname,
 	if ((level == SOL_SOCKET) && ((optname == SO_RCVTIMEO) ||
 		(optname == SO_SNDTIMEO))) {
 		nrf_optval = &nrf_timeo;
-		nrf_optlen = sizeof(struct nrf_timeval);
+		nrf_optlen = &nrf_timeo_size;
 	}
 
 	retval = nrf_getsockopt(sd, nrf_level, nrf_optname, nrf_optval,
-				&nrf_optlen);
+				nrf_optlen);
 
-	if ((retval == 0) && (optval != NULL)) {
-		*optlen = nrf_optlen;
-
+	/* The call was successful so we can assume that both
+	 * `nrf_optval` (`optval`) and `nrf_optlen` (`optlen`)
+	 * are not NULL, so we can dereference them.
+	 */
+	if (retval == 0) {
 		if (level == SOL_SOCKET) {
 			if (optname == SO_ERROR) {
 				/* Use nrf_modem_os_errno_set() to translate from nRF
@@ -536,7 +524,7 @@ static ssize_t nrf91_socket_offload_recvfrom(void *obj, void *buf, size_t len,
 		k_mutex_unlock(ctx->lock);
 	}
 
-	if (from == NULL) {
+	if (from == NULL || fromlen == NULL) {
 		retval = nrf_recvfrom(ctx->nrf_fd, buf, len, flags,
 				      NULL, NULL);
 	} else {
@@ -551,10 +539,12 @@ static ssize_t nrf91_socket_offload_recvfrom(void *obj, void *buf, size_t len,
 			goto exit;
 		}
 
-		if (cliaddr->sa_family == NRF_AF_INET) {
+		if (cliaddr->sa_family == NRF_AF_INET &&
+		    sock_len == sizeof(struct nrf_sockaddr_in)) {
 			nrf_to_z_ipv4(from, (struct nrf_sockaddr_in *)cliaddr);
 			*fromlen = sizeof(struct sockaddr_in);
-		} else if (cliaddr->sa_family == NRF_AF_INET6) {
+		} else if (cliaddr->sa_family == NRF_AF_INET6 &&
+			   sock_len == sizeof(struct nrf_sockaddr_in6)) {
 			nrf_to_z_ipv6(from, (struct nrf_sockaddr_in6 *)
 					  cliaddr);
 			*fromlen = sizeof(struct sockaddr_in6);
@@ -598,14 +588,10 @@ static ssize_t nrf91_socket_offload_sendto(void *obj, const void *buf,
 		retval = nrf_sendto(sd, buf, len, flags,
 				    (struct nrf_sockaddr*)&ipv6, sock_len);
 	} else {
-		goto error;
+		errno = EAFNOSUPPORT;
+		retval = -1;
 	}
 
-	return retval;
-
-error:
-	retval = -1;
-	errno = ENOTSUP;
 	return retval;
 }
 
@@ -623,13 +609,6 @@ static ssize_t nrf91_socket_offload_sendmsg(void *obj, const struct msghdr *msg,
 		errno = EINVAL;
 		return -1;
 	}
-
-	/* The standard POSIX definition of sendmsg says it should return
-	 * EWOULDBLOCK if the socket is in NONBLOCK mode and handed too much data.
-	 * This implementation doesn't meet that requirement and will always
-	 * block, even in NONBLOCK mode.  See POSIX.1-2017:
-	 * <http://pubs.opengroup.org/onlinepubs/9699919799/functions/sendmsg.html>
-	 */
 
 	/* Try to reduce number of `sendto` calls - copy data if they fit into
 	 * a single buffer
@@ -693,58 +672,6 @@ static ssize_t nrf91_socket_offload_sendmsg(void *obj, const struct msghdr *msg,
 	return len;
 }
 
-static inline int nrf91_socket_offload_poll(struct pollfd *fds, int nfds,
-					    int timeout)
-{
-	int retval = 0;
-	struct nrf_pollfd tmp[NRF_MODEM_MAX_SOCKET_COUNT] = { 0 };
-	void *obj;
-
-	for (int i = 0; i < nfds; i++) {
-		tmp[i].events = 0;
-		fds[i].revents = 0;
-
-		if (fds[i].fd < 0) {
-			/* Per POSIX, negative fd's are just ignored */
-			tmp[i].fd = fds[i].fd;
-			continue;
-		} else {
-			obj = z_get_fd_obj(fds[i].fd,
-					   (const struct fd_op_vtable *)
-						     &nrf91_socket_fd_op_vtable,
-					   ENOTSUP);
-			if (obj != NULL) {
-				/* Offloaded socket found. */
-				tmp[i].fd = OBJ_TO_SD(obj);
-			} else {
-				/* Non-offloaded socket, return an error. */
-				fds[i].revents = POLLNVAL;
-				retval++;
-			}
-		}
-
-		tmp[i].events = fds[i].events;
-	}
-
-	if (retval > 0) {
-		return retval;
-	}
-
-	retval = nrf_poll((struct nrf_pollfd *)&tmp, nfds, timeout);
-
-	/* Translate the API from nRF to native. */
-	/* No need to translate .events, shall be untouched by poll() */
-	for (int i = 0; i < nfds; i++) {
-		if (fds[i].fd < 0) {
-			continue;
-		}
-
-		fds[i].revents = tmp[i].revents;
-	}
-
-	return retval;
-}
-
 static void nrf91_socket_offload_freeaddrinfo(struct zsock_addrinfo *root)
 {
 	struct zsock_addrinfo *next = root;
@@ -802,12 +729,8 @@ static int nrf91_socket_offload_getaddrinfo(const char *node,
 			retval = DNS_EAI_MEMORY;
 			k_free(next_z_res);
 			break;
-		} else if (err == -EPROTONOSUPPORT) {
-			retval = DNS_EAI_SOCKTYPE;
-			k_free(next_z_res);
-			break;
 		} else if (err == -EAFNOSUPPORT) {
-			retval = DNS_EAI_ADDRFAMILY;
+			retval = DNS_EAI_FAMILY;
 			k_free(next_z_res);
 			break;
 		}
@@ -841,32 +764,115 @@ static int nrf91_socket_offload_fcntl(int fd, int cmd, va_list args)
 	switch (cmd) {
 	case F_SETFL:
 		flags = va_arg(args, int);
-		if (flags != 0 && flags != O_NONBLOCK)
-			goto error;
+		if (flags != 0 && flags != O_NONBLOCK) {
+			errno = EINVAL;
+			retval = -1;
+		}
 
 		/* Translate flags from native to nRF */
 		flags = (flags & O_NONBLOCK) ? NRF_O_NONBLOCK : 0;
 
 		retval = nrf_fcntl(fd, NRF_F_SETFL, flags);
-		break;
 
+		break;
 	case F_GETFL:
 		flags = nrf_fcntl(fd, NRF_F_GETFL, 0);
 
 		/* Translate flags from nRF to native */
 		retval = (flags & NRF_O_NONBLOCK) ? O_NONBLOCK : 0;
-		break;
 
+		break;
 	default:
-		goto error;
+		errno = EINVAL;
+		retval = -1;
 	}
 
 	return retval;
+}
 
-error:
-	retval = -1;
-	errno = EINVAL;
-	return retval;
+static struct nrf_sock_ctx *find_ctx(int fd)
+{
+	for (size_t i = 0; i < ARRAY_SIZE(offload_ctx); i++) {
+		if (offload_ctx[i].nrf_fd == fd) {
+			return &offload_ctx[i];
+		}
+	}
+
+	return NULL;
+}
+
+static void pollcb(struct nrf_pollfd *pollfd)
+{
+	struct nrf_sock_ctx *ctx;
+
+	ctx = find_ctx(pollfd->fd);
+	if (!ctx) {
+		return;
+	}
+
+	k_poll_signal_raise(&ctx->poll, pollfd->revents);
+}
+
+static int nrf91_poll_prepare(struct nrf_sock_ctx *ctx, struct zsock_pollfd *pfd,
+			      struct k_poll_event **pev, struct k_poll_event *pev_end)
+{
+	int err;
+	int flags;
+	unsigned int signaled;
+	int fd = OBJ_TO_SD(ctx);
+	struct nrf_modem_pollcb pcb = {
+		.callback = pollcb,
+		.events = pfd->events,
+		.oneshot = true, /* callback invoked only once */
+	};
+
+	if (*pev == pev_end) {
+		errno = ENOMEM;
+		return -1;
+	}
+
+	k_poll_signal_init(&ctx->poll);
+	k_poll_event_init(*pev, K_POLL_TYPE_SIGNAL, K_POLL_MODE_NOTIFY_ONLY, &ctx->poll);
+
+	err = nrf_setsockopt(fd, NRF_SOL_SOCKET, NRF_SO_POLLCB, &pcb, sizeof(pcb));
+	if (err) {
+		return -1;
+	}
+
+	/* Let other sockets use another k_poll_event */
+	(*pev)++;
+
+	signaled = 0;
+	flags = 0;
+
+	k_poll_signal_check(&ctx->poll, &signaled, &flags);
+	if (!signaled) {
+		return 0;
+	}
+
+	/* Events are ready, don't wait */
+	return -EALREADY;
+}
+
+static int nrf91_poll_update(struct nrf_sock_ctx *ctx, struct zsock_pollfd *pfd,
+			     struct k_poll_event **pev)
+{
+	int flags;
+	unsigned int signaled;
+
+	(*pev)++;
+
+	signaled = 0;
+	flags = 0;
+
+	k_poll_signal_check(&ctx->poll, &signaled, &flags);
+	if (!signaled) {
+		return 0;
+	}
+
+	pfd->revents = flags;
+
+	return 0;
 }
 
 static int nrf91_socket_offload_ioctl(void *obj, unsigned int request,
@@ -875,23 +881,30 @@ static int nrf91_socket_offload_ioctl(void *obj, unsigned int request,
 	int sd = OBJ_TO_SD(obj);
 
 	switch (request) {
-	case ZFD_IOCTL_POLL_PREPARE:
-		return -EXDEV;
+	case ZFD_IOCTL_POLL_PREPARE: {
+		struct zsock_pollfd *pfd;
+		struct k_poll_event **pev;
+		struct k_poll_event *pev_end;
 
-	case ZFD_IOCTL_POLL_UPDATE:
-		return -EOPNOTSUPP;
+		pfd = va_arg(args, struct zsock_pollfd *);
+		pev = va_arg(args, struct k_poll_event **);
+		pev_end = va_arg(args, struct k_poll_event *);
 
-	case ZFD_IOCTL_POLL_OFFLOAD: {
-		struct zsock_pollfd *fds;
-		int nfds;
-		int timeout;
-
-		fds = va_arg(args, struct zsock_pollfd *);
-		nfds = va_arg(args, int);
-		timeout = va_arg(args, int);
-
-		return nrf91_socket_offload_poll(fds, nfds, timeout);
+		return nrf91_poll_prepare(obj, pfd, pev, pev_end);
 	}
+
+	case ZFD_IOCTL_POLL_UPDATE: {
+		struct zsock_pollfd *pfd;
+		struct k_poll_event **pev;
+
+		pfd = va_arg(args, struct zsock_pollfd *);
+		pev = va_arg(args, struct k_poll_event **);
+
+		return nrf91_poll_update(obj, pfd, pev);
+	}
+
+	case ZFD_IOCTL_POLL_OFFLOAD:
+		return -EOPNOTSUPP;
 
 	case ZFD_IOCTL_SET_LOCK: {
 		struct nrf_sock_ctx *ctx = OBJ_TO_CTX(obj);
@@ -957,6 +970,11 @@ static inline bool proto_is_secure(int proto)
 	       (proto >= IPPROTO_DTLS_1_0 && proto <= IPPROTO_DTLS_1_2);
 }
 
+static inline bool af_is_supported(int family)
+{
+	return (family == AF_PACKET) || (family == AF_INET) || (family == AF_INET6);
+}
+
 static bool nrf91_socket_is_supported(int family, int type, int proto)
 {
 	if (offload_disabled) {
@@ -967,7 +985,7 @@ static bool nrf91_socket_is_supported(int family, int type, int proto)
 		return false;
 	}
 
-	return true;
+	return af_is_supported(family);
 }
 
 static int native_socket(int family, int type, int proto, bool *offload_lock)

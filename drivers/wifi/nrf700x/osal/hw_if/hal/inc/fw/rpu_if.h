@@ -23,19 +23,45 @@
 #define RPU_ADDR_BEV_END 0xBFCFFFFF
 #define RPU_ADDR_PKTRAM_START 0xB0000000
 #define RPU_ADDR_PKTRAM_END 0xB0030FFF
-#define RPU_ADDR_MCU1_CORE_ROM_START 0x80000000
-#define RPU_ADDR_MCU1_CORE_ROM_END 0x8002E7FF
-#define RPU_ADDR_MCU1_CORE_RET_START 0x80040000
-#define RPU_ADDR_MCU1_CORE_RET_END 0x8004C000
-#define RPU_ADDR_MCU1_CORE_SCRATCH_START 0x80080000
-#define RPU_ADDR_MCU1_CORE_SCRATCH_END 0x8008FFFF
-/*UMAC*/
-#define RPU_ADDR_MCU2_CORE_ROM_START 0x80000000
-#define RPU_ADDR_MCU2_CORE_ROM_END 0x800617FF
-#define RPU_ADDR_MCU2_CORE_RET_START 0x80080000
-#define RPU_ADDR_MCU2_CORE_RET_END 0x800A3FFF
-#define RPU_ADDR_MCU2_CORE_SCRATCH_START 0x80100000
-#define RPU_ADDR_MCU2_CORE_SCRATCH_END 0x80137FFF
+
+/* Needed for calculatating sleep controller address */
+#define RPU_ADDR_LMAC_CORE_RET_START 0x80040000
+#define RPU_ADDR_UMAC_CORE_RET_START 0x80080000
+
+enum RPU_MCU_ADDR_REGIONS {
+	RPU_MCU_ADDR_REGION_ROM = 0,
+	RPU_MCU_ADDR_REGION_RETENTION,
+	RPU_MCU_ADDR_REGION_SCRATCH,
+	RPU_MCU_ADDR_REGION_MAX,
+};
+
+struct rpu_addr_region {
+	unsigned int start;
+	unsigned int end;
+};
+
+struct rpu_addr_map {
+	struct rpu_addr_region regions[RPU_MCU_ADDR_REGION_MAX];
+};
+
+static const struct rpu_addr_map RPU_ADDR_MAP_MCU[] = {
+	/* MCU1 - LMAC */
+	{
+		{
+			{0x80000000, 0x80033FFF},
+			{0x80040000, 0x8004BFFF},
+			{0x80080000, 0x8008FFFF}
+		},
+	},
+	/* MCU2 - UMAC */
+	{
+		{
+			{0x80000000, 0x800617FF},
+			{0x80080000, 0x800A3FFF},
+			{0x80100000, 0x80137FFF},
+		}
+	},
+};
 
 #define RPU_ADDR_MASK_BASE 0xFF000000
 #define RPU_ADDR_MASK_OFFSET 0x00FFFFFF
@@ -97,10 +123,10 @@
 #define PWR_COUNTERSTATUS1_SYSDEF 0xA40190B4
 #define PWR_COUNTERSTATUS2_SYSDEF 0xA40190B8
 #define PWR_COUNTERSTATUS3_SYSDEF 0xA40190BC
-#define WL_PWR_MON_SYSDEF 0xA40010
-#define WL_PWR_AUX_SYSDEF 0xA40014
-#define WL_PWR_VMON_CTRL_SYSDEF 0xA40030
-#define WL_PWR_VMON_DATA_SYSDEF 0xA40034
+#define WL_PWR_MON_SYSDEF 0xA4009310
+#define WL_PWR_AUX_SYSDEF 0xA4009314
+#define WL_PWR_VMON_CTRL_SYSDEF 0xA4009330
+#define WL_PWR_VMON_DATA_SYSDEF 0xA4009334
 #define WLAFE_WL_BBPLLEN_SYSDEF 0xA400B004
 #define WLAFE_RG_BBPLL_CLK_01_SYSDEF 0xA400B050
 #define WLAFE_RG_AFE_LDOCTRL_SYSDEF 0xA400B0F0
@@ -153,6 +179,7 @@
 #define RPU_MEM_HPQ_INFO 0xB0000024
 #define RPU_MEM_TX_CMD_BASE 0xB00000B8
 #define RPU_MEM_OTP_INFO 0xB000005C
+#define RPU_MEM_OTP_INFO_FLAGS 0xB0004FDC
 #define RPU_MEM_LMAC_IF_INFO 0xB0004FE0
 
 #define RPU_MEM_PKT_BASE 0xB0005000
@@ -167,27 +194,130 @@
 
 #define MAX_NUM_OF_RX_QUEUES 3
 
-#define IMG_RPU_PWR_DATA_TYPE_LFC_ERR 0
-#define IMG_RPU_PWR_DATA_TYPE_VBAT_MON 1
-#define IMG_RPU_PWR_DATA_TYPE_TEMP 2
-#define IMG_RPU_PWR_DATA_TYPE_ALL 3
-#define IMG_RPU_PWR_DATA_TYPE_MAX 4
+#define NRF_WIFI_RPU_PWR_DATA_TYPE_LFC_ERR 0
+#define NRF_WIFI_RPU_PWR_DATA_TYPE_VBAT_MON 1
+#define NRF_WIFI_RPU_PWR_DATA_TYPE_TEMP 2
+#define NRF_WIFI_RPU_PWR_DATA_TYPE_ALL 3
+#define NRF_WIFI_RPU_PWR_DATA_TYPE_MAX 4
 
 #ifndef RPU_RF_C0_SUPPORT
-#define IMG_RPU_RF_CLK_TYPE_20 0
-#define IMG_RPU_RF_CLK_TYPE_40 1
-#define IMG_RPU_RF_CLK_TYPE_MAX 2
+#define NRF_WIFI_RPU_RF_CLK_TYPE_20 0
+#define NRF_WIFI_RPU_RF_CLK_TYPE_40 1
+#define NRF_WIFI_RPU_RF_CLK_TYPE_MAX 2
 #endif /* RPU_RF_C0_SUPPORT */
 
+#define RPU_PKTRAM_SIZE (RPU_ADDR_PKTRAM_END - RPU_MEM_PKT_BASE + 1)
+
+#ifdef CONFIG_NRF700X_RADIO_TEST
+#define RPU_MEM_RF_TEST_CAP_BASE 0xB0006000
+#endif /* CONFIG_NRF700X_RADIO_TEST */
+
+/* REGION PROTECT : OTP Address offsets (word offsets) */
+#define REGION_PROTECT 64
+#define QSPI_KEY 68
+#define MAC0_ADDR 72
+#define MAC1_ADDR 74
+#define CALIB_XO 76
+#define CALIB_PDADJM7 77
+#define CALIB_PDADJM0 78
+#define CALIB_PWR2G 79
+#define CALIB_PWR5GM7 80
+#define CALIB_PWR5GM0 81
+#define CALIB_RXGNOFF 82
+#define CALIB_TXPOWBACKOFFT 83
+#define CALIB_TXPOWBACKOFFV 84
+#define REGION_DEFAULTS 85
+#define OTP_MAX_WORD_LEN 128
+
+/* Size of OTP fields in bytes */
+#define OTP_SZ_CALIB_XO 1
+#define OTP_SZ_CALIB_PDADJM7 4
+#define OTP_SZ_CALIB_PDADJM0 4
+#define OTP_SZ_CALIB_PWR2G 1
+#define OTP_SZ_CALIB_PWR2GM0M7 2
+#define OTP_SZ_CALIB_PWR5GM7 3
+#define OTP_SZ_CALIB_PWR5GM0 3
+#define OTP_SZ_CALIB_RXGNOFF 4
+#define OTP_SZ_CALIB_TXP_BOFF_2GH 1
+#define OTP_SZ_CALIB_TXP_BOFF_2GL 1
+#define OTP_SZ_CALIB_TXP_BOFF_5GH 1
+#define OTP_SZ_CALIB_TXP_BOFF_5GL 1
+#define OTP_SZ_CALIB_TXP_BOFF_V 4
+
+/* Offsets of OTP calib values in the calib field */
+#define OTP_OFF_CALIB_XO 0
+#define OTP_OFF_CALIB_PDADJM7 4
+#define OTP_OFF_CALIB_PDADJM0 8
+#define OTP_OFF_CALIB_PWR2G 12
+#define OTP_OFF_CALIB_PWR2GM0M7 13
+#define OTP_OFF_CALIB_PWR5GM7 16
+#define OTP_OFF_CALIB_PWR5GM0 20
+#define OTP_OFF_CALIB_RXGNOFF 24
+#define OTP_OFF_CALIB_TXP_BOFF_2GH 28
+#define OTP_OFF_CALIB_TXP_BOFF_2GL 29
+#define OTP_OFF_CALIB_TXP_BOFF_5GH 30
+#define OTP_OFF_CALIB_TXP_BOFF_5GL 31
+#define OTP_OFF_CALIB_TXP_BOFF_V 32
+
+/* MASKS to program bit fields in REGION_DEFAULTS register */
+#define QSPI_KEY_FLAG_MASK ~(1U<<0)
+#define MAC0_ADDR_FLAG_MASK ~(1U<<1)
+#define MAC1_ADDR_FLAG_MASK ~(1U<<2)
+#define CALIB_XO_FLAG_MASK ~(1U<<3)
+#define CALIB_PDADJM7_FLAG_MASK ~(1U<<4)
+#define CALIB_PDADJM0_FLAG_MASK ~(1U<<5)
+#define CALIB_PWR2G_FLAG_MASK ~(1U<<6)
+#define CALIB_PWR5GM7_FLAG_MASK ~(1U<<7)
+#define CALIB_PWR5GM0_FLAG_MASK ~(1U<<8)
+#define CALIB_RXGNOFF_FLAG_MASK ~(1U<<9)
+#define CALIB_TXPOWBACKOFFT_FLAG_MASK ~(1U<<10)
+#define CALIB_TXPOWBACKOFFV_FLAG_MASK ~(1U<<11)
+
+/* OTP Device address definitions */
+#define OTP_VOLTCTRL_ADDR 0x19004
+#define OTP_VOLTCTRL_2V5 0x3b
+#define OTP_VOLTCTRL_1V8 0xb
+
+#define OTP_POLL_ADDR 0x01B804
+#define OTP_WR_DONE 0x1
+#define OTP_READ_VALID 0x2
+#define OTP_READY 0x4
+
+
+#define OTP_RWSBMODE_ADDR 0x01B800
+#define OTP_STANDBY_MODE 0x0
+#define OTP_READ_MODE 0x1
+#define OTP_BYTE_WRITE_MODE 0x42
+
+
+#define OTP_RDENABLE_ADDR 0x01B810
+#define OTP_READREG_ADDR 0x01B814
+
+#define OTP_WRENABLE_ADDR 0x01B808
+#define OTP_WRITEREG_ADDR 0x01B80C
+
+#define OTP_TIMING_REG1_ADDR 0x01B820
+#define OTP_TIMING_REG1_VAL 0x0
+#define OTP_TIMING_REG2_ADDR 0x01B824
+#define OTP_TIMING_REG2_VAL 0x030D8B
+
+#define PRODTEST_TRIM_LEN 15
+
+#define OTP_FRESH_FROM_FAB 0xFFFFFFFF
+#define OTP_PROGRAMMED 0x00000000
+#define OTP_ENABLE_PATTERN 0x50FA50FA
+#define OTP_INVALID 0xDEADBEEF
+
+
 /**
- * struct img_rpu_pwr_data - Data that host may want to read from the Power IP.
+ * struct nrf_wifi_rpu_pwr_data - Data that host may want to read from the Power IP.
  * @lfc_err: Estimated Lo Frequency Clock error in ppm.
  * @vbat_mon: Vbat monitor readout. The actual Vbat in volt equals 2.5 + 0.07*vbat_mon.
  * @temp: Estimated die temperature (degC).
  *
  * This structure represents the Power IP monitoring data.
  */
-struct img_rpu_pwr_data {
+struct nrf_wifi_rpu_pwr_data {
 	int lfc_err;
 	int vbat_mon;
 	int temp;
@@ -204,7 +334,7 @@ struct img_rpu_pwr_data {
 
 struct host_rpu_rx_buf_info {
 	unsigned int addr;
-} __IMG_PKD;
+} __NRF_WIFI_PKD;
 
 /**
  * struct host_rpu_hpq - Hostport Queue (HPQ) information.
@@ -219,7 +349,7 @@ struct host_rpu_rx_buf_info {
 struct host_rpu_hpq {
 	unsigned int enqueue_addr;
 	unsigned int dequeue_addr;
-} __IMG_PKD;
+} __NRF_WIFI_PKD;
 
 /**
  * struct host_rpu_hpqm_info - Information about Hostport Queues (HPQ) to be used
@@ -241,7 +371,7 @@ struct host_rpu_hpqm_info {
 	struct host_rpu_hpq cmd_busy_queue;
 	struct host_rpu_hpq cmd_avl_queue;
 	struct host_rpu_hpq rx_buf_busy_queue[MAX_NUM_OF_RX_QUEUES];
-} __IMG_PKD;
+} __NRF_WIFI_PKD;
 
 /**
  * struct host_rpu_msg_hdr - Common header included in each command/event.
@@ -256,7 +386,7 @@ struct host_rpu_hpqm_info {
 struct host_rpu_msg_hdr {
 	unsigned int len;
 	unsigned int resubmit;
-} __IMG_PKD;
+} __NRF_WIFI_PKD;
 
 #define BT_INIT 0x1
 #define BT_MODE 0x2
@@ -300,6 +430,6 @@ struct pta_ext_params {
 	 * is with reference to BT_ACTIVE assert time.
 	 */
 	unsigned int dec_time;
-} __IMG_PKD;
+} __NRF_WIFI_PKD;
 
 #endif /* __RPU_IF_H__ */

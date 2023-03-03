@@ -7,11 +7,11 @@
 #define LOG_MODULE_NAME net_lwm2m_obj_configuration
 #define LOG_LEVEL CONFIG_LWM2M_LOG_LEVEL
 
-#include <logging/log.h>
+#include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(LOG_MODULE_NAME);
 
 #include <string.h>
-#include <init.h>
+#include <zephyr/init.h>
 
 #include "lwm2m_object.h"
 #include "lwm2m_engine.h"
@@ -22,7 +22,7 @@ LOG_MODULE_REGISTER(LOG_MODULE_NAME);
 
 /* Configuration object resource IDs */
 #define RESOURCE_PASSIVE_MODE			0
-#define RESOURCE_GNSS_TIMEOUT			1
+#define RESOURCE_LOCATION_TIMEOUT		1
 #define RESOURCE_ACTIVE_WAIT_TIMEOUT		2
 #define RESOURCE_MOVEMENT_RESOLUTION		3
 #define RESOURCE_MOVEMENT_TIMEOUT		4
@@ -37,7 +37,7 @@ LOG_MODULE_REGISTER(LOG_MODULE_NAME);
 
 /* Storage variables to hold configuration values. */
 static bool passive_mode;
-static int gnss_timeout;
+static int location_timeout;
 static int active_wait_timeout;
 static int movement_resolution;
 static int movement_timeout;
@@ -50,7 +50,7 @@ static bool ncell_enable;
 static struct lwm2m_engine_obj object;
 static struct lwm2m_engine_obj_field fields[] = {
 	OBJ_FIELD_DATA(RESOURCE_PASSIVE_MODE, RW, BOOL),
-	OBJ_FIELD_DATA(RESOURCE_GNSS_TIMEOUT, RW, S32),
+	OBJ_FIELD_DATA(RESOURCE_LOCATION_TIMEOUT, RW, S32),
 	OBJ_FIELD_DATA(RESOURCE_ACTIVE_WAIT_TIMEOUT, RW, S32),
 	OBJ_FIELD_DATA(RESOURCE_MOVEMENT_RESOLUTION, RW, S32),
 	OBJ_FIELD_DATA(RESOURCE_MOVEMENT_TIMEOUT, RW, S32),
@@ -74,8 +74,8 @@ static struct lwm2m_engine_obj_inst *object_create(uint16_t obj_inst_id)
 	/* Initialize object instance resource data */
 	INIT_OBJ_RES_DATA(RESOURCE_PASSIVE_MODE, res, i, res_inst, j,
 			  &passive_mode, sizeof(passive_mode));
-	INIT_OBJ_RES_DATA(RESOURCE_GNSS_TIMEOUT, res, i, res_inst, j,
-			  &gnss_timeout, sizeof(gnss_timeout));
+	INIT_OBJ_RES_DATA(RESOURCE_LOCATION_TIMEOUT, res, i, res_inst, j,
+			  &location_timeout, sizeof(location_timeout));
 	INIT_OBJ_RES_DATA(RESOURCE_ACTIVE_WAIT_TIMEOUT, res, i, res_inst, j,
 			  &active_wait_timeout, sizeof(active_wait_timeout));
 	INIT_OBJ_RES_DATA(RESOURCE_MOVEMENT_RESOLUTION, res, i, res_inst, j,

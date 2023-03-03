@@ -20,9 +20,6 @@ Characteristics
 The Fast Pair GATT characteristics are described in detail in the `Fast Pair GATT Characteristics`_ documentation.
 The implementation in the |NCS| follows these requirements.
 
-.. note::
-   The Additional Data characteristic is not supported yet.
-
 Configuration
 *************
 
@@ -35,6 +32,8 @@ The following Kconfig options are also available for this module:
   MbedTLS is used by default, whereas Tinycrypt is used by default for cases of building with TF-M as the Secure Execution Environment (:kconfig:option:`CONFIG_BUILD_WITH_TFM`).
   This is because in such case the MbedTLS API cannot be directly used by the Fast Pair service.
   The Oberon backend can be used to limit memory consumption.
+* :kconfig:option:`CONFIG_BT_FAST_PAIR_EXT_PN` - The option enables the `Fast Pair Personalized Name extension`_.
+* :kconfig:option:`CONFIG_BT_FAST_PAIR_STORAGE_EXT_PN_LEN_MAX` - The option specifies the maximum length of a stored Fast Pair Personalized Name.
 
 See the Kconfig help for details.
 
@@ -47,7 +46,7 @@ The service also enables some of the functionalities using Kconfig select statem
 Bluetooth privacy
 -----------------
 
-The service selects Bluetooth privacy (:kconfig:option:`CONFIG_BT_PRIVACY`) and sets the default value of :kconfig:option:`CONFIG_BT_RPA_TIMEOUT` to 3600 seconds.
+The service selects Bluetooth privacy (:kconfig:option:`CONFIG_BT_PRIVACY`).
 
 During not discoverable advertising, the Resolvable Private Address (RPA) rotation must be done together with the Fast Pair payload update.
 Because of this, the RPA cannot be rotated by Zephyr in the background.
@@ -87,6 +86,12 @@ Because of this requirement, the default values of the following Kconfig options
    In case of :ref:`nRF53 Series <ug_nrf53>`, this part of the configuration cannot be automatically updated for the network core and you must manually align it.
    The listed options must be set on the network core to default values specified by the GFPS Kconfig options.
 
+Security re-establishment
+-------------------------
+
+By default, the Fast Pair service disables the automatic security re-establishment request as a peripheral (:kconfig:option:`CONFIG_BT_GATT_AUTO_SEC_REQ`).
+This is done to allow Fast Pair Seeker to control the security re-establishment.
+
 Partition Manager
 -----------------
 
@@ -96,7 +101,7 @@ The GFPS selects :kconfig:option:`CONFIG_PM_SINGLE_IMAGE` to enable the :ref:`pa
 Settings
 --------
 
-The GFPS uses Zephyr's :ref:`zephyr:settings_api` to store Account Keys.
+The GFPS uses Zephyr's :ref:`zephyr:settings_api` to store Account Keys and the Personalized Name.
 Because of this, the GFPS selects :kconfig:option:`CONFIG_SETTINGS`.
 
 Implementation details

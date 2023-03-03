@@ -9,7 +9,7 @@
 #include <app/clusters/door-lock-server/door-lock-server.h>
 #include <lib/core/ClusterEnums.h>
 
-#include <zephyr/zephyr.h>
+#include <zephyr/kernel.h>
 
 #include <cstdint>
 
@@ -65,10 +65,9 @@ private:
 	friend class AppTask;
 
 	void SetState(State state, OperationSource source);
-	void CompleteLockAction();
 
 	static void ActuatorTimerEventHandler(k_timer *timer);
-	static void ActuatorAppEventHandler(AppEvent *aEvent);
+	static void ActuatorAppEventHandler(const AppEvent &aEvent);
 	friend BoltLockManager &BoltLockMgr();
 
 	State mState = State::kLockingCompleted;

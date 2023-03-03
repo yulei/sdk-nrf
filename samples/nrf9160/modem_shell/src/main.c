@@ -28,6 +28,8 @@
 #include <modem/modem_info.h>
 #include <modem/lte_lc.h>
 
+#include <net/nrf_cloud_os.h>
+
 #include <dk_buttons_and_leds.h>
 #include "uart/uart_shell.h"
 
@@ -182,6 +184,7 @@ static void mosh_print_version_info(void)
 #endif
 }
 
+#if defined(CONFIG_DK_LIBRARY)
 static void button_handler(uint32_t button_states, uint32_t has_changed)
 {
 	if (has_changed & button_states & DK_BTN1_MSK) {
@@ -196,10 +199,14 @@ static void button_handler(uint32_t button_states, uint32_t has_changed)
 	}
 
 	if (has_changed & button_states & DK_BTN2_MSK) {
-		mosh_print("Button 2 pressed, toggling UART power state");
+		/* printk() used instead of mosh_print() which returns before the printing is
+		 * actually finished and UART gets shut down in the meantime causing a jam.
+		 */
+		printk("\nButton 2 pressed, toggling UART power state\n");
 		uart_toggle_power_state();
 	}
 }
+#endif
 
 void main(void)
 {
@@ -218,6 +225,37 @@ void main(void)
 
 	mosh_print_version_info();
 
+#if !defined(CONFIG_LWM2M_CARRIER) && !defined(CONFIG_NRF_MODEM_LIB_SYS_INIT)
+	/* Manually initialize modem library when CONFIG_NRF_MODEM_LIB_SYS_INIT is disabled.
+	 * This is necessary for the modem trace flash backend. Which depend on the flash device
+	 * to be initialized before initializing the nRF modem library.
+	 */
+	nrf_modem_lib_init(NORMAL_MODE);
+#endif
+
+#if defined(CONFIG_NRF_CLOUD_REST) || defined(CONFIG_NRF_CLOUD_MQTT)
+#if defined(CONFIG_MOSH_IPERF3)
+	/* Due to iperf3, we cannot let nrf cloud lib to initialize cJSON lib to be
+	 * using kernel heap allocations (i.e. k_ prepending functions).
+	 * Thus, we use standard c alloc/free, i.e. "system heap".
+	 */
+	struct nrf_cloud_os_mem_hooks hooks = {
+		.malloc_fn = malloc,
+		.calloc_fn = calloc,
+		.free_fn = free,
+	};
+#else
+	/* else: we default to Kernel heap */
+	struct nrf_cloud_os_mem_hooks hooks = {
+		.malloc_fn = k_malloc,
+		.calloc_fn = k_calloc,
+		.free_fn = k_free,
+	};
+#endif
+
+	nrf_cloud_os_mem_hooks_init(&hooks);
+#endif
+
 	k_work_queue_start(
 		&mosh_common_work_q,
 		mosh_common_workq_stack,
@@ -232,23 +270,27 @@ void main(void)
 	case 0:
 		/* Modem library was initialized successfully. */
 		break;
-	case MODEM_DFU_RESULT_OK:
+	case NRF_MODEM_DFU_RESULT_OK:
 		printk("Modem firmware update successful!\n");
 		printk("Modem will run the new firmware after reboot\n");
 		sys_reboot(SYS_REBOOT_WARM);
 		return;
-	case MODEM_DFU_RESULT_UUID_ERROR:
-	case MODEM_DFU_RESULT_AUTH_ERROR:
+	case NRF_MODEM_DFU_RESULT_UUID_ERROR:
+	case NRF_MODEM_DFU_RESULT_AUTH_ERROR:
 		printk("Modem firmware update failed!\n");
 		printk("Modem will run non-updated firmware on reboot.\n");
 		sys_reboot(SYS_REBOOT_WARM);
 		return;
-	case MODEM_DFU_RESULT_HARDWARE_ERROR:
-	case MODEM_DFU_RESULT_INTERNAL_ERROR:
+	case NRF_MODEM_DFU_RESULT_HARDWARE_ERROR:
+	case NRF_MODEM_DFU_RESULT_INTERNAL_ERROR:
 		printk("Modem firmware update failed!\n");
 		printk("Fatal error.\n");
 		sys_reboot(SYS_REBOOT_WARM);
 		return;
+	case NRF_MODEM_DFU_RESULT_VOLTAGE_LOW:
+		printk("Modem firmware update cancelled due to low power.\n");
+		printk("Please reboot once you have sufficient power for the DFU\n");
+		break;
 	default:
 		/* Modem library initialization failed. */
 		printk("Could not initialize modemlib.\n");
@@ -289,11 +331,16 @@ void main(void)
 	}
 #endif
 
+#if defined(CONFIG_DK_LIBRARY)
 	err = dk_buttons_init(button_handler);
 	if (err) {
 		printk("Failed to initialize DK buttons library, error: %d\n", err);
 	}
-
+	err = dk_leds_init();
+	if (err) {
+		printk("Cannot initialize LEDs (err: %d)\n", err);
+	}
+#endif
 	/* Application started successfully, mark image as OK to prevent
 	 * revert at next reboot.
 	 */
@@ -301,11 +348,6 @@ void main(void)
 	boot_write_img_confirmed();
 #endif
 	k_poll_signal_init(&mosh_signal);
-
-	err = dk_leds_init();
-	if (err) {
-		printk("Cannot initialize LEDs (err: %d)\n", err);
-	}
 
 #if defined(CONFIG_SHELL_BACKEND_SERIAL)
 	/* Resize terminal width and height of the shell to have proper command editing. */

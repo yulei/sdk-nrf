@@ -13,6 +13,7 @@ target_sources(app PRIVATE ${app_sources})
 
 target_sources(app
     PRIVATE
+    ${ZEPHYR_BASE}/../zephyr/subsys/bluetooth/common/addr.c
     ${ZEPHYR_BASE}/../nrf/subsys/bluetooth/mesh/vnd/silvair_enocean_srv.c
     ${ZEPHYR_BASE}/subsys/net/buf.c
     )
@@ -20,17 +21,13 @@ target_sources(app
 target_include_directories(app
     PRIVATE
     ${ZEPHYR_BASE}/../nrf/subsys/bluetooth/mesh
+    ${ZEPHYR_BASE}/subsys/bluetooth
     )
 
 target_compile_options(app
     PRIVATE
     -DCONFIG_BT_ENOCEAN_STORE=1
-    -DCONFIG_BT_MESH_SILVAIR_ENOCEAN_WAIT_TIME=250
-    -DCONFIG_BT_MESH_SILVAIR_ENOCEAN_TICK_TIME=100
-    -DCONFIG_BT_MESH_SILVAIR_ENOCEAN_DELTA=1000
-    -DCONFIG_BT_MESH_SILVAIR_ENOCEAN_DELTA_TIMEOUT=7000
     -DCONFIG_BT_MESH_SILVAIR_ENOCEAN_AUTO_COMMISSION=1
-    -DCONFIG_BT_MESH_SILVAIR_ENOCEAN_DELTA_TRANSITION_TIME=200
     -DCONFIG_BT_MESH_MODEL_KEY_COUNT=1
     -DCONFIG_BT_MESH_MODEL_GROUP_COUNT=1
     )

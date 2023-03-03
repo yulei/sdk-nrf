@@ -13,7 +13,12 @@ set(mcuboot_KCONFIG_ROOT ${MATTER_MODULE_ROOT}/config/nrfconnect/chip-module/Kco
 set(multiprotocol_rpmsg_KCONFIG_ROOT ${MATTER_MODULE_ROOT}/config/nrfconnect/chip-module/Kconfig.multiprotocol_rpmsg.root)
 set(hci_rpmsg_KCONFIG_ROOT ${MATTER_MODULE_ROOT}/config/nrfconnect/chip-module/Kconfig.hci_rpmsg.root)
 
-if(NOT CONF_FILE STREQUAL "prj_no_dfu.conf")
+# For prj.conf the CONF_FILE is empty. In other case extract the exact file name from the path string.
+if(CONF_FILE)
+    get_filename_component(CONFIG_FILE_NAME ${CONF_FILE} NAME)
+endif()
+
+if(NOT CONFIG_FILE_NAME STREQUAL "prj_no_dfu.conf")
     set(PM_STATIC_YML_FILE ${CMAKE_CURRENT_SOURCE_DIR}/configuration/${BOARD}/pm_static_dfu.yml)
 endif()
 
@@ -40,7 +45,6 @@ target_sources(app PRIVATE
     src/zap-generated/IMClusterCommandHandler.cpp
     src/zap-generated/callback-stub.cpp
     ${COMMON_ROOT}/src/led_widget.cpp
-    $<$<BOOL:${CONFIG_NET_L2_OPENTHREAD}>:${COMMON_ROOT}/src/thread_util.cpp>
 )
 
 if(CONFIG_CHIP_OTA_REQUESTOR)
@@ -49,6 +53,7 @@ endif()
 
 chip_configure_data_model(app
     INCLUDE_SERVER
+    BYPASS_IDL
     ZAP_FILE ${CMAKE_CURRENT_SOURCE_DIR}/src/template.zap
 )
 # NORDIC SDK APP END

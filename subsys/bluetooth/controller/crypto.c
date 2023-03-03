@@ -15,9 +15,9 @@
 #include "nrf_errno.h"
 #include "multithreading_lock.h"
 
-#define BT_DBG_ENABLED IS_ENABLED(CONFIG_BT_DEBUG_KEYS)
-#define LOG_MODULE_NAME sdc_crypto
-#include <common/log.h>
+#define LOG_LEVEL CONFIG_BT_HCI_DRIVER_LOG_LEVEL
+#include "zephyr/logging/log.h"
+LOG_MODULE_REGISTER(bt_sdc_crypto);
 
 #define BT_ECB_BLOCK_SIZE 16
 
@@ -40,8 +40,8 @@ int bt_encrypt_le(const uint8_t key[BT_ECB_BLOCK_SIZE],
 	uint8_t plaintext_le[BT_ECB_BLOCK_SIZE];
 	uint8_t enc_data_le[BT_ECB_BLOCK_SIZE];
 
-	BT_HEXDUMP_DBG(key, BT_ECB_BLOCK_SIZE, "key");
-	BT_HEXDUMP_DBG(plaintext, BT_ECB_BLOCK_SIZE, "plaintext");
+	LOG_HEXDUMP_DBG(key, BT_ECB_BLOCK_SIZE, "key");
+	LOG_HEXDUMP_DBG(plaintext, BT_ECB_BLOCK_SIZE, "plaintext");
 
 	sys_memcpy_swap(key_le, key, BT_ECB_BLOCK_SIZE);
 	sys_memcpy_swap(plaintext_le, plaintext, BT_ECB_BLOCK_SIZE);
@@ -56,7 +56,7 @@ int bt_encrypt_le(const uint8_t key[BT_ECB_BLOCK_SIZE],
 	if (!errcode) {
 		sys_memcpy_swap(enc_data, enc_data_le, BT_ECB_BLOCK_SIZE);
 
-		BT_HEXDUMP_DBG(enc_data, BT_ECB_BLOCK_SIZE, "enc_data");
+		LOG_HEXDUMP_DBG(enc_data, BT_ECB_BLOCK_SIZE, "enc_data");
 	}
 
 	return errcode;
@@ -66,8 +66,8 @@ int bt_encrypt_be(const uint8_t key[BT_ECB_BLOCK_SIZE],
 		  const uint8_t plaintext[BT_ECB_BLOCK_SIZE],
 		  uint8_t enc_data[BT_ECB_BLOCK_SIZE])
 {
-	BT_HEXDUMP_DBG(key, BT_ECB_BLOCK_SIZE, "key");
-	BT_HEXDUMP_DBG(plaintext, BT_ECB_BLOCK_SIZE, "plaintext");
+	LOG_HEXDUMP_DBG(key, BT_ECB_BLOCK_SIZE, "key");
+	LOG_HEXDUMP_DBG(plaintext, BT_ECB_BLOCK_SIZE, "plaintext");
 
 	int errcode = MULTITHREADING_LOCK_ACQUIRE();
 
@@ -77,7 +77,7 @@ int bt_encrypt_be(const uint8_t key[BT_ECB_BLOCK_SIZE],
 	}
 
 	if (!errcode) {
-		BT_HEXDUMP_DBG(enc_data, BT_ECB_BLOCK_SIZE, "enc_data");
+		LOG_HEXDUMP_DBG(enc_data, BT_ECB_BLOCK_SIZE, "enc_data");
 	}
 
 	return errcode;

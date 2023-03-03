@@ -10,6 +10,7 @@ import sys
 NRF_BASE = Path(__file__).absolute().parents[2]
 
 sys.path.insert(0, str(NRF_BASE / "doc" / "_utils"))
+import redirects
 import utils
 
 ZEPHYR_BASE = utils.get_projdir("zephyr")
@@ -17,9 +18,9 @@ ZEPHYR_BASE = utils.get_projdir("zephyr")
 # General configuration --------------------------------------------------------
 
 project = "nRF Connect SDK"
-copyright = "2019-2022, Nordic Semiconductor"
+copyright = "2019-2023, Nordic Semiconductor"
 author = "Nordic Semiconductor"
-version = release = "2.1.0"
+version = release = "2.3.99"
 
 sys.path.insert(0, str(ZEPHYR_BASE / "doc" / "_extensions"))
 sys.path.insert(0, str(NRF_BASE / "doc" / "_extensions"))
@@ -39,6 +40,7 @@ extensions = [
     "ncs_cache",
     "zephyr.external_content",
     "zephyr.doxyrunner",
+    "zephyr.link-roles",
     "sphinx_tabs.tabs",
     "software_maturity_table",
     "sphinx_togglebutton",
@@ -140,16 +142,16 @@ ncs_include_mapping = {
 
 # Options for html_redirect ----------------------------------------------------
 
-html_redirect_pages = [
-    ("gs_ins_windows", "gs_installing"),
-    ("gs_ins_linux", "gs_installing"),
-    ("gs_ins_mac", "gs_installing"),
-    ("examples", "samples"),
-]
+html_redirect_pages = redirects.NRF
 
 # -- Options for zephyr.warnings_filter ----------------------------------------
 
 warnings_filter_config = str(NRF_BASE / "doc" / "nrf" / "known-warnings.txt")
+
+# Options for zephyr.link-roles ------------------------------------------------
+
+link_roles_manifest_project = "nrf"
+link_roles_manifest_baseurl = "https://github.com/nrfconnect/sdk-nrf"
 
 # Options for external_content -------------------------------------------------
 

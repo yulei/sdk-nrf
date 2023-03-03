@@ -4,17 +4,9 @@
  * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
- #include <zephyr/dt-bindings/ipc_service/static_vrings.h>
-
 / {
 	zephyr,user {
 		battery-charge-gpios = <&gpio1 0 (GPIO_PULL_UP | GPIO_ACTIVE_LOW)>;
-	};
-
-	chosen {
-		zephyr,console = &cdc_acm_uart0;
-		zephyr,shell-uart = &cdc_acm_uart0;
-		nordic,pm-ext-flash = &mx25r64;
 	};
 
 	pwmbuzzer {
@@ -32,21 +24,9 @@
 	};
 };
 
-&ipc0 {
-    zephyr,priority = <0 PRIO_COOP>;
-};
-
-&zephyr_udc0 {
-	cdc_acm_uart0: cdc_acm_uart0 {
-		compatible = "zephyr,cdc-acm-uart";
-		label = "CDC_ACM_0";
-	};
-};
-
 &i2c1 {
 	bme688@76 {
 		compatible = "bosch,bme680";
-		label = "BME688";
 		reg = <0x76>;
 	};
 };

@@ -18,6 +18,55 @@
 #include "hal_mem.h"
 #include "fmac_util.h"
 
+/* Set the coresponding bit of access category.
+ * First 4 bits(0 to 3) represenst first spare desc access cateogories
+ * Second 4 bits(4 to 7) represenst second spare desc access cateogories and so on
+ */
+static void set_spare_desc_q_map(struct wifi_nrf_fmac_dev_ctx *fmac_dev_ctx,
+				 unsigned int desc,
+				 int tx_done_q)
+{
+	unsigned short spare_desc_indx = 0;
+
+	spare_desc_indx = (desc % (fmac_dev_ctx->fpriv->num_tx_tokens_per_ac *
+				   WIFI_NRF_FMAC_AC_MAX));
+
+	fmac_dev_ctx->tx_config.spare_desc_queue_map |=
+		(1 << ((spare_desc_indx * SPARE_DESC_Q_MAP_SIZE) + tx_done_q));
+}
+
+
+/* Clear the coresponding bit of access category.
+ * First 4 bits(0 to 3) represenst first spare desc access cateogories
+ * Second 4 bits(4 to 7) represenst second spare desc access cateogories and so on
+ */
+static void clear_spare_desc_q_map(struct wifi_nrf_fmac_dev_ctx *fmac_dev_ctx,
+				   unsigned int desc,
+				   int tx_done_q)
+{
+	unsigned short spare_desc_indx = 0;
+
+	spare_desc_indx = (desc % (fmac_dev_ctx->fpriv->num_tx_tokens_per_ac *
+				   WIFI_NRF_FMAC_AC_MAX));
+
+	fmac_dev_ctx->tx_config.spare_desc_queue_map &=
+		~(1 << ((spare_desc_indx * SPARE_DESC_Q_MAP_SIZE) + tx_done_q));
+}
+
+/*Get the spare descriptor queue map */
+static unsigned short get_spare_desc_q_map(struct wifi_nrf_fmac_dev_ctx *fmac_dev_ctx,
+					   unsigned int desc)
+{
+	unsigned short spare_desc_indx = 0;
+
+	spare_desc_indx = (desc % (fmac_dev_ctx->fpriv->num_tx_tokens_per_ac *
+				   WIFI_NRF_FMAC_AC_MAX));
+
+	return	(fmac_dev_ctx->tx_config.spare_desc_queue_map >> (spare_desc_indx *
+			SPARE_DESC_Q_MAP_SIZE)) & 0x000F;
+}
+
+
 int pending_frames_count(struct wifi_nrf_fmac_dev_ctx *fmac_dev_ctx,
 			 int peer_id)
 {
@@ -52,7 +101,7 @@ enum wifi_nrf_status update_pend_q_bmp(struct wifi_nrf_fmac_dev_ctx *fmac_dev_ct
 	vif_id = fmac_dev_ctx->tx_config.peers[peer_id].if_idx;
 	vif_ctx = fmac_dev_ctx->vif_ctx[vif_id];
 
-	if (vif_ctx->if_type == IMG_IFTYPE_AP &&
+	if (vif_ctx->if_type == NRF_WIFI_IFTYPE_AP &&
 	    peer_id < MAX_PEERS) {
 		bmp = &fmac_dev_ctx->tx_config.peers[peer_id].pend_q_bmp;
 		pend_pkt_q = fmac_dev_ctx->tx_config.data_pending_txq[peer_id][ac];
@@ -91,25 +140,17 @@ void tx_desc_free(struct wifi_nrf_fmac_dev_ctx *fmac_dev_ctx,
 
 	bit = (desc % TX_DESC_BUCKET_BOUND);
 	pool_id = (desc / TX_DESC_BUCKET_BOUND);
+
+	if (!(fmac_dev_ctx->tx_config.buf_pool_bmp_p[pool_id] & (1 << bit))) {
+		return;
+	}
+
 	fmac_dev_ctx->tx_config.buf_pool_bmp_p[pool_id] &= (~(1 << bit));
 
 	fmac_dev_ctx->tx_config.outstanding_descs[queue]--;
 
 	if (desc >= (fpriv->num_tx_tokens_per_ac * WIFI_NRF_FMAC_AC_MAX)) {
-		switch (desc % (fpriv->num_tx_tokens_per_ac * WIFI_NRF_FMAC_AC_MAX)) {
-		case 0:
-			fmac_dev_ctx->tx_config.spare_desc_queue_map &= 0xfff0;
-			break;
-		case 1:
-			fmac_dev_ctx->tx_config.spare_desc_queue_map &= 0xff0f;
-			break;
-		case 2:
-			fmac_dev_ctx->tx_config.spare_desc_queue_map &= 0xf0ff;
-			break;
-		case 3:
-			fmac_dev_ctx->tx_config.spare_desc_queue_map &= 0x0fff;
-			break;
-		}
+		clear_spare_desc_q_map(fmac_dev_ctx, desc, queue);
 	}
 
 }
@@ -176,25 +217,7 @@ unsigned int tx_desc_get(struct wifi_nrf_fmac_dev_ctx *fmac_dev_ctx,
 				 * Fourth nibble represent second spare desc
 				 * (B15B14B13B12 : V0-VI-BE-BK)
 				 */
-				switch (desc % (fpriv->num_tx_tokens_per_ac *
-						WIFI_NRF_FMAC_AC_MAX)) {
-				case 0:
-					fmac_dev_ctx->tx_config.spare_desc_queue_map |=
-						(1 << queue);
-					break;
-				case 1:
-					fmac_dev_ctx->tx_config.spare_desc_queue_map |=
-						(1 << (4 + queue));
-					break;
-				case 2:
-					fmac_dev_ctx->tx_config.spare_desc_queue_map |=
-						(1 << (8 + queue));
-					break;
-				case 3:
-					fmac_dev_ctx->tx_config.spare_desc_queue_map |=
-						(1 << (12 + queue));
-					break;
-				}
+				set_spare_desc_q_map(fmac_dev_ctx, desc, queue);
 				break;
 			}
 		}
@@ -317,7 +340,7 @@ int tx_curr_peer_opp_get(struct wifi_nrf_fmac_dev_ctx *fmac_dev_ctx,
 
 		ps_state = fmac_dev_ctx->tx_config.peers[curr_peer_opp].ps_state;
 
-		if (ps_state == IMG_CLIENT_PS_MODE) {
+		if (ps_state == NRF_WIFI_CLIENT_PS_MODE) {
 			continue;
 		}
 
@@ -436,7 +459,7 @@ enum wifi_nrf_status tx_cmd_prep_callbk_fn(void *callbk_data,
 	unsigned long nwb_data = 0;
 	unsigned long phy_addr = 0;
 	struct tx_cmd_prep_info *info = NULL;
-	struct img_tx_buff *config = NULL;
+	struct nrf_wifi_tx_buff *config = NULL;
 	unsigned int desc_id = 0;
 	unsigned int buf_len = 0;
 
@@ -501,7 +524,7 @@ int tx_cmd_prepare(struct wifi_nrf_fmac_dev_ctx *fmac_dev_ctx,
 		   void *txq,
 		   int peer_id)
 {
-	struct img_tx_buff *config = NULL;
+	struct nrf_wifi_tx_buff *config = NULL;
 	int len = 0;
 	void *nwb = NULL;
 	void *nwb_data = NULL;
@@ -531,7 +554,7 @@ int tx_cmd_prepare(struct wifi_nrf_fmac_dev_ctx *fmac_dev_ctx,
 
 	fmac_dev_ctx->tx_config.send_pkt_coalesce_count_p[desc] = txq_len;
 
-	config = (struct img_tx_buff *)(umac_cmd->msg);
+	config = (struct nrf_wifi_tx_buff *)(umac_cmd->msg);
 
 	data = wifi_nrf_osal_nbuf_data_get(fmac_dev_ctx->fpriv->opriv,
 					   nwb);
@@ -539,10 +562,10 @@ int tx_cmd_prepare(struct wifi_nrf_fmac_dev_ctx *fmac_dev_ctx,
 	len = wifi_nrf_osal_nbuf_data_size(fmac_dev_ctx->fpriv->opriv,
 					   nwb);
 
-	config->umac_head.cmd = IMG_CMD_TX_BUFF;
+	config->umac_head.cmd = NRF_WIFI_CMD_TX_BUFF;
 
-	config->umac_head.len += sizeof(struct img_tx_buff);
-	config->umac_head.len += sizeof(struct img_tx_buff_info) * txq_len;
+	config->umac_head.len += sizeof(struct nrf_wifi_tx_buff);
+	config->umac_head.len += sizeof(struct nrf_wifi_tx_buff_info) * txq_len;
 
 	config->tx_desc_num = desc;
 
@@ -552,12 +575,12 @@ int tx_cmd_prepare(struct wifi_nrf_fmac_dev_ctx *fmac_dev_ctx,
 	wifi_nrf_osal_mem_cpy(fmac_dev_ctx->fpriv->opriv,
 			      config->mac_hdr_info.dest,
 			      wifi_nrf_util_get_dest(fmac_dev_ctx, nwb),
-			      IMG_ETH_ALEN);
+			      NRF_WIFI_ETH_ADDR_LEN);
 
 	wifi_nrf_osal_mem_cpy(fmac_dev_ctx->fpriv->opriv,
 			      config->mac_hdr_info.src,
 			      wifi_nrf_util_get_src(fmac_dev_ctx, nwb),
-			      IMG_ETH_ALEN);
+			      NRF_WIFI_ETH_ADDR_LEN);
 
 	nwb_data = wifi_nrf_osal_nbuf_data_get(fmac_dev_ctx->fpriv->opriv,
 					       nwb);
@@ -588,9 +611,9 @@ int tx_cmd_prepare(struct wifi_nrf_fmac_dev_ctx *fmac_dev_ctx,
 	fmac_dev_ctx->host_stats.total_tx_pkts += config->num_tx_pkts;
 	config->wdev_id = fmac_dev_ctx->tx_config.peers[peer_id].if_idx;
 
-	if ((vif_ctx->if_type == IMG_IFTYPE_AP ||
-	    vif_ctx->if_type == IMG_IFTYPE_AP_VLAN ||
-	    vif_ctx->if_type == IMG_IFTYPE_MESH_POINT) &&
+	if ((vif_ctx->if_type == NRF_WIFI_IFTYPE_AP ||
+	    vif_ctx->if_type == NRF_WIFI_IFTYPE_AP_VLAN ||
+	    vif_ctx->if_type == NRF_WIFI_IFTYPE_MESH_POINT) &&
 		pending_frames_count(fmac_dev_ctx, peer_id) != 0) {
 		config->mac_hdr_info.more_data = 1;
 	}
@@ -602,7 +625,7 @@ int tx_cmd_prepare(struct wifi_nrf_fmac_dev_ctx *fmac_dev_ctx,
 
 		config->mac_hdr_info.eosp = 1;
 
-		if (fmac_dev_ctx->tx_config.peers[peer_id].ps_state == IMG_CLIENT_PS_MODE) {
+		if (fmac_dev_ctx->tx_config.peers[peer_id].ps_state == NRF_WIFI_CLIENT_PS_MODE) {
 		}
 	} else {
 		config->mac_hdr_info.eosp = 0;
@@ -621,13 +644,13 @@ enum wifi_nrf_status tx_cmd_init(struct wifi_nrf_fmac_dev_ctx *fmac_dev_ctx,
 	struct host_rpu_msg *umac_cmd = NULL;
 	unsigned int len = 0;
 
-	len += sizeof(struct img_tx_buff_info);
+	len += sizeof(struct nrf_wifi_tx_buff_info);
 	len *= wifi_nrf_utils_list_len(fmac_dev_ctx->fpriv->opriv, txq);
 
-	len += sizeof(struct img_tx_buff);
+	len += sizeof(struct nrf_wifi_tx_buff);
 
 	umac_cmd = umac_cmd_alloc(fmac_dev_ctx,
-				  IMG_HOST_RPU_MSG_TYPE_DATA,
+				  NRF_WIFI_HOST_RPU_MSG_TYPE_DATA,
 				  len);
 
 	status = tx_cmd_prepare(fmac_dev_ctx,
@@ -709,9 +732,7 @@ enum wifi_nrf_status tx_enqueue(struct wifi_nrf_fmac_dev_ctx *fmac_dev_ctx,
 
 	qlen = wifi_nrf_utils_q_len(fmac_dev_ctx->fpriv->opriv, queue);
 
-	if (qlen >= CONFIG_NRF700x_MAX_TX_PENDING_QLEN) {
-		wifi_nrf_osal_nbuf_free(fmac_dev_ctx->fpriv->opriv,
-					nwb);
+	if (qlen >= CONFIG_NRF700X_MAX_TX_PENDING_QLEN) {
 		goto out;
 	}
 
@@ -749,16 +770,12 @@ enum wifi_nrf_status tx_process(struct wifi_nrf_fmac_dev_ctx *fmac_dev_ctx,
 			    peer_id);
 
 	if (status != WIFI_NRF_STATUS_SUCCESS) {
-		wifi_nrf_osal_log_err(fmac_dev_ctx->fpriv->opriv,
-				      "%s: tx_enqueue failed\n",
-				      __func__);
-
 		goto out;
 	}
 
 	ps_state = fmac_dev_ctx->tx_config.peers[peer_id].ps_state;
 
-	if (ps_state == IMG_CLIENT_PS_MODE) {
+	if (ps_state == NRF_WIFI_CLIENT_PS_MODE) {
 		goto out;
 	}
 
@@ -811,51 +828,32 @@ out:
 
 
 unsigned int tx_buff_req_free(struct wifi_nrf_fmac_dev_ctx *fmac_dev_ctx,
-			      struct img_tx_buff_done *config,
+			      unsigned int tx_desc_num,
 			      unsigned char *ac)
 {
-	struct wifi_nrf_fmac_priv *fpriv = NULL;
 	unsigned int pkts_pend = 0;
-	unsigned int desc = config->tx_desc_num;
+	unsigned int desc = tx_desc_num;
 	int tx_done_q = 0, start_ac, end_ac, cnt = 0;
-	unsigned int queue_map = fmac_dev_ctx->tx_config.spare_desc_queue_map;
-
-	fpriv = fmac_dev_ctx->fpriv;
+	unsigned short tx_done_spare_desc_q_map = 0;
 
 	/* Determine the Queue from the descriptor */
 	/* Reserved desc */
-	if (desc < (fpriv->num_tx_tokens_per_ac * WIFI_NRF_FMAC_AC_MAX)) {
-		/* Derive the queue here as it is not given by UMAC.
-		 * tx_done_q = desc
-		 */
+	if (desc < (fmac_dev_ctx->fpriv->num_tx_tokens_per_ac * WIFI_NRF_FMAC_AC_MAX)) {
 		tx_done_q = (desc % WIFI_NRF_FMAC_AC_MAX);
 		start_ac = end_ac = tx_done_q;
 	} else {
-		if (desc >= (fpriv->num_tx_tokens_per_ac * WIFI_NRF_FMAC_AC_MAX)) {
-			switch (desc %  (fpriv->num_tx_tokens_per_ac * WIFI_NRF_FMAC_AC_MAX)) {
-			case 0:
-				tx_done_q = (queue_map & 0x0f);
-				break;
-			case 1:
-				tx_done_q = ((queue_map & 0xf0) >> 4);
-				break;
-			case 2:
-				tx_done_q = ((queue_map & 0xf00) >> 8);
-				break;
-			case 3:
-				tx_done_q = ((queue_map & 0xf000) >> 12);
-				break;
-			}
-		}
+		/* Derive the queue here as it is not given by UMAC. */
+		if (desc >= (fmac_dev_ctx->fpriv->num_tx_tokens_per_ac * WIFI_NRF_FMAC_AC_MAX)) {
+			tx_done_spare_desc_q_map = get_spare_desc_q_map(fmac_dev_ctx, desc);
 
-		if (tx_done_q == 1) {
-			tx_done_q = WIFI_NRF_FMAC_AC_BK;
-		} else if (tx_done_q == 2) {
-			tx_done_q = WIFI_NRF_FMAC_AC_BE;
-		} else if (tx_done_q == 4) {
-			tx_done_q = WIFI_NRF_FMAC_AC_VO;
-		} else {
-			tx_done_q = WIFI_NRF_FMAC_AC_VI;
+			if (tx_done_spare_desc_q_map & (1 << WIFI_NRF_FMAC_AC_BK))
+				tx_done_q = WIFI_NRF_FMAC_AC_BK;
+			else if (tx_done_spare_desc_q_map & (1 << WIFI_NRF_FMAC_AC_BE))
+				tx_done_q = WIFI_NRF_FMAC_AC_BE;
+			else if (tx_done_spare_desc_q_map & (1 << WIFI_NRF_FMAC_AC_VI))
+				tx_done_q = WIFI_NRF_FMAC_AC_VI;
+			else if (tx_done_spare_desc_q_map & (1 << WIFI_NRF_FMAC_AC_VO))
+				tx_done_q = WIFI_NRF_FMAC_AC_VO;
 		}
 
 		/* Spare desc:
@@ -865,21 +863,35 @@ unsigned int tx_buff_req_free(struct wifi_nrf_fmac_dev_ctx *fmac_dev_ctx,
 		end_ac = WIFI_NRF_FMAC_AC_BK;
 	}
 
-	for (cnt = start_ac; cnt >= end_ac; cnt--) {
-		pkts_pend = _tx_pending_process(fmac_dev_ctx, desc, cnt);
+	if (fmac_dev_ctx->twt_sleep_status ==
+	    WIFI_NRF_FMAC_TWT_STATE_SLEEP) {
+		tx_desc_free(fmac_dev_ctx,
+			     desc,
+			     tx_done_q);
+		goto out;
+	} else {
+		for (cnt = start_ac; cnt >= end_ac; cnt--) {
+			pkts_pend = _tx_pending_process(fmac_dev_ctx, desc, cnt);
 
-		if (pkts_pend) {
-			*ac = (unsigned char)cnt;
+			if (pkts_pend) {
+				*ac = (unsigned char)cnt;
 
-			/* Spare Token Case*/
-			if (tx_done_q != *ac) {
-				/*Adjust the counters*/
-				fmac_dev_ctx->tx_config.outstanding_descs[tx_done_q]--;
-				fmac_dev_ctx->tx_config.outstanding_descs[*ac]++;
+				/* Spare Token Case*/
+				if (tx_done_q != *ac) {
+					/* Adjust the counters */
+					fmac_dev_ctx->tx_config.outstanding_descs[tx_done_q]--;
+					fmac_dev_ctx->tx_config.outstanding_descs[*ac]++;
+
+					/* Update the queue_map */
+					/* Clear the last access category. */
+					clear_spare_desc_q_map(fmac_dev_ctx, desc, tx_done_q);
+					/* Set the new access category. */
+					set_spare_desc_q_map(fmac_dev_ctx, desc, *ac);
+				}
+				break;
 			}
-
-			break;
 		}
+
 	}
 
 	if (!pkts_pend) {
@@ -889,12 +901,13 @@ unsigned int tx_buff_req_free(struct wifi_nrf_fmac_dev_ctx *fmac_dev_ctx,
 			     tx_done_q);
 	}
 
+out:
 	return pkts_pend;
 }
 
 
 enum wifi_nrf_status tx_done_process(struct wifi_nrf_fmac_dev_ctx *fmac_dev_ctx,
-				     struct img_tx_buff_done *config)
+				     struct nrf_wifi_tx_buff_done *config)
 {
 	enum wifi_nrf_status status = WIFI_NRF_STATUS_FAIL;
 	struct wifi_nrf_fmac_priv *fpriv = NULL;
@@ -976,18 +989,24 @@ enum wifi_nrf_status tx_done_process(struct wifi_nrf_fmac_dev_ctx *fmac_dev_ctx,
 
 	fmac_dev_ctx->host_stats.total_tx_done_pkts += pkt;
 
-
-	pkts_pending = tx_buff_req_free(fmac_dev_ctx, config, &queue);
+	pkts_pending = tx_buff_req_free(fmac_dev_ctx, config->tx_desc_num, &queue);
 
 	if (pkts_pending) {
-		pkt_info = &fmac_dev_ctx->tx_config.pkt_info_p[desc];
+		if (fmac_dev_ctx->twt_sleep_status ==
+		    WIFI_NRF_FMAC_TWT_STATE_AWAKE) {
 
-		txq = pkt_info->pkt;
+			pkt_info = &fmac_dev_ctx->tx_config.pkt_info_p[desc];
 
-		status = tx_cmd_init(fmac_dev_ctx,
-				     txq,
-				     desc,
-				     pkt_info->peer_id);
+			txq = pkt_info->pkt;
+
+			status = tx_cmd_init(fmac_dev_ctx,
+					     txq,
+					     desc,
+					     pkt_info->peer_id);
+		} else {
+			status = WIFI_NRF_STATUS_SUCCESS;
+		}
+
 	} else {
 		status = WIFI_NRF_STATUS_SUCCESS;
 	}
@@ -997,7 +1016,7 @@ out:
 
 
 enum wifi_nrf_status wifi_nrf_fmac_tx_done_event_process(struct wifi_nrf_fmac_dev_ctx *fmac_dev_ctx,
-							 struct img_tx_buff_done *config)
+							 struct nrf_wifi_tx_buff_done *config)
 {
 	enum wifi_nrf_status status = WIFI_NRF_STATUS_FAIL;
 
@@ -1048,6 +1067,7 @@ enum wifi_nrf_status wifi_nrf_fmac_tx(struct wifi_nrf_fmac_dev_ctx *fmac_dev_ctx
 	wifi_nrf_osal_spinlock_take(fmac_dev_ctx->fpriv->opriv,
 				    fmac_dev_ctx->tx_config.tx_lock);
 
+
 	if (fpriv->num_tx_tokens == 0) {
 		goto out;
 	}
@@ -1062,6 +1082,12 @@ enum wifi_nrf_status wifi_nrf_fmac_tx(struct wifi_nrf_fmac_dev_ctx *fmac_dev_ctx
 		goto out;
 	}
 
+
+	if (fmac_dev_ctx->twt_sleep_status ==
+	    WIFI_NRF_FMAC_TWT_STATE_SLEEP) {
+		goto out;
+	}
+
 	desc = tx_desc_get(fmac_dev_ctx, ac);
 
 	if (desc == fpriv->num_tx_tokens) {
@@ -1072,12 +1098,6 @@ enum wifi_nrf_status wifi_nrf_fmac_tx(struct wifi_nrf_fmac_dev_ctx *fmac_dev_ctx
 				    desc,
 				    ac);
 out:
-	/* TODO: for goto cases also Returning success always
-	 * (same as in CL-5741850).
-	 * Check again
-	 */
-	status = WIFI_NRF_STATUS_SUCCESS;
-
 	wifi_nrf_osal_spinlock_rel(fmac_dev_ctx->fpriv->opriv,
 				   fmac_dev_ctx->tx_config.tx_lock);
 
@@ -1307,6 +1327,8 @@ enum wifi_nrf_status tx_init(struct wifi_nrf_fmac_dev_ctx *fmac_dev_ctx)
 		goto out;
 	}
 
+	fmac_dev_ctx->twt_sleep_status = WIFI_NRF_FMAC_TWT_STATE_AWAKE;
+
 	status = WIFI_NRF_STATUS_SUCCESS;
 out:
 	return status;
@@ -1406,8 +1428,6 @@ enum wifi_nrf_status wifi_nrf_fmac_start_xmit(void *dev_ctx,
 
 	if (wifi_nrf_osal_nbuf_data_size(fmac_dev_ctx->fpriv->opriv,
 					 nbuf) < WIFI_NRF_FMAC_ETH_HDR_LEN) {
-		wifi_nrf_osal_nbuf_free(fmac_dev_ctx->fpriv->opriv,
-					nbuf);
 		goto out;
 	}
 
@@ -1439,6 +1459,18 @@ enum wifi_nrf_status wifi_nrf_fmac_start_xmit(void *dev_ctx,
 				  ac,
 				  peer_id);
 
+	if (status != WIFI_NRF_STATUS_SUCCESS) {
+		wifi_nrf_osal_log_dbg(fmac_dev_ctx->fpriv->opriv,
+				      "%s: Failed to send packet\n",
+				      __func__);
+		goto out;
+	}
+
+	return WIFI_NRF_STATUS_SUCCESS;
 out:
+	if (nbuf) {
+		wifi_nrf_osal_nbuf_free(fmac_dev_ctx->fpriv->opriv,
+			nbuf);
+	}
 	return status;
 }

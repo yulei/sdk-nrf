@@ -19,13 +19,27 @@
 
 #pragma once
 
-#include <app-common/zap-generated/callbacks/PluginCallbacks.h>
+void MatterIdentifyPluginServerInitCallback();
+void MatterDescriptorPluginServerInitCallback();
+void MatterAccessControlPluginServerInitCallback();
+void MatterBasicInformationPluginServerInitCallback();
+void MatterOtaSoftwareUpdateRequestorPluginServerInitCallback();
+void MatterGeneralCommissioningPluginServerInitCallback();
+void MatterNetworkCommissioningPluginServerInitCallback();
+void MatterGeneralDiagnosticsPluginServerInitCallback();
+void MatterSoftwareDiagnosticsPluginServerInitCallback();
+void MatterThreadNetworkDiagnosticsPluginServerInitCallback();
+void MatterWiFiNetworkDiagnosticsPluginServerInitCallback();
+void MatterAdministratorCommissioningPluginServerInitCallback();
+void MatterOperationalCredentialsPluginServerInitCallback();
+void MatterGroupKeyManagementPluginServerInitCallback();
+void MatterDoorLockPluginServerInitCallback();
 
 #define MATTER_PLUGINS_INIT                                                                                            \
+	MatterIdentifyPluginServerInitCallback();                                                                      \
 	MatterDescriptorPluginServerInitCallback();                                                                    \
 	MatterAccessControlPluginServerInitCallback();                                                                 \
-	MatterBasicPluginServerInitCallback();                                                                         \
-	MatterOtaSoftwareUpdateProviderPluginClientInitCallback();                                                     \
+	MatterBasicInformationPluginServerInitCallback();                                                              \
 	MatterOtaSoftwareUpdateRequestorPluginServerInitCallback();                                                    \
 	MatterGeneralCommissioningPluginServerInitCallback();                                                          \
 	MatterNetworkCommissioningPluginServerInitCallback();                                                          \
@@ -35,6 +49,5 @@
 	MatterWiFiNetworkDiagnosticsPluginServerInitCallback();                                                        \
 	MatterAdministratorCommissioningPluginServerInitCallback();                                                    \
 	MatterOperationalCredentialsPluginServerInitCallback();                                                        \
-	MatterFixedLabelPluginServerInitCallback();                                                                    \
-	MatterUserLabelPluginServerInitCallback();                                                                     \
+	MatterGroupKeyManagementPluginServerInitCallback();                                                            \
 	MatterDoorLockPluginServerInitCallback();

@@ -4,15 +4,15 @@
  * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
-#include <zephyr/zephyr.h>
+#include <zephyr/kernel.h>
 #include <errno.h>
 #include <stdbool.h>
 #include <stdlib.h>
 #include <zephyr/bluetooth/mesh.h>
 
-#define BT_DBG_ENABLED IS_ENABLED(CONFIG_BT_MESH_DEBUG_RPL)
-#define LOG_MODULE_NAME bt_mesh_rpl
-#include "common/log.h"
+#define LOG_LEVEL CONFIG_BT_MESH_RPL_LOG_LEVEL
+#include "zephyr/logging/log.h"
+LOG_MODULE_REGISTER(bt_mesh_rpl);
 
 #include <mesh/net.h>
 #include <mesh/rpl.h>
@@ -21,11 +21,6 @@
 static struct bt_mesh_rpl replay_list[CONFIG_BT_MESH_CRPL];
 
 EMDS_STATIC_ENTRY_DEFINE(rpl_store, CONFIG_BT_MESH_RPL_INDEX, replay_list, sizeof(replay_list));
-
-static inline int rpl_idx(const struct bt_mesh_rpl *rpl)
-{
-	return rpl - &replay_list[0];
-}
 
 void bt_mesh_rpl_update(struct bt_mesh_rpl *rpl,
 		struct bt_mesh_net_rx *rx)
@@ -97,7 +92,7 @@ bool bt_mesh_rpl_check(struct bt_mesh_net_rx *rx,
 		}
 	}
 
-	BT_ERR("RPL is full!");
+	LOG_ERR("RPL is full!");
 	return true;
 }
 

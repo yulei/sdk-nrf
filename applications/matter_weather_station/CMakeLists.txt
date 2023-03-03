@@ -45,17 +45,17 @@ target_sources(app PRIVATE
     src/buzzer.cpp
     src/zap-generated/IMClusterCommandHandler.cpp
     src/zap-generated/callback-stub.cpp
-    ${COMMON_ROOT}/src/thread_util.cpp
     ${COMMON_ROOT}/src/led_widget.cpp
     ${COMMON_ROOT}/src/dfu_over_smp.cpp
 )
 
-if(CONFIG_CHIP_OTA_REQUESTOR)
+if(CONFIG_CHIP_OTA_REQUESTOR OR CONFIG_MCUMGR_SMP_BT)
     target_sources(app PRIVATE ${COMMON_ROOT}/src/ota_util.cpp)
 endif()
 
 chip_configure_data_model(app
     INCLUDE_SERVER
+    BYPASS_IDL
     ZAP_FILE ${CMAKE_CURRENT_SOURCE_DIR}/src/weather-station.zap
 )
 # NORDIC SDK APP END

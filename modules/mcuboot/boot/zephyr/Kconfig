@@ -55,6 +55,11 @@ config MCUBOOT_NRF_CLEANUP_PERIPHERAL
 	depends on SOC_FAMILY_NRF
 	default y
 
+config MCUBOOT_NRF_CLEANUP_NONSECURE_RAM
+	bool "Perform non-secure RAM cleanup before chain-load the application"
+	depends on SOC_FAMILY_NRF && ARM_TRUSTZONE_M
+	default y if MCUBOOT_USE_ALL_AVAILABLE_RAM
+
 config BOOT_SIGNATURE_KEY_FILE
 	string "MCUBoot PEM key file"
 	depends on !MCUBOOT_BUILD_STRATEGY_FROM_SOURCE
@@ -95,6 +100,16 @@ config BOOT_IMAGE_ACCESS_HOOKS
 	default y if UPDATEABLE_IMAGE_NUMBER > 1 && SOC_NRF5340_CPUAPP && PM_EXTERNAL_FLASH_MCUBOOT_SECONDARY
 	depends on MCUBOOT
 
+config BOOT_IMAGE_ACCESS_HOOK_NRF5340
+	bool "Enable default nRF5340 hook"
+	default y if BOOT_IMAGE_ACCESS_HOOKS
+	depends on BOOT_IMAGE_ACCESS_HOOKS
+	help
+	  This enables the default nRF5340 image hook for MCUboot, which
+	  supports upgrading the network core image from the application core.
+	  To disable or override this feature, disable this option and add a
+	  custom file using CMake.
+
 DT_COMPAT_SIM_FLASH:= zephyr,sim-flash
 DT_SIM_FLASH_PATH := $(dt_nodelabel_path,flash_sim0)
 
@@ -108,7 +123,7 @@ config NRF53_MULTI_IMAGE_UPDATE
 	depends on FLASH_SIMULATOR_DOUBLE_WRITES
 	depends on !FLASH_SIMULATOR_STATS
 	depends on PM_EXTERNAL_FLASH_MCUBOOT_SECONDARY
-	depends on BOOT_UPGRADE_ONLY
+	depends on BOOT_UPGRADE_ONLY || USE_NRF53_MULTI_IMAGE_WITHOUT_UPGRADE_ONLY
 	depends on $(dt_compat_enabled,$(DT_COMPAT_SIM_FLASH))
 	select NRF53_MCUBOOT_PRIMARY_1_RAM_FLASH
 

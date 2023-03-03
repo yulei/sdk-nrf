@@ -82,6 +82,7 @@
 #define AT_NCELLMEAS_STATUS_INDEX		1
 #define AT_NCELLMEAS_STATUS_VALUE_SUCCESS	0
 #define AT_NCELLMEAS_STATUS_VALUE_FAIL		1
+#define AT_NCELLMEAS_STATUS_VALUE_INCOMPLETE	2
 #define AT_NCELLMEAS_CELL_ID_INDEX		2
 #define AT_NCELLMEAS_PLMN_INDEX			3
 #define AT_NCELLMEAS_TAC_INDEX			4
@@ -106,6 +107,8 @@
 #define AT_NCELLMEAS_PARAMS_COUNT_MAX					\
 	(AT_NCELLMEAS_PRE_NCELLS_PARAMS_COUNT +				\
 	 AT_NCELLMEAS_N_PARAMS_COUNT * CONFIG_LTE_NEIGHBOR_CELLS_MAX)
+
+#define AT_NCELLMEAS_GCI_CELL_PARAMS_COUNT	12
 
 /* XMODEMSLEEP command parameters. */
 #define AT_XMODEMSLEEP_SUB			"AT%%XMODEMSLEEP=1,%d,%d"
@@ -240,8 +243,26 @@ uint32_t neighborcell_count_get(const char *at_response);
  * @param ncell Pointer to ncell structure.
  *
  * @return Zero on success or (negative) error code otherwise.
+ *         Returns -E2BIG if the static buffers set by CONFIG_LTE_NEIGHBOR_CELLS_MAX
+ *         are to small for the modem response. The associated data is still valid,
+ *         but not complete.
  */
 int parse_ncellmeas(const char *at_response, struct lte_lc_cells_info *cells);
+
+/* @brief Parses a NCELLMEAS notification for GCI search types, and stores neighboring cell
+ *	  and measured GCI cell information in a struct.
+ *
+ * @param params Neighbor cell measurement parameters.
+ * @param at_response Pointer to buffer with AT response.
+ * @param cells Pointer to lte_lc_cells_info structure.
+ *
+ * @return Zero on success or (negative) error code otherwise.
+ *         Returns -E2BIG if the static buffers set by CONFIG_LTE_NEIGHBOR_CELLS_MAX
+ *         are to small for the modem response. The associated data is still valid,
+ *         but not complete.
+ */
+int parse_ncellmeas_gci(struct lte_lc_ncellmeas_params *params,
+	const char *at_response, struct lte_lc_cells_info *cells);
 
 /* @brief Parses an XMODEMSLEEP response and extracts the sleep type and time.
  *

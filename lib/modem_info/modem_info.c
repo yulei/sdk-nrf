@@ -11,6 +11,7 @@
 #include <zephyr/device.h>
 #include <errno.h>
 #include <modem/modem_info.h>
+#include <nrf_errno.h>
 #include <zephyr/net/socket.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -128,6 +129,20 @@ LOG_MODULE_REGISTER(modem_info);
 
 #define APN_PARAM_INDEX		3
 #define APN_PARAM_COUNT		7
+
+#define CELL_RSRP_INVALID	255
+
+/* FW UUID is 36 characters: XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX */
+#define FW_UUID_SIZE 37
+
+/* Size of the format string for requesting modem firmware version */
+#define SWVER_FMT_STR_SIZE 23
+
+/* SVN is a NULL-terminated string with 2 digits: XX */
+#define SVN_SIZE 3
+
+#define HWVER_CMD_STR "HWVERSION"
+#define HWVER_FMT_STR "%%%%" HWVER_CMD_STR ": %%%d[^" AT_CMD_RSP_DELIM "]"
 
 struct modem_info_data {
 	const char *cmd;
@@ -382,6 +397,22 @@ static int modem_info_parse(const struct modem_info_data *modem_data,
 	return err;
 }
 
+static int map_nrf_modem_at_scanf_error(int err)
+{
+	switch (err) {
+	case -NRF_EPERM:
+		return -EPERM;
+	case -NRF_EFAULT:
+		return -EFAULT;
+	case -NRF_EBADMSG:
+		return -EBADMSG;
+	case -NRF_ENOMEM:
+		return -ENOMEM;
+	default:
+		return -EIO;
+	}
+}
+
 enum at_param_type modem_info_type_get(enum modem_info info_type)
 {
 	if (info_type >= MODEM_INFO_COUNT) {
@@ -395,11 +426,12 @@ int modem_info_name_get(enum modem_info info, char *name)
 {
 	int len;
 
-	if (name == NULL) {
+	if (name == NULL || info < 0 || info >= MODEM_INFO_COUNT) {
 		return -EINVAL;
 	}
 
 	len = strlen(modem_data[info]->data_name);
+	__ASSERT_NO_MSG(len <= MODEM_INFO_MAX_RESPONSE_SIZE);
 
 	if (len <= 0) {
 		return -EINVAL;
@@ -715,6 +747,144 @@ int modem_info_rsrp_register(rsrp_cb_t cb)
 		return -EIO;
 	}
 
+	return 0;
+}
+
+int modem_info_get_fw_uuid(char *buf, size_t buf_size)
+{
+	int ret;
+
+	if (buf == NULL || buf_size < FW_UUID_SIZE) {
+		return -EINVAL;
+	}
+
+	ret = nrf_modem_at_scanf("AT%XMODEMUUID",
+				 "%%XMODEMUUID: %" STRINGIFY(FW_UUID_SIZE) "[^\r\n]",
+				 buf);
+	if (ret != 1) {
+		LOG_ERR("Could not get FW ID, error: %d", ret);
+		return map_nrf_modem_at_scanf_error(ret);
+	}
+	return 0;
+}
+
+int modem_info_get_fw_version(char *buf, size_t buf_size)
+{
+	int ret;
+	char format[SWVER_FMT_STR_SIZE];
+
+	if (buf == NULL || buf_size < MODEM_INFO_FWVER_SIZE) {
+		return -EINVAL;
+	}
+
+	sprintf(format, "%%%%SHORTSWVER: %%%d[^\r\n]", buf_size);
+
+	ret = nrf_modem_at_scanf("AT%SHORTSWVER",
+				 format,
+				 buf);
+
+	if (ret != 1) {
+		LOG_ERR("Could not get FW version, error: %d", ret);
+		return map_nrf_modem_at_scanf_error(ret);
+	}
+	return 0;
+}
+
+int modem_info_get_hw_version(char *buf, uint8_t buf_size)
+{
+	int ret;
+	char format[sizeof(HWVER_FMT_STR)];
+
+	if ((buf == NULL) || (buf_size == 0)) {
+		return -EINVAL;
+	}
+
+	sprintf(format, HWVER_FMT_STR, buf_size);
+
+	ret = nrf_modem_at_scanf("AT%" HWVER_CMD_STR, format, buf);
+
+	if (ret != 1) {
+		LOG_ERR("Could not get HW version, error: %d", ret);
+		return map_nrf_modem_at_scanf_error(ret);
+	}
+	return 0;
+}
+
+int modem_info_get_svn(char *buf, size_t buf_size)
+{
+	int ret;
+
+	if (buf == NULL || buf_size < SVN_SIZE) {
+		return -EINVAL;
+	}
+
+	ret = nrf_modem_at_scanf("AT+CGSN=3",
+				 "+CGSN: \"%" STRINGIFY(SVN_SIZE) "[^\"]",
+				 buf);
+
+	if (ret != 1) {
+		LOG_ERR("Could not get SVN, error: %d", ret);
+		return map_nrf_modem_at_scanf_error(ret);
+	}
+	return 0;
+}
+
+int modem_info_get_batt_voltage(int *val)
+{
+	int ret;
+
+	if (val == NULL) {
+		return -EINVAL;
+	}
+
+	ret = nrf_modem_at_scanf("AT%XVBAT", "%%XVBAT: %d", val);
+
+	if (ret != 1) {
+		LOG_ERR("Could not get battery voltage, error: %d", ret);
+		return map_nrf_modem_at_scanf_error(ret);
+	}
+	return 0;
+}
+
+int modem_info_get_temperature(int *val)
+{
+	int ret;
+
+	if (val == NULL) {
+		return -EINVAL;
+	}
+
+	ret = nrf_modem_at_scanf("AT%XTEMP?", "%%XTEMP: %d", val);
+
+	if (ret != 1) {
+		LOG_ERR("Could not get temperature, error: %d", ret);
+		return map_nrf_modem_at_scanf_error(ret);
+	}
+	return 0;
+}
+
+int modem_info_get_rsrp(int *val)
+{
+	int ret;
+
+	if (val == NULL) {
+		return -EINVAL;
+	}
+
+	ret = nrf_modem_at_scanf("AT+CESQ",
+				 "+CESQ: %*d,%*d,%*d,%*d,%*d,%d", val);
+
+	if (ret != 1) {
+		LOG_ERR("at_scanf_int failed");
+		return map_nrf_modem_at_scanf_error(ret);
+	}
+
+	if (*val == CELL_RSRP_INVALID) {
+		LOG_WRN("No valid RSRP");
+		return -ENOENT;
+	}
+
+	*val = *val - RSRP_OFFSET_VAL;
 	return 0;
 }
 

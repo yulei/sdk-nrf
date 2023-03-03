@@ -4,8 +4,6 @@
  * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
-#include <dt-bindings/ipc_service/static_vrings.h>
-
 / {
 	chosen {
 		nordic,pm-ext-flash = &mx25r64;
@@ -31,15 +29,8 @@
 	};
 };
 
-&ipc0 {
-    zephyr,priority = <0 PRIO_COOP>;
-};
-
 /* Disable unused peripherals to reduce power consumption */
 &adc {
-	status = "disabled";
-};
-&gpio1 {
 	status = "disabled";
 };
 &i2c1 {

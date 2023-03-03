@@ -7,9 +7,15 @@
 #include "nrf_cloud_fsm.h"
 #include "nrf_cloud_codec.h"
 #include "nrf_cloud_mem.h"
-
 #include <zephyr/kernel.h>
+#include <net/nrf_cloud_alerts.h>
 #include <zephyr/logging/log.h>
+#if defined(CONFIG_NRF_CLOUD_AGPS)
+#include <net/nrf_cloud_agps.h>
+#endif
+#if defined(CONFIG_NRF_CLOUD_PGPS)
+#include <net/nrf_cloud_pgps.h>
+#endif
 
 LOG_MODULE_REGISTER(nrf_cloud_fsm, CONFIG_NRF_CLOUD_LOG_LEVEL);
 
@@ -30,6 +36,8 @@ static int cc_rx_data_handler(const struct nct_evt *nct_evt);
 static int handle_pin_complete(const struct nct_evt *nct_evt);
 static int handle_device_config_update(const struct nct_evt *const evt,
 				       bool *const config_found);
+static int handle_device_control_update(const struct nct_evt *const evt,
+					bool *const control_found);
 
 static const fsm_transition idle_fsm_transition[NCT_EVT_TOTAL] = {
 	[NCT_EVT_DISCONNECTED] = disconnection_handler,
@@ -103,11 +111,16 @@ BUILD_ASSERT(ARRAY_SIZE(state_event_handlers) == STATE_TOTAL);
 
 static bool persistent_session;
 
-#if defined(CONFIG_NRF_CLOUD_CELL_POS) && defined(CONFIG_NRF_CLOUD_MQTT)
-static nrf_cloud_cell_pos_response_t cell_pos_cb;
-void nfsm_set_cell_pos_response_cb(nrf_cloud_cell_pos_response_t cb)
+/* Flag to track if the c2d topic was modified; if so, the desired section
+ * in the shadow needs to be updated to prevent delta events.
+ */
+static bool c2d_topic_modified;
+
+#if defined(CONFIG_NRF_CLOUD_LOCATION) && defined(CONFIG_NRF_CLOUD_MQTT)
+static nrf_cloud_location_response_t location_cb;
+void nfsm_set_location_response_cb(nrf_cloud_location_response_t cb)
 {
-	cell_pos_cb = cb;
+	location_cb = cb;
 }
 #endif
 
@@ -151,7 +164,7 @@ static int state_ua_pin_wait(void)
 	};
 
 	/* Publish report to the cloud on current status. */
-	err = nrf_cloud_encode_state(STATE_UA_PIN_WAIT, &msg.data);
+	err = nrf_cloud_encode_state(STATE_UA_PIN_WAIT, false, &msg.data);
 	if (err) {
 		LOG_ERR("nrf_cloud_encode_state failed %d", err);
 		return err;
@@ -184,10 +197,6 @@ static int handle_device_config_update(const struct nct_evt *const evt,
 		.message_id = NCT_MSG_ID_STATE_REPORT,
 	};
 
-	struct nrf_cloud_evt cloud_evt = {
-		.type = NRF_CLOUD_EVT_RX_DATA
-	};
-
 	if ((evt == NULL) || (config_found == NULL)) {
 		return -EINVAL;
 	}
@@ -216,10 +225,81 @@ static int handle_device_config_update(const struct nct_evt *const evt,
 		}
 	}
 
-	cloud_evt.data = evt->param.cc->data;
-	cloud_evt.topic = evt->param.cc->topic;
+	return err;
+}
 
-	nfsm_set_current_state_and_notify(nfsm_get_current_state(), &cloud_evt);
+static int _log_level;
+
+/* Placeholder until cloud logging added in another PR */
+void nrf_cloud_log_control_set(int log_level)
+{
+	LOG_DBG("Setting nRF Cloud log level = %d", log_level);
+	_log_level = log_level;
+}
+
+/* Placeholder until cloud logging added in another PR */
+int nrf_cloud_log_control_get(void)
+{
+	return _log_level;
+}
+
+static int handle_device_control_update(const struct nct_evt *const evt,
+					bool *const control_found)
+{
+	int err;
+	enum nrf_cloud_ctrl_status status = NRF_CLOUD_CTRL_NOT_PRESENT;
+	struct nrf_cloud_ctrl_data ctrl_data;
+
+	if ((evt == NULL) || (control_found == NULL)) {
+		return -EINVAL;
+	}
+
+	if (evt->param.cc == NULL) {
+		return -ENOENT;
+	}
+
+#if IS_ENABLED(CONFIG_NRF_CLOUD_ALERTS)
+	ctrl_data.alerts_enabled = nrf_cloud_alert_control_get();
+#else
+	ctrl_data.alerts_enabled = false;
+#endif /* CONFIG_NRF_CLOUD_ALERTS */
+	ctrl_data.log_level = nrf_cloud_log_control_get();
+
+	err = nrf_cloud_decode_control(&evt->param.cc->data, &status, &ctrl_data);
+	if (err) {
+		return (err == -ESRCH) ? 0 : err;
+	}
+
+	*control_found = (status != NRF_CLOUD_CTRL_NOT_PRESENT);
+	if (*control_found) {
+#if IS_ENABLED(CONFIG_NRF_CLOUD_ALERTS)
+		nrf_cloud_alert_control_set(ctrl_data.alerts_enabled);
+#endif /* CONFIG_NRF_CLOUD_ALERTS */
+		nrf_cloud_log_control_set(ctrl_data.log_level);
+	}
+
+	/* Acknowledge that shadow delta changes have been made. */
+	if (status == NRF_CLOUD_CTRL_REPLY) {
+		struct nct_cc_data msg = {
+			.opcode = NCT_CC_OPCODE_UPDATE_REQ,
+			.message_id = NCT_MSG_ID_STATE_REPORT,
+		};
+
+		err = nrf_cloud_encode_control_response(&ctrl_data, &msg.data);
+		if (err) {
+			LOG_ERR("nrf_cloud_encode_control_response failed %d", err);
+			return err;
+		}
+
+		if (msg.data.ptr) {
+			err = nct_cc_send(&msg);
+			nrf_cloud_free((void *)msg.data.ptr);
+
+			if (err) {
+				LOG_ERR("nct_cc_send failed %d", err);
+			}
+		}
+	}
 
 	return err;
 }
@@ -232,11 +312,13 @@ static int state_ua_pin_complete(void)
 		.message_id = NCT_MSG_ID_PAIR_STATUS_REPORT,
 	};
 
-	err = nrf_cloud_encode_state(STATE_UA_PIN_COMPLETE, &msg.data);
+	err = nrf_cloud_encode_state(STATE_UA_PIN_COMPLETE, c2d_topic_modified, &msg.data);
 	if (err) {
 		LOG_ERR("nrf_cloud_encode_state failed %d", err);
 		return err;
 	}
+
+	c2d_topic_modified = false;
 
 	err = nct_cc_send(&msg);
 	if (err) {
@@ -266,12 +348,15 @@ static int drop_event_handler(const struct nct_evt *nct_evt)
 static int connection_handler(const struct nct_evt *nct_evt)
 {
 	int err;
-	struct nrf_cloud_evt evt;
+	struct nrf_cloud_evt evt = {
+		.type = NRF_CLOUD_EVT_TRANSPORT_CONNECTED,
+		.status = nct_evt->status
+	};
 
 	/* Notify the application of the connection event.
 	 * State transitions according to the event result.
 	 */
-	if (nct_evt->status != 0) {
+	if (nct_evt->status != NRF_CLOUD_ERR_STATUS_NONE) {
 		evt.type = NRF_CLOUD_EVT_ERROR;
 		evt.status = nct_evt->status;
 		nfsm_set_current_state_and_notify(nfsm_get_current_state(),
@@ -279,7 +364,7 @@ static int connection_handler(const struct nct_evt *nct_evt)
 		return 0;
 	}
 
-	evt.type = NRF_CLOUD_EVT_TRANSPORT_CONNECTED;
+	/* For a connected event, status indicates if a persistent session is present */
 	evt.status = nct_evt->param.flag;
 	nfsm_set_current_state_and_notify(STATE_CONNECTED, &evt);
 
@@ -327,17 +412,17 @@ static int cc_connection_handler(const struct nct_evt *nct_evt)
 	/* Set the state according to the status of the event.
 	 * If status the connection, request state synchronization.
 	 */
-	static const struct nct_cc_data get_request = {
+	const struct nct_cc_data get_request = {
 		.opcode = NCT_CC_OPCODE_GET_REQ,
 		.message_id = NCT_MSG_ID_STATE_REQUEST,
 	};
-
 	int err;
 	const struct nrf_cloud_evt evt = {
 		.type = NRF_CLOUD_EVT_ERROR,
+		.status = nct_evt->status
 	};
 
-	if (nct_evt->status != 0) {
+	if (nct_evt->status != NRF_CLOUD_ERR_STATUS_NONE) {
 		/* Send error event and initiate disconnect */
 		nfsm_set_current_state_and_notify(nfsm_get_current_state(), &evt);
 		(void)nct_dc_disconnect();
@@ -373,6 +458,9 @@ static int handle_pin_complete(const struct nct_evt *nct_evt)
 		return err;
 	}
 
+	/* Update to use wildcard topic if necessary */
+	c2d_topic_modified = nrf_cloud_set_wildcard_c2d_topic((char *)rx.ptr, rx.len);
+
 	/* Set the endpoint information. */
 	nct_dc_endpoint_set(&tx, &rx, &bulk, &endpoint);
 
@@ -385,21 +473,39 @@ static int cc_rx_data_handler(const struct nct_evt *nct_evt)
 	enum nfsm_state new_state;
 	const struct nrf_cloud_data *payload = &nct_evt->param.cc->data;
 	bool config_found = false;
+	bool control_found = false;
 	const enum nfsm_state current_state = nfsm_get_current_state();
 
+	LOG_INF("CC RX on topic %s: %s",
+		(const char *)nct_evt->param.cc->topic.ptr,
+		(const char *)nct_evt->param.cc->data.ptr);
 	handle_device_config_update(nct_evt, &config_found);
+	handle_device_control_update(nct_evt, &control_found);
+
+	if (config_found || control_found) {
+		struct nrf_cloud_evt cloud_evt = {
+			.type = NRF_CLOUD_EVT_RX_DATA_SHADOW,
+			.data = nct_evt->param.cc->data,
+			.topic = nct_evt->param.cc->topic
+		};
+
+		/* Pass the current state since the state is not changing. Give
+		 * application a chance to see the change to the shadow.
+		 */
+		nfsm_set_current_state_and_notify(current_state, &cloud_evt);
+	}
 
 	err = nrf_cloud_decode_requested_state(payload, &new_state);
 
 	if (err) {
 #ifndef CONFIG_NRF_CLOUD_GATEWAY
-		if (!config_found) {
+		if (!config_found && !control_found) {
 			LOG_ERR("nrf_cloud_decode_requested_state Failed %d",
 				err);
 			return err;
 		}
 #endif
-		/* Config only, nothing else to do */
+		/* Config or control only, nothing else to do */
 		return 0;
 	}
 
@@ -409,10 +515,12 @@ static int cc_rx_data_handler(const struct nct_evt *nct_evt)
 	case STATE_UA_PIN_WAIT:
 	case STATE_UA_PIN_COMPLETE:
 		if (new_state == STATE_UA_PIN_COMPLETE) {
-			/* If the config was found, the shadow data has already been sent */
-			if (!config_found) {
+			/* If the config or control was found,
+			 * the shadow data has already been sent
+			 */
+			if (!config_found && !control_found) {
 				struct nrf_cloud_evt cloud_evt = {
-					.type = NRF_CLOUD_EVT_RX_DATA,
+					.type = NRF_CLOUD_EVT_RX_DATA_SHADOW,
 					.data = nct_evt->param.cc->data,
 					.topic = nct_evt->param.cc->topic
 				};
@@ -499,50 +607,132 @@ static int cc_disconnection_handler(const struct nct_evt *nct_evt)
 
 static int dc_connection_handler(const struct nct_evt *nct_evt)
 {
-	if (nct_evt->status == 0) {
-		struct nrf_cloud_evt evt = {
-			.type = NRF_CLOUD_EVT_READY,
-		};
+	struct nrf_cloud_evt evt = {
+		.type = NRF_CLOUD_EVT_READY,
+		.status = nct_evt->status
+	};
 
+	if (nct_evt->status != NRF_CLOUD_ERR_STATUS_NONE) {
+		evt.type = NRF_CLOUD_EVT_ERROR;
+		nfsm_set_current_state_and_notify(nfsm_get_current_state(), &evt);
+	} else {
 		nfsm_set_current_state_and_notify(STATE_DC_CONNECTED, &evt);
 	}
+
 	return 0;
 }
 
-static int cell_pos_cb_send(const char *const rx_buf)
+static void agps_process(const char * const buf, const size_t buf_len)
 {
-#if defined(CONFIG_NRF_CLOUD_CELL_POS) && defined(CONFIG_NRF_CLOUD_MQTT)
-	if (cell_pos_cb) {
-		struct nrf_cloud_cell_pos_result res;
-		int ret = nrf_cloud_cell_pos_process(rx_buf, &res);
+#if defined(CONFIG_NRF_CLOUD_AGPS)
+	int ret = nrf_cloud_agps_process(buf, buf_len);
 
-		if (ret <= 0) {
-			/* A cell-pos response was received, send to callback */
-			cell_pos_cb(&res);
+	if (ret) {
+		struct nrf_cloud_evt evt = {
+			.type = NRF_CLOUD_EVT_ERROR,
+			.status = NRF_CLOUD_ERR_STATUS_AGPS_PROC
+		};
 
-			/* Clear the callback after use */
-			nfsm_set_cell_pos_response_cb(NULL);
-			return 0;
+		LOG_ERR("Error processing A-GPS data: %d", ret);
+		nfsm_set_current_state_and_notify(nfsm_get_current_state(), &evt);
+	} else {
+		LOG_DBG("A-GPS data processed");
+	}
+
+#if defined(CONFIG_NRF_CLOUD_PGPS)
+	/* If both A-GPS and P-GPS are enabled, everything but ephemerides and almanacs
+	 * are handled by A-GPS.
+	 * In this configuration it is important to check, after receiving A-GPS data,
+	 * whether any further assistance is needed by the modem for ephemerides,
+	 * which would come from P-GPS (usually, in stored predictions in flash).
+	 */
+	if (ret == 0) {
+		ret = nrf_cloud_pgps_notify_prediction();
+		if (ret) {
+			LOG_ERR("Error requesting P-GPS notification: %d", ret);
 		}
-		/* ret == 1 indicates that no cell pos data was found, send to app */
 	}
 #endif
-	return -EFTYPE;
+#endif
+}
+
+static void pgps_process(const char * const buf, const size_t buf_len)
+{
+#if defined(CONFIG_NRF_CLOUD_PGPS)
+	int ret = nrf_cloud_pgps_process(buf, buf_len);
+
+	if (ret) {
+		struct nrf_cloud_evt evt = {
+			.type = NRF_CLOUD_EVT_ERROR,
+			.status = NRF_CLOUD_ERR_STATUS_PGPS_PROC
+		};
+
+		LOG_ERR("Error processing P-GPS data: %d", ret);
+		nfsm_set_current_state_and_notify(nfsm_get_current_state(), &evt);
+	} else {
+		LOG_DBG("P-GPS data processed");
+	}
+#endif
+}
+
+static int location_process(const char * const buf)
+{
+#if defined(CONFIG_NRF_CLOUD_LOCATION) && defined(CONFIG_NRF_CLOUD_MQTT)
+	if (location_cb) {
+		struct nrf_cloud_location_result res;
+		int ret = nrf_cloud_location_process(buf, &res);
+
+		if (ret <= 0) {
+			/* A location response was received, send to callback */
+			location_cb(&res);
+
+			LOG_DBG("Location data sent to provided callback");
+
+			/* Clear the callback after use */
+			nfsm_set_location_response_cb(NULL);
+			return 0;
+		}
+		/* ret == 1 indicates that no location data was found */
+	}
+#endif
+	return -ENOSYS;
 }
 
 static int dc_rx_data_handler(const struct nct_evt *nct_evt)
 {
+	__ASSERT_NO_MSG(nct_evt != NULL);
+	__ASSERT_NO_MSG(nct_evt->param.dc != NULL);
+
+	bool discon_req = false;
+
 	struct nrf_cloud_evt cloud_evt = {
-		.type = NRF_CLOUD_EVT_RX_DATA,
 		.data = nct_evt->param.dc->data,
 		.topic = nct_evt->param.dc->topic,
 	};
 
-	bool discon_req = nrf_cloud_detect_disconnection_request(nct_evt->param.dc->data.ptr);
-
-	/* All data is forwared to the app... unless a callback is registered */
-	if (cell_pos_cb_send(nct_evt->param.dc->data.ptr) == 0) {
+	switch (nrf_cloud_decode_dc_rx_topic(cloud_evt.topic.ptr)) {
+	case NRF_CLOUD_RCV_TOPIC_AGPS:
+		agps_process(cloud_evt.data.ptr, cloud_evt.data.len);
 		return 0;
+	case NRF_CLOUD_RCV_TOPIC_PGPS:
+		pgps_process(cloud_evt.data.ptr, cloud_evt.data.len);
+		return 0;
+	case NRF_CLOUD_RCV_TOPIC_LOCATION:
+		if (location_process(cloud_evt.data.ptr) == 0) {
+			/* Data was sent to cb, do not send to application */
+			return 0;
+		}
+		cloud_evt.type = NRF_CLOUD_EVT_RX_DATA_LOCATION;
+		break;
+	case NRF_CLOUD_RCV_TOPIC_UNKNOWN:
+		LOG_DBG("Received data on unknown topic: %s",
+			(char *)(cloud_evt.topic.ptr ? cloud_evt.topic.ptr : "NULL"));
+		/* Intentional fall-through */
+	case NRF_CLOUD_RCV_TOPIC_GENERAL:
+	default:
+		cloud_evt.type = NRF_CLOUD_EVT_RX_DATA_GENERAL;
+		discon_req = nrf_cloud_detect_disconnection_request(cloud_evt.data.ptr);
+		break;
 	}
 
 	nfsm_set_current_state_and_notify(nfsm_get_current_state(), &cloud_evt);

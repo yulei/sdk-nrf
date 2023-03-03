@@ -5,6 +5,7 @@
  */
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 #include <modem/location.h>
@@ -14,10 +15,13 @@
 #include "method_gnss.h"
 #endif
 #if defined(CONFIG_LOCATION_METHOD_CELLULAR)
-#include "method_cellular.h"
+#include "scan_cellular.h"
 #endif
 #if defined(CONFIG_LOCATION_METHOD_WIFI)
-#include "method_wifi.h"
+#include "scan_wifi.h"
+#endif
+#if defined(CONFIG_LOCATION_METHOD_CELLULAR) || defined(CONFIG_LOCATION_METHOD_WIFI)
+#include "method_cloud_location.h"
 #endif
 
 LOG_MODULE_DECLARE(location, CONFIG_LOCATION_LOG_LEVEL);
@@ -27,18 +31,11 @@ static location_event_handler_t event_handler;
 
 /***** Variables for storing information on currently handled location request *****/
 
-/** Event data for currently ongoing location request. */
-static struct location_event_data current_event_data;
-
-/** Configuration given for currently ongoing location request. */
-static struct location_config current_config;
-
-/** Index to the current_config.methods for the currently used method. */
-static int current_method_index;
+static struct location_request_info loc_req_info;
 
 /***** Work queue and work item definitions *****/
 
-#define LOCATION_CORE_STACK_SIZE 4096
+#define LOCATION_CORE_STACK_SIZE CONFIG_LOCATION_WORKQUEUE_STACK_SIZE
 #define LOCATION_CORE_PRIORITY  5
 K_THREAD_STACK_DEFINE(location_core_stack, LOCATION_CORE_STACK_SIZE);
 
@@ -51,11 +48,23 @@ static void location_core_periodic_work_fn(struct k_work *work);
 /** Work item for periodic location requests. */
 K_WORK_DELAYABLE_DEFINE(location_periodic_work, location_core_periodic_work_fn);
 
+/** Handler for method timeout. */
+static void location_core_method_timeout_work_fn(struct k_work *work);
+
+/** Work item for method timeout handler. */
+K_WORK_DELAYABLE_DEFINE(location_core_method_timeout_work, location_core_method_timeout_work_fn);
+
 /** Handler for timeout. */
 static void location_core_timeout_work_fn(struct k_work *work);
 
-/** Work item for timeout handler. */
-K_WORK_DELAYABLE_DEFINE(location_timeout_work, location_core_timeout_work_fn);
+/** Work item for location request timeout handler. */
+K_WORK_DELAYABLE_DEFINE(location_core_timeout_work, location_core_timeout_work_fn);
+
+/** Location event callback. */
+static void location_core_event_cb_fn(struct k_work *work);
+
+/** Work item for location event callback. */
+K_WORK_DEFINE(location_event_cb_work, location_core_event_cb_fn);
 
 /** Semaphore protecting the use of location requests. */
 K_SEM_DEFINE(location_core_sem, 1, 1);
@@ -70,16 +79,25 @@ static const struct location_method_api method_gnss_api = {
 	.init             = method_gnss_init,
 	.location_get     = method_gnss_location_get,
 	.cancel           = method_gnss_cancel,
+	.timeout          = method_gnss_timeout,
+#if defined(CONFIG_LOCATION_DATA_DETAILS)
+	.details_get      = method_gnss_details_get,
+#endif
 };
 #endif
+
 #if defined(CONFIG_LOCATION_METHOD_CELLULAR)
 /** Cellular location method configuration. */
 static const struct location_method_api method_cellular_api = {
 	.method           = LOCATION_METHOD_CELLULAR,
 	.method_string    = "Cellular",
-	.init             = method_cellular_init,
-	.location_get     = method_cellular_location_get,
-	.cancel           = method_cellular_cancel,
+	.init             = scan_cellular_init,
+	.location_get     = method_cloud_location_get,
+	.cancel           = method_cloud_location_cancel,
+	.timeout          = method_cloud_location_cancel,
+#if defined(CONFIG_LOCATION_DATA_DETAILS)
+	.details_get      = NULL,
+#endif
 };
 #endif
 #if defined(CONFIG_LOCATION_METHOD_WIFI)
@@ -87,9 +105,34 @@ static const struct location_method_api method_cellular_api = {
 static const struct location_method_api method_wifi_api = {
 	.method           = LOCATION_METHOD_WIFI,
 	.method_string    = "Wi-Fi",
-	.init             = method_wifi_init,
-	.location_get     = method_wifi_location_get,
-	.cancel           = method_wifi_cancel,
+	.init             = scan_wifi_init,
+	.location_get     = method_cloud_location_get,
+	.cancel           = method_cloud_location_cancel,
+	.timeout          = method_cloud_location_cancel,
+#if defined(CONFIG_LOCATION_DATA_DETAILS)
+	.details_get      = NULL,
+#endif
+
+/** Threshold for cloud location method to select Wi-Fi vs. cellular into the returned event. */
+#define METHOD_WIFI_ACCURACY_THRESHOLD 100
+};
+#endif
+#if defined(CONFIG_LOCATION_METHOD_CELLULAR) || defined(CONFIG_LOCATION_METHOD_WIFI)
+/**
+ * Configuration for cloud location method, that is, combined Wi-Fi and cellular location method.
+ * This is an internal method to handle combining sending of ncellmeas and Wi-Fi scan results
+ * into a single cloud request. This method cannot be chosen in the library API.
+ */
+static const struct location_method_api method_cloud_location_api = {
+	.method           = LOCATION_METHOD_INTERNAL_WIFI_CELLULAR,
+	.method_string    = "Wi-Fi + Cellular (internal)",
+	.init             = method_cloud_location_init,
+	.location_get     = method_cloud_location_get,
+	.cancel           = method_cloud_location_cancel,
+	.timeout          = method_cloud_location_cancel,
+#if defined(CONFIG_LOCATION_DATA_DETAILS)
+	.details_get      = NULL,
+#endif
 };
 #endif
 
@@ -104,19 +147,22 @@ static const struct location_method_api *methods_supported[] = {
 #if defined(CONFIG_LOCATION_METHOD_WIFI)
 	&method_wifi_api,
 #endif
+#if defined(CONFIG_LOCATION_METHOD_CELLULAR) || defined(CONFIG_LOCATION_METHOD_WIFI)
+	&method_cloud_location_api,
+#endif
 	NULL
 };
 
 static void location_core_current_event_data_init(enum location_method method)
 {
-	memset(&current_event_data, 0, sizeof(current_event_data));
+	memset(&loc_req_info.current_event_data, 0, sizeof(loc_req_info.current_event_data));
 
-	current_event_data.location.method = method;
+	loc_req_info.current_method = method;
 }
 
 static void location_core_current_config_clear(void)
 {
-	memset(&current_config, 0, sizeof(current_config));
+	memset(&loc_req_info.config, 0, sizeof(loc_req_info.config));
 }
 
 static const struct location_method_api *location_method_api_get(enum location_method method)
@@ -208,6 +254,9 @@ int location_core_init(void)
 	 * which is not allowed.
 	 */
 	for (int i = 0; methods_supported[i] != NULL; i++) {
+		if (methods_supported[i]->init == NULL) {
+			continue;
+		}
 		err = methods_supported[i]->init();
 		if (err) {
 			LOG_ERR("Failed to initialize '%s' method",
@@ -240,11 +289,6 @@ int location_core_validate_params(const struct location_config *config)
 		return -EINVAL;
 	}
 
-	if ((config->interval > 0) && (config->interval < 10)) {
-		LOG_ERR("Interval for periodic location updates must be longer than 10 seconds");
-		return -EINVAL;
-	}
-
 	for (int i = 0; i < config->methods_count; i++) {
 		/* Check if the method is valid */
 		method_api = location_method_api_get(config->methods[i].method);
@@ -265,6 +309,7 @@ void location_core_config_log(const struct location_config *config)
 
 	LOG_DBG("  Methods count: %d", config->methods_count);
 	LOG_DBG("  Interval: %d", config->interval);
+	LOG_DBG("  Timeout: %dms", config->timeout);
 	LOG_DBG("  Mode: %d", config->mode);
 	LOG_DBG("  List of methods:");
 
@@ -305,32 +350,125 @@ static void location_core_current_config_set(const struct location_config *confi
 {
 	__ASSERT_NO_MSG(config->methods_count <= CONFIG_LOCATION_METHODS_LIST_SIZE);
 
-	if (config == &current_config) {
+	if (config == &loc_req_info.config) {
 		/* This is hit in periodic mode */
 		return;
 	}
 
-	location_core_current_config_clear();
-
-	memcpy(&current_config, config, sizeof(struct location_config));
+	memcpy(&loc_req_info.config, config, sizeof(loc_req_info.config));
 }
 
-static int location_core_location_get_pos(const struct location_config *config)
+static int location_core_location_get_pos(void)
 {
 	int err;
 	enum location_method requested_method;
 
-	location_core_current_config_set(config);
+	location_core_current_config_set(&loc_req_info.config);
 	/* Location request starts from the first method */
-	current_method_index = 0;
-	requested_method = config->methods[current_method_index].method;
+	loc_req_info.execute_fallback = true;
+	loc_req_info.current_method_index = 0;
+	requested_method = loc_req_info.methods[loc_req_info.current_method_index];
 	LOG_DBG("Requesting location with '%s' method",
 		(char *)location_method_api_get(requested_method)->method_string);
 	location_core_current_event_data_init(requested_method);
-	err = location_method_api_get(requested_method)->location_get(
-		&config->methods[current_method_index]);
+
+	err = location_method_api_get(requested_method)->location_get(&loc_req_info);
+
+	if (err == 0 &&
+	    loc_req_info.config.timeout != SYS_FOREVER_MS &&
+	    loc_req_info.config.timeout > 0) {
+		LOG_DBG("Starting request timer with timeout=%d", loc_req_info.config.timeout);
+
+		k_work_schedule(&location_core_timeout_work, K_MSEC(loc_req_info.config.timeout));
+	}
 
 	return err;
+}
+
+static void location_request_info_create(const struct location_config *config)
+{
+	/* Initialize to big values so subtracting the indices from each other gives
+	 * a big absolute value if one of the methods is not requested at all.
+	 */
+	int method_cellular_index = 1000;
+	int method_wifi_index = 100000;
+	bool combined = false;
+	bool combine_wifi_cell = false;
+
+	memset(&loc_req_info, 0, sizeof(loc_req_info));
+	loc_req_info.config = *config;
+
+	/* Pick up information from config to the location request information for quick access */
+	for (int i = 0; i < config->methods_count; i++) {
+		if (loc_req_info.config.methods[i].method == LOCATION_METHOD_CELLULAR) {
+			loc_req_info.cellular = &loc_req_info.config.methods[i].cellular;
+			method_cellular_index = i;
+		} else if (loc_req_info.config.methods[i].method == LOCATION_METHOD_WIFI) {
+			loc_req_info.wifi = &loc_req_info.config.methods[i].wifi;
+			method_wifi_index = i;
+		} else if (loc_req_info.config.methods[i].method == LOCATION_METHOD_GNSS) {
+			loc_req_info.gnss = &loc_req_info.config.methods[i].gnss;
+		}
+	}
+
+	/* Wi-Fi and cellular are not combined if LOCATION_REQ_MODE_ALL is used */
+	if (loc_req_info.config.mode == LOCATION_REQ_MODE_FALLBACK) {
+		/* Wi-Fi and cellular are combined if they are one after the other in method list */
+		if (abs(method_wifi_index - method_cellular_index) == 1) {
+			__ASSERT_NO_MSG(loc_req_info.cellular != NULL);
+			__ASSERT_NO_MSG(loc_req_info.wifi != NULL);
+
+			/* If Wi-Fi and cellular are using same service */
+			if (loc_req_info.cellular->service == loc_req_info.wifi->service) {
+				combine_wifi_cell = true;
+			} else {
+				LOG_DBG("Wi-Fi and cellular methods have different service "
+					"so they are not combined");
+			}
+		} else if (loc_req_info.cellular != NULL && loc_req_info.wifi != NULL) {
+			LOG_DBG("Wi-Fi and cellular methods are not one after the other "
+				"in method list so they are not combined");
+		}
+	}
+
+	/* Compose a list of methods that are really used, including combined internal method */
+	for (int i = 0; i < loc_req_info.config.methods_count; i++) {
+		if (combine_wifi_cell &&
+		    (loc_req_info.config.methods[i].method == LOCATION_METHOD_WIFI ||
+		     loc_req_info.config.methods[i].method == LOCATION_METHOD_CELLULAR)) {
+
+			if (!combined) {
+				LOG_INF("Wi-Fi and cellular methods combined");
+				loc_req_info.methods[loc_req_info.methods_count] =
+					LOCATION_METHOD_INTERNAL_WIFI_CELLULAR;
+				loc_req_info.methods_count++;
+				combined = true;
+			}
+		} else {
+			loc_req_info.methods[loc_req_info.methods_count] =
+				loc_req_info.config.methods[i].method;
+			loc_req_info.methods_count++;
+		}
+	}
+
+#if defined(CONFIG_LOG)
+	if (combined) {
+		/* Log the updated method list */
+		LOG_DBG("Updated location method list:");
+		for (int i = 0; i < loc_req_info.methods_count; i++) {
+			enum location_method type = loc_req_info.methods[i];
+			const struct location_method_api *method_api =
+				location_method_api_get(type);
+
+			if (method_api != NULL) {
+				LOG_DBG("    Method #%d type: %s (%d)",
+					i, method_api->method_string, type);
+			} else {
+				LOG_DBG("    Method #%d type: Unknown (%d)", i, type);
+			}
+		}
+	}
+#endif
 }
 
 int location_core_location_get(const struct location_config *config)
@@ -344,107 +482,234 @@ int location_core_location_get(const struct location_config *config)
 		return -EBUSY;
 	}
 
-	return location_core_location_get_pos(config);
+	location_request_info_create(config);
+
+	return location_core_location_get_pos();
 }
 
 void location_core_event_cb_error(void)
 {
-	current_event_data.id = LOCATION_EVT_ERROR;
+	loc_req_info.current_event_data.id = LOCATION_EVT_ERROR;
 
 	location_core_event_cb(NULL);
 }
 
 void location_core_event_cb_timeout(void)
 {
-	current_event_data.id = LOCATION_EVT_TIMEOUT;
+	loc_req_info.current_event_data.id = LOCATION_EVT_TIMEOUT;
 
 	location_core_event_cb(NULL);
 }
 
-#if defined(CONFIG_LOCATION_METHOD_GNSS_AGPS_EXTERNAL)
+#if defined(CONFIG_LOCATION_SERVICE_EXTERNAL) && defined(CONFIG_NRF_CLOUD_AGPS)
 void location_core_event_cb_agps_request(const struct nrf_modem_gnss_agps_data_frame *request)
 {
 	struct location_event_data agps_request_event_data;
 
+	LOG_DBG("Request A-GPS data from application: ephe 0x%08x, alm 0x%08x, data_flags 0x%02x",
+		request->sv_mask_ephe,
+		request->sv_mask_alm,
+		request->data_flags);
+
 	agps_request_event_data.id = LOCATION_EVT_GNSS_ASSISTANCE_REQUEST;
+	agps_request_event_data.method = LOCATION_METHOD_GNSS;
 	agps_request_event_data.agps_request = *request;
 	event_handler(&agps_request_event_data);
 }
 #endif
 
-#if defined(CONFIG_LOCATION_METHOD_GNSS_PGPS_EXTERNAL)
+#if defined(CONFIG_LOCATION_SERVICE_EXTERNAL) && defined(CONFIG_NRF_CLOUD_PGPS)
 void location_core_event_cb_pgps_request(const struct gps_pgps_request *request)
 {
 	struct location_event_data pgps_request_event_data;
 
+	LOG_DBG("Request P-GPS data from application: "
+		"prediction_count %d, prediction_period_min %d, gps_day %d, time_of_day %d",
+		request->prediction_count,
+		request->prediction_period_min,
+		request->gps_day,
+		request->gps_time_of_day);
+
 	pgps_request_event_data.id = LOCATION_EVT_GNSS_PREDICTION_REQUEST;
+	pgps_request_event_data.method = LOCATION_METHOD_GNSS;
 	pgps_request_event_data.pgps_request = *request;
 	event_handler(&pgps_request_event_data);
 }
 #endif
 
-void location_core_event_cb(const struct location_data *location)
+#if defined(CONFIG_LOCATION_SERVICE_EXTERNAL)
+void location_core_event_cb_cloud_location_request(struct location_data_cloud *request)
+{
+	struct location_event_data cloud_location_request_event_data = { 0 };
+
+	cloud_location_request_event_data.id = LOCATION_EVT_CLOUD_LOCATION_EXT_REQUEST;
+
+#if defined(CONFIG_LOCATION_METHOD_CELLULAR) && defined(CONFIG_LOCATION_METHOD_WIFI)
+	/* For external service, we always determine Wi-Fi is used although it could be cellular */
+	cloud_location_request_event_data.method =
+		(request->wifi_data != NULL) ? LOCATION_METHOD_WIFI : LOCATION_METHOD_CELLULAR;
+#else
+	cloud_location_request_event_data.method = loc_req_info.current_method;
+#endif
+	loc_req_info.current_event_data.method = cloud_location_request_event_data.method;
+
+#if defined(CONFIG_LOCATION_METHOD_CELLULAR)
+	cloud_location_request_event_data.cloud_location_request.cell_data = request->cell_data;
+#endif
+#if defined(CONFIG_LOCATION_METHOD_WIFI)
+	cloud_location_request_event_data.cloud_location_request.wifi_data = request->wifi_data;
+#endif
+	event_handler(&cloud_location_request_event_data);
+}
+
+void location_core_cloud_location_ext_result_set(
+	enum location_ext_result result,
+	struct location_data *location)
+{
+	if (k_sem_count_get(&location_core_sem) > 0) {
+		LOG_WRN("Cloud positioning result set called but no location request pending");
+		return;
+	}
+
+	LOG_DBG("Cloud positioning result set with result=%s",
+		result == LOCATION_EXT_RESULT_SUCCESS ? "success" :
+		result == LOCATION_EXT_RESULT_UNKNOWN ? "unknown" : "error");
+
+	switch (result) {
+	case LOCATION_EXT_RESULT_SUCCESS:
+		loc_req_info.current_event_data.id = LOCATION_EVT_LOCATION;
+		loc_req_info.current_event_data.location = *location;
+		break;
+	case LOCATION_EXT_RESULT_UNKNOWN:
+		loc_req_info.current_event_data.id = LOCATION_EVT_RESULT_UNKNOWN;
+		break;
+	case LOCATION_EXT_RESULT_ERROR:
+	default:
+		loc_req_info.current_event_data.id = LOCATION_EVT_ERROR;
+		break;
+	}
+
+	k_work_submit_to_queue(
+		location_core_work_queue_get(),
+		&location_event_cb_work);
+}
+#endif
+
+static void location_core_event_details_get(struct location_event_data *event)
+{
+#if defined(CONFIG_LOCATION_DATA_DETAILS)
+	if (location_method_api_get(loc_req_info.current_method)->details_get != NULL) {
+
+		struct location_data_details *details;
+
+		if (event->id == LOCATION_EVT_LOCATION) {
+			details = &event->location.details;
+		} else {
+			details = &event->error.details;
+		}
+
+		location_method_api_get(loc_req_info.current_method)->details_get(details);
+	}
+#endif
+}
+
+enum location_method location_core_event_method_resolve(enum location_method method)
+{
+#if defined(CONFIG_LOCATION_METHOD_CELLULAR) && defined(CONFIG_LOCATION_METHOD_WIFI)
+	/* Other than combined Wi-Fi + cellular method is used as is */
+	if (method != LOCATION_METHOD_INTERNAL_WIFI_CELLULAR) {
+		return method;
+	}
+
+	/* If Wi-Fi and cellular were requested and location accuracy is available */
+	if (loc_req_info.wifi != NULL && loc_req_info.cellular != NULL &&
+	    loc_req_info.current_event_data.location.accuracy > 0) {
+
+		/* If accuracy is higher than Wi-Fi threshold, use cellular, otherwise Wi-Fi */
+		if (loc_req_info.current_event_data.location.accuracy >
+		    METHOD_WIFI_ACCURACY_THRESHOLD) {
+			return LOCATION_METHOD_CELLULAR;
+		} else {
+			return LOCATION_METHOD_WIFI;
+		}
+	}
+
+	/* If Wi-Fi was requested, use Wi-Fi, otherwise cellular */
+	if (loc_req_info.wifi != NULL) {
+		return LOCATION_METHOD_WIFI;
+	} else {
+		return LOCATION_METHOD_CELLULAR;
+	}
+#else
+	return method;
+#endif
+}
+
+static void location_core_event_cb_fn(struct k_work *work)
 {
 	char latitude_str[12];
 	char longitude_str[12];
 	char accuracy_str[12];
 	enum location_method requested_method;
-	enum location_method previous_method;
 	int err;
 
-	k_work_cancel_delayable(&location_timeout_work);
+	k_work_cancel_delayable(&location_core_method_timeout_work);
+	loc_req_info.current_event_data.method =
+		location_core_event_method_resolve(loc_req_info.current_method);
 
-	if (location != NULL) {
-		/* Location was acquired properly */
-		current_event_data.id = LOCATION_EVT_LOCATION;
-		current_event_data.location = *location;
+	/* Update the event structure with the details of the current method */
+	location_core_event_details_get(&loc_req_info.current_event_data);
+
+	if (loc_req_info.current_event_data.id == LOCATION_EVT_LOCATION) {
+		/* Location was acquired properly.
+		 * Caller sets loc_req_info.current_event_data.location
+		 */
 
 		LOG_DBG("Location acquired successfully:");
 		LOG_DBG("  method: %s (%d)", (char *)location_method_api_get(
-			current_event_data.location.method)->method_string,
-			current_event_data.location.method);
+			loc_req_info.current_event_data.method)->method_string,
+			loc_req_info.current_event_data.method);
 		/* Logging v1 doesn't support double and float logging. Logging v2 would support
 		 * but that's up to application to configure.
 		 */
-		sprintf(latitude_str, "%.06f", current_event_data.location.latitude);
+		sprintf(latitude_str, "%.06f", loc_req_info.current_event_data.location.latitude);
 		LOG_DBG("  latitude: %s", latitude_str);
-		sprintf(longitude_str, "%.06f", current_event_data.location.longitude);
+		sprintf(longitude_str, "%.06f", loc_req_info.current_event_data.location.longitude);
 		LOG_DBG("  longitude: %s", longitude_str);
-		sprintf(accuracy_str, "%.01f", current_event_data.location.accuracy);
+		sprintf(accuracy_str, "%.01f", loc_req_info.current_event_data.location.accuracy);
 		LOG_DBG("  accuracy: %s m", accuracy_str);
-		if (current_event_data.location.datetime.valid) {
+		if (loc_req_info.current_event_data.location.datetime.valid) {
 			LOG_DBG("  date: %04d-%02d-%02d",
-				current_event_data.location.datetime.year,
-				current_event_data.location.datetime.month,
-				current_event_data.location.datetime.day);
+				loc_req_info.current_event_data.location.datetime.year,
+				loc_req_info.current_event_data.location.datetime.month,
+				loc_req_info.current_event_data.location.datetime.day);
 			LOG_DBG("  time: %02d:%02d:%02d.%03d UTC",
-				current_event_data.location.datetime.hour,
-				current_event_data.location.datetime.minute,
-				current_event_data.location.datetime.second,
-				current_event_data.location.datetime.ms);
+				loc_req_info.current_event_data.location.datetime.hour,
+				loc_req_info.current_event_data.location.datetime.minute,
+				loc_req_info.current_event_data.location.datetime.second,
+				loc_req_info.current_event_data.location.datetime.ms);
 		}
 		LOG_DBG("  Google maps URL: https://maps.google.com/?q=%s,%s",
 			latitude_str, longitude_str);
-		if (current_config.mode == LOCATION_REQ_MODE_ALL) {
+		if (loc_req_info.config.mode == LOCATION_REQ_MODE_ALL) {
 			/* Get possible next method */
-			previous_method = current_event_data.location.method;
-			current_method_index++;
-			if (current_method_index < current_config.methods_count) {
+			loc_req_info.current_method_index++;
+			if (loc_req_info.current_method_index < loc_req_info.methods_count) {
 				requested_method =
-					current_config.methods[current_method_index].method;
+					loc_req_info.methods[loc_req_info.current_method_index];
 				LOG_INF("LOCATION_REQ_MODE_ALL: acquired location using '%s', "
 					"trying with '%s' next",
 					(char *)location_method_api_get(
-						previous_method)->method_string,
+						loc_req_info.current_method)->method_string,
 					(char *)location_method_api_get(
 						requested_method)->method_string);
 
-				event_handler(&current_event_data);
+				event_handler(&loc_req_info.current_event_data);
 
 				/* Run next method on the list */
 				location_core_current_event_data_init(requested_method);
 				err = location_method_api_get(requested_method)->location_get(
-					&current_config.methods[current_method_index]);
+					&loc_req_info);
 				return;
 			}
 			LOG_INF("LOCATION_REQ_MODE_ALL: all methods done");
@@ -452,47 +717,66 @@ void location_core_event_cb(const struct location_data *location)
 			/* Start from the beginning if in interval mode
 			 * for possible cancel within restarting interval.
 			 */
-			current_method_index = 0;
+			loc_req_info.current_method_index = 0;
 		}
-	} else {
+	} else if (loc_req_info.execute_fallback) {
 		/* Get possible next method to be run */
-		previous_method = current_event_data.location.method;
-		current_method_index++;
-		if (current_method_index < current_config.methods_count) {
-			requested_method = current_config.methods[current_method_index].method;
+		loc_req_info.current_method_index++;
+		if (loc_req_info.current_method_index < loc_req_info.methods_count) {
+			requested_method = loc_req_info.methods[loc_req_info.current_method_index];
 
-			LOG_WRN("Failed to acquire location using '%s', "
-				"trying with '%s' next",
-				(char *)location_method_api_get(previous_method)->method_string,
+			LOG_INF("Location retrieval %s using '%s', trying with '%s' next",
+				loc_req_info.current_event_data.id != LOCATION_EVT_RESULT_UNKNOWN ?
+					"failed" : "completed",
+				(char *)location_method_api_get(
+					loc_req_info.current_method)->method_string,
 				(char *)location_method_api_get(requested_method)->method_string);
 
-			if (current_config.mode == LOCATION_REQ_MODE_ALL) {
+			if (loc_req_info.config.mode == LOCATION_REQ_MODE_ALL) {
 				/* In ALL mode, events are sent for all methods and thus
 				 * also for failure events
 				 */
-				event_handler(&current_event_data);
+				event_handler(&loc_req_info.current_event_data);
 			}
 
 			location_core_current_event_data_init(requested_method);
 			err = location_method_api_get(requested_method)->location_get(
-				&current_config.methods[current_method_index]);
+				&loc_req_info);
 			return;
 		}
-		LOG_ERR("Location acquisition failed and fallbacks are also done");
+		if (loc_req_info.current_event_data.id != LOCATION_EVT_RESULT_UNKNOWN) {
+			LOG_ERR("Location acquisition failed and fallbacks are also done");
+		} else {
+			LOG_DBG("Location acquisition completed and fallbacks are also done");
+		}
 	}
 
-	event_handler(&current_event_data);
+	event_handler(&loc_req_info.current_event_data);
 
-	if (current_config.interval > 0) {
+	k_work_cancel_delayable(&location_core_timeout_work);
+
+	if (loc_req_info.config.interval > 0) {
 		k_work_schedule_for_queue(
 			location_core_work_queue_get(),
 			&location_periodic_work,
-			K_SECONDS(current_config.interval));
+			K_SECONDS(loc_req_info.config.interval));
 	} else {
 		location_core_current_config_clear();
 
 		k_sem_give(&location_core_sem);
 	}
+}
+
+void location_core_event_cb(const struct location_data *location)
+{
+	if (location) {
+		loc_req_info.current_event_data.id = LOCATION_EVT_LOCATION;
+		loc_req_info.current_event_data.location = *location;
+	}
+
+	k_work_submit_to_queue(
+		location_core_work_queue_get(),
+		&location_event_cb_work);
 }
 
 struct k_work_q *location_core_work_queue_get(void)
@@ -503,20 +787,40 @@ struct k_work_q *location_core_work_queue_get(void)
 static void location_core_periodic_work_fn(struct k_work *work)
 {
 	ARG_UNUSED(work);
-	location_core_location_get_pos(&current_config);
+	location_core_location_get_pos();
+}
+
+static void location_core_method_timeout_work_fn(struct k_work *work)
+{
+	enum location_method current_method =
+		loc_req_info.methods[loc_req_info.current_method_index];
+
+	ARG_UNUSED(work);
+
+	LOG_INF("Method specific timeout expired");
+
+	location_method_api_get(current_method)->timeout();
+	location_core_event_cb_timeout();
 }
 
 static void location_core_timeout_work_fn(struct k_work *work)
 {
 	enum location_method current_method =
-		current_config.methods[current_method_index].method;
+		loc_req_info.methods[loc_req_info.current_method_index];
 
 	ARG_UNUSED(work);
 
-	LOG_WRN("Timeout occurred");
+	LOG_INF("Timeout for entire location request expired");
 
-	location_method_api_get(current_method)->cancel();
-	location_core_event_cb_timeout();
+	location_method_api_get(current_method)->timeout();
+	/* config->timeout needs to expire without fallbacks */
+
+	loc_req_info.current_event_data.id = LOCATION_EVT_TIMEOUT;
+	loc_req_info.execute_fallback = false;
+
+	k_work_submit_to_queue(
+		location_core_work_queue_get(),
+		&location_event_cb_work);
 }
 
 void location_core_timer_start(int32_t timeout)
@@ -530,23 +834,25 @@ void location_core_timer_start(int32_t timeout)
 		 * their operation, blocking waiting of semaphores will block the timeout from
 		 * expiring and canceling methods.
 		 */
-		k_work_schedule(&location_timeout_work, K_MSEC(timeout));
+		k_work_schedule(&location_core_method_timeout_work, K_MSEC(timeout));
 	}
 }
 
 void location_core_timer_stop(void)
 {
-	k_work_cancel_delayable(&location_timeout_work);
+	k_work_cancel_delayable(&location_core_method_timeout_work);
 }
 
 int location_core_cancel(void)
 {
 	int err = 0;
 	enum location_method current_method =
-		current_config.methods[current_method_index].method;
+		loc_req_info.methods[loc_req_info.current_method_index];
 
-	k_work_cancel_delayable(&location_timeout_work);
+	k_work_cancel_delayable(&location_core_method_timeout_work);
+	k_work_cancel_delayable(&location_core_timeout_work);
 	k_work_cancel_delayable(&location_periodic_work);
+	k_work_cancel(&location_event_cb_work);
 
 	/* Check if location has been requested using one of the methods */
 	if (current_method != 0) {

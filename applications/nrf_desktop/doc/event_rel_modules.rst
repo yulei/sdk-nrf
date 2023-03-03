@@ -23,6 +23,7 @@ Source modules for ble_peer_event
 Sink modules for ble_peer_event
 ===============================
 
+* :ref:`nrf_desktop_fast_pair_app`
 * :ref:`nrf_desktop_hids`
 * :ref:`nrf_desktop_ble_adv`
 * :ref:`nrf_desktop_ble_bond`
@@ -118,6 +119,7 @@ Source modules for module_state_event
 * :ref:`nrf_desktop_click_detector`
 * :ref:`nrf_desktop_cpu_meas`
 * :ref:`nrf_desktop_failsafe`
+* :ref:`nrf_desktop_fast_pair_app`
 * :ref:`nrf_desktop_fn_keys`
 * :ref:`nrf_desktop_hfclk_lock`
 * :ref:`nrf_desktop_hid_forward`
@@ -143,6 +145,7 @@ Sink modules for module_state_event
 
 * :ref:`nrf_desktop_board`
 * :ref:`nrf_desktop_failsafe`
+* :ref:`nrf_desktop_hids`
 * :ref:`nrf_desktop_nrf_profiler_sync`
 * :ref:`nrf_desktop_watchdog`
 * :ref:`nrf_desktop_bas`
@@ -163,11 +166,11 @@ Sink modules for module_state_event
 * :ref:`nrf_desktop_constlat`
 * :ref:`nrf_desktop_cpu_meas`
 * :ref:`nrf_desktop_dfu`
+* :ref:`nrf_desktop_fast_pair_app`
 * :ref:`nrf_desktop_fn_keys`
 * :ref:`nrf_desktop_hfclk_lock`
 * :ref:`nrf_desktop_hid_forward`
 * :ref:`nrf_desktop_hid_state`
-* :ref:`nrf_desktop_hids`
 * :ref:`nrf_desktop_info`
 * :ref:`nrf_desktop_led_state`
 * :ref:`nrf_desktop_led_stream`
@@ -221,6 +224,7 @@ Sink modules for power_down_event
 Source modules for wake_up_event
 ================================
 
+* :ref:`nrf_desktop_ble_adv`
 * :ref:`nrf_desktop_buttons`
 * :ref:`nrf_desktop_hid_forward`
 * :ref:`nrf_desktop_motion`

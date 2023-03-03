@@ -1,8 +1,8 @@
 .. |NCS| replace:: nRF Connect SDK
 
-.. |release| replace:: v2.1.0
-.. |release_tt| replace:: ``v2.1.0``
-.. |release_number_tt| replace:: ``2.1.0``
+.. |release| replace:: v2.3.0
+.. |release_tt| replace:: ``v2.3.0``
+.. |release_number_tt| replace:: ``2.3.0``
 
 .. ### Config shortcuts
 
@@ -11,6 +11,8 @@
 .. |config| replace:: See :ref:`configure_application` for information about how to permanently or temporarily change the configuration.
 
 .. |test_sample| replace:: After programming the sample to your development kit, complete the following steps to test it:
+
+.. |test_application| replace:: After programming the application to your development kit, complete the following steps to test it:
 
 .. |connect_generic| replace:: Connect the device to the computer using a USB cable.
    The device is assigned a COM port (Windows) or ttyACM device (Linux), which is visible in the Device Manager.
@@ -44,6 +46,7 @@
 .. ### Board shortcuts
 
 .. |nRF5340DKnoref| replace:: nRF5340 DK board (PCA10095)
+.. |nRF7002DKnoref| replace:: nRF7002 DK board (PCA10143)
 
 .. |nRF9160DK| replace:: nRF9160 DK board (PCA10090) - see :ref:`ug_nrf9160`
 .. |nRF5340DK| replace:: nRF5340 DK board (PCA10095) - see :ref:`ug_nrf5340`
@@ -57,17 +60,17 @@
 
 .. ### FOTA shortcuts
 
-.. |fota_upgrades_def| replace:: You can upgrade the firmware of the device over the air, thus without a wired connection.
-   Such an upgrade is called a FOTA (firmware over-the-air) upgrade.
+.. |fota_upgrades_def| replace:: You can update the firmware of the device over the air, thus without a wired connection.
+   Such an update is called a FOTA (firmware over-the-air) update.
 
-.. |fota_upgrades_req_mcuboot| replace:: To upgrade the application, you must use :doc:`mcuboot:index-ncs` as the upgradable bootloader (:kconfig:option:`CONFIG_BOOTLOADER_MCUBOOT` must be enabled).
-
-.. |fota_upgrades_building| replace:: To create a binary file for an application upgrade, make sure that :kconfig:option:`CONFIG_BOOTLOADER_MCUBOOT` is enabled and build the application as usual.
-   The build will create several binary files (see :ref:`mcuboot:mcuboot_ncs`).
+.. |fota_upgrades_building| replace:: To create a binary file for an application update, build the application with the :kconfig:option:`CONFIG_BOOTLOADER_MCUBOOT` option enabled.
 
 .. ### VSC shortcuts
 
-.. |vsc_extension_instructions| replace:: The |nRFVSC| is a complete IDE for developing applications for nRF91, nRF53 and nRF52 Series devices. This includes an interface to the compiler and linker, an RTOS-aware debugger, a seamless interface to the nRF Connect SDK, and a serial terminal. For detailed instructions, see the `nRF Connect for Visual Studio Code`_ documentation site.
+.. |vsc_extension_instructions| replace:: The |nRFVSC| is a complete IDE for developing applications for nRF91, nRF53 and nRF52 Series devices.
+   This includes an interface to the compiler and linker, an RTOS-aware debugger, a seamless interface to the nRF Connect SDK, and a serial terminal.
+   For installation instructions, see `Installing using Visual Studio Code`_.
+   For other instructions related to |nRFVSC|, see the `nRF Connect for Visual Studio Code`_ documentation site.
 .. |VSC| replace:: Visual Studio Code
 .. |nRFVSC| replace:: nRF Connect for VS Code extension
 
@@ -97,10 +100,48 @@
 
 .. ### nRF Desktop shortcuts
 
+.. |battery_meas| replace:: Battery measurement module
+.. |ble_adv| replace:: Bluetooth LE advertising module
+.. |ble_bond| replace:: Bluetooth LE bond module
+.. |ble_conn_params| replace:: Bluetooth LE connection parameters module
+.. |ble_discovery| replace:: Bluetooth LE discovery module
+.. |ble_latency| replace:: Bluetooth LE latency module
+.. |ble_scan| replace:: Bluetooth LE scanning module
+.. |ble_state| replace:: Bluetooth LE state module
+.. |ble_state_pm| replace:: Bluetooth state power manager module
+.. |button_sim| replace:: button simulator module
+.. |buttons_pm_keep_alive| replace:: Power manager keep alive module for buttons
+.. |click_detector| replace:: click detector module
+.. |device_pm_note| replace:: Not all device power states might be supported by the sensor's device.
+   Check the sensor's driver implementation before configuring :c:member:`sm_sensor_config.suspend`.
+.. |conf_channel| replace:: Configuration channel
+.. |GATT_HID| replace:: GATT HID Service
+.. |hid_forward| replace:: HID forward module
+.. |hid_state| replace:: HID state module
+.. |hid_state_pm| replace:: HID state power manager module
+.. |led_note| replace:: A breathing LED indicates that the device has entered either scanning or advertising mode.
+   This happens when the device is looking for a peer to connect to.
+.. |led_state| replace:: LED state module
+.. |led_stream| replace:: LED stream module
+.. |net_state| replace:: network state module
 .. |nrf_desktop_module_event_note| replace:: See the :ref:`nrf_desktop_architecture` for more information about the event-based communication in the nRF Desktop application and about how to read this table.
 .. |nrf_desktop_build_type_conf| replace:: In addition to these build types, some boards can have additional build type configurations that you can use to generate an application in a specific variant.
-   Such board-specific configurations use dedicated :file:`app_*build_type*.conf` files, where the name of the configuration replaces the ``*build_type*`` part in the file name.
+   Such board-specific configurations use dedicated :file:`prj_*build_type*.conf` files, where the name of the configuration replaces the ``*build_type*`` part in the file name.
    Given the potential number of such configurations, they are not listed above and you can read the description of each of them in the respective configuration file.
+.. |nRF_Desktop_confirmation_effect| replace:: After the confirmation, Bluetooth advertising using a new local identity is started.
+   When a new Bluetooth Central device successfully connects and bonds, the old bond is removed and the new bond is used instead.
+   If the new peer does not connect in the predefined period of time, the advertising ends and the application switches back to the old peer.
+.. |nRF_Desktop_cancel_operation| replace:: You can cancel the ongoing peer operation with a standard button press.
+.. |only_configured_module_note| replace:: Only the configured module should include the configuration file.
+   Do not include the configuration file in other source files.
+.. |power_manager| replace:: power manager module
+.. |preconfigured_build_types| replace:: The preconfigured build types configure the device without the bootloader in debug mode and with MCUboot bootloader in release mode due to memory size limits.
+.. |sensor_manager| replace:: sensor manager module
+.. |sensor_data_aggregator| replace:: sensor data aggregator module
+.. |settings_loader| replace:: Settings loader module
+.. |smp| replace:: simple management protocol module
+.. |usb_state| replace:: USB state module
+.. |usb_state_pm| replace:: USB state power manager module
 
 .. ### Matter shortcuts
 
@@ -113,7 +154,6 @@
 .. |matter_controller_def_nolink| replace:: The Matter controller is a node in the Matter network and a role within the Matter development environment.
    The controller device is used to pair and control the Matter accessory device remotely over a network, interacting with it using Bluetooth® LE and the regular IPv6 communication.
 .. |matter_chip_tool_pc_default_line| replace:: CHIP Tool for Linux or macOS is the default implementation of the :ref:`ug_matter_configuring_controller` role, recommended for the nRF Connect platform.
-.. |matter_chip_tool_android_recommended_line| replace:: CHIP Tool for Android (also known as Android CHIPTool) is the recommended :ref:`ug_matter_configuring_controller` for mobile, which allows you to test Matter applications using an Android smartphone.
 
 .. ### Other shortcuts
 
@@ -129,7 +169,9 @@
 
 .. |thingy53_sample_note| replace:: If you build this application for Thingy:53, it enables additional features. See :ref:`thingy53_app_guide` for details.
 
-.. |nrf5340_audio_note| replace:: The |NCS| includes the :ref:`nrf53_audio_app` application, a complete project that integrates the LE Audio standard with custom reference hardware based on the nRF5340 SiP.
+.. |nrf5340_mesh_sample_note| replace:: For nRF5340 and Thingy:53, the extended advertiser has to be set manually for the network core, because the Bluetooth® Low Energy does not know that the Bluetooth mesh is enabled when built for this core. This is already done for this sample by setting ``CONFIG_BT_EXT_ADV=y`` for the network core.
+
+.. |nrf5340_audio_note| replace:: The |NCS| includes the :ref:`nrf53_audio_app` application, a complete project that integrates the LE Audio standard with custom reference hardware based on the nRF5340 DK.
 
 .. |trusted_execution| replace:: nRF5340 and nRF9160
 
@@ -141,3 +183,7 @@
 .. |nfc_nfct_driver_note| replace:: If you are using debug messages in the NFCT driver, the driver might not be working properly if you have :kconfig:option:`CONFIG_LOG_MODE_IMMEDIATE` enabled.
    The NFCT driver is part of the nrfx driver package.
    For more information about this driver, see the NFCT driver page in the `nrfx`_ repository.
+
+.. |Supported OS| replace:: The operating system versions that support the |NCS| tools are listed in the :ref:`gs_supported_OS` section.
+
+.. |no_changes_yet_note| replace:: No changes since the latest |NCS| release.
