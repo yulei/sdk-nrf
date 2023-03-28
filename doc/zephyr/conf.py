@@ -1,3 +1,9 @@
+#
+# Copyright (c) 2023 Nordic Semiconductor
+#
+# SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
+#
+
 # Zephyr documentation build configuration file
 
 import os
@@ -42,6 +48,7 @@ html_static_path.append(str(NRF_BASE / "doc" / "_static"))
 html_last_updated_fmt = "%b %d, %Y"
 html_show_sourcelink = True
 html_logo = None
+html_title = "Zephyr Project documentation (nRF Connect SDK)"
 
 html_context = {
     "show_license": True,
@@ -49,7 +56,11 @@ html_context = {
     "is_release": is_release,
 }
 
-html_theme_options = {"docset": "zephyr", "docsets": utils.ALL_DOCSETS}
+html_theme_options = {
+    "docset": "zephyr",
+    "docsets": utils.ALL_DOCSETS,
+    "subtitle": "nRF Connect SDK",
+}
 
 # Options for intersphinx ------------------------------------------------------
 
@@ -80,4 +91,4 @@ ncs_cache_manifest = NRF_BASE / "west.yml"
 def setup(app):
     app.add_css_file("css/zephyr.css")
 
-    utils.add_google_analytics(app)
+    utils.add_google_analytics(app, html_theme_options)

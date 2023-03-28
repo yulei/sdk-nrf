@@ -1,3 +1,9 @@
+#
+# Copyright (c) 2023 Nordic Semiconductor
+#
+# SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
+#
+
 from pathlib import Path
 import sys
 
@@ -34,8 +40,13 @@ html_static_path = [str(NRF_BASE / "doc" / "_static")]
 html_last_updated_fmt = "%b %d, %Y"
 html_show_sourcelink = True
 html_show_sphinx = False
+html_title = "Matter documentation (nRF Connect SDK)"
 
-html_theme_options = {"docset": "matter", "docsets": utils.ALL_DOCSETS}
+html_theme_options = {
+    "docset": "matter",
+    "docsets": utils.ALL_DOCSETS,
+    "subtitle": "nRF Connect SDK",
+}
 
 # Options for external_content -------------------------------------------------
 
@@ -63,4 +74,4 @@ ncs_cache_manifest = NRF_BASE / "west.yml"
 def setup(app):
     app.add_css_file("css/matter.css")
 
-    utils.add_google_analytics(app)
+    utils.add_google_analytics(app, html_theme_options)

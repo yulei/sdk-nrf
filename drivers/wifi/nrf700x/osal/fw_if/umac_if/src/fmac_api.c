@@ -24,6 +24,10 @@
 #include "fmac_bb.h"
 #include "util.h"
 
+#ifdef CONFIG_NRF700X_RADIO_TEST
+#define RADIO_CMD_STATUS_TIMEOUT 5000
+#endif
+
 #ifndef CONFIG_NRF700X_RADIO_TEST
 unsigned char wifi_nrf_fmac_vif_idx_get(struct wifi_nrf_fmac_dev_ctx *fmac_dev_ctx)
 {
@@ -860,6 +864,42 @@ enum wifi_nrf_status wifi_nrf_fmac_conf_btcoex(struct wifi_nrf_fmac_dev_ctx *fma
 
 
 #ifdef CONFIG_NRF700X_RADIO_TEST
+enum wifi_nrf_status wait_for_radio_cmd_status(struct wifi_nrf_fmac_dev_ctx *fmac_dev_ctx,
+					       unsigned int timeout)
+{
+	unsigned int count = 0;
+	enum nrf_wifi_radio_test_err_status radio_cmd_status;
+
+	do {
+		wifi_nrf_osal_sleep_ms(fmac_dev_ctx->fpriv->opriv,
+				       1);
+		count++;
+	} while ((!fmac_dev_ctx->radio_cmd_done) &&
+		 (count < timeout));
+
+	if (count == timeout) {
+		wifi_nrf_osal_log_err(fmac_dev_ctx->fpriv->opriv,
+				      "%s: Timed out (%d secs)\n",
+				      __func__,
+					 timeout / 1000);
+		goto out;
+	}
+
+	radio_cmd_status = fmac_dev_ctx->radio_cmd_status;
+
+	if (radio_cmd_status != NRF_WIFI_UMAC_CMD_SUCCESS) {
+		wifi_nrf_osal_log_err(fmac_dev_ctx->fpriv->opriv,
+				      "%s: Radio test command failed with status %d\n",
+				      __func__,
+				      radio_cmd_status);
+		goto out;
+	}
+	return WIFI_NRF_STATUS_SUCCESS;
+
+out:
+	return WIFI_NRF_STATUS_FAIL;
+}
+
 enum wifi_nrf_status wifi_nrf_fmac_radio_test_init(struct wifi_nrf_fmac_dev_ctx *fmac_dev_ctx,
 						   struct rpu_conf_params *params)
 {
@@ -884,9 +924,24 @@ enum wifi_nrf_status wifi_nrf_fmac_radio_test_init(struct wifi_nrf_fmac_dev_ctx 
 	init_params.phy_threshold = params->phy_threshold;
 	init_params.phy_calib = params->phy_calib;
 
+	fmac_dev_ctx->radio_cmd_done = false;
 	status = umac_cmd_prog_init(fmac_dev_ctx,
 				    &init_params);
 
+	if (status != WIFI_NRF_STATUS_SUCCESS) {
+		wifi_nrf_osal_log_err(fmac_dev_ctx->fpriv->opriv,
+				      "%s: Unable to init radio test\n",
+				      __func__);
+		goto out;
+	}
+
+	status = wait_for_radio_cmd_status(fmac_dev_ctx,
+					   RADIO_CMD_STATUS_TIMEOUT);
+	if (status != WIFI_NRF_STATUS_SUCCESS) {
+		goto out;
+	}
+
+out:
 	return status;
 }
 
@@ -896,9 +951,23 @@ enum wifi_nrf_status wifi_nrf_fmac_radio_test_prog_tx(struct wifi_nrf_fmac_dev_c
 {
 	enum wifi_nrf_status status = WIFI_NRF_STATUS_FAIL;
 
+	fmac_dev_ctx->radio_cmd_done = false;
 	status = umac_cmd_prog_tx(fmac_dev_ctx,
 				  params);
 
+	if (status != WIFI_NRF_STATUS_SUCCESS) {
+		wifi_nrf_osal_log_err(fmac_dev_ctx->fpriv->opriv,
+				      "%s: Unable to program radio test TX\n",
+				      __func__);
+		goto out;
+	}
+
+	status = wait_for_radio_cmd_status(fmac_dev_ctx,
+					   RADIO_CMD_STATUS_TIMEOUT);
+	if (status != WIFI_NRF_STATUS_SUCCESS) {
+		goto out;
+	}
+out:
 	return status;
 }
 
@@ -930,9 +999,23 @@ enum wifi_nrf_status wifi_nrf_fmac_radio_test_prog_rx(struct wifi_nrf_fmac_dev_c
 	rx_params.phy_calib = params->phy_calib;
 	rx_params.rx = params->rx;
 
+	fmac_dev_ctx->radio_cmd_done = false;
 	status = umac_cmd_prog_rx(fmac_dev_ctx,
 				  &rx_params);
 
+	if (status != WIFI_NRF_STATUS_SUCCESS) {
+		wifi_nrf_osal_log_err(fmac_dev_ctx->fpriv->opriv,
+				      "%s: Unable to program radio test RX\n",
+				      __func__);
+		goto out;
+	}
+
+	status = wait_for_radio_cmd_status(fmac_dev_ctx,
+					   RADIO_CMD_STATUS_TIMEOUT);
+	if (status != WIFI_NRF_STATUS_SUCCESS) {
+		goto out;
+	}
+out:
 	return status;
 }
 
@@ -3105,7 +3188,7 @@ enum wifi_nrf_status wifi_nrf_fmac_chg_vif_state(void *dev_ctx,
 	if (count == 0) {
 		wifi_nrf_osal_log_err(fmac_dev_ctx->fpriv->opriv,
 				      "%s: RPU is unresponsive for %d sec\n",
-				      __func__, RPU_CMD_TIMEOUT_MS);
+				      __func__, RPU_CMD_TIMEOUT_MS / 1000);
 		goto out;
 	}
 
@@ -4286,3 +4369,43 @@ enum wifi_nrf_status wifi_nrf_fmac_rf_params_get(struct wifi_nrf_fmac_dev_ctx *f
 out:
 	return status;
 }
+
+
+#ifdef CONFIG_NRF700X_UTIL
+enum wifi_nrf_status wifi_nrf_fmac_set_tx_rate(struct wifi_nrf_fmac_dev_ctx *fmac_dev_ctx,
+					       unsigned char rate_flag,
+					       int data_rate)
+{
+	enum wifi_nrf_status status = WIFI_NRF_STATUS_FAIL;
+	struct host_rpu_msg *umac_cmd = NULL;
+	struct nrf_wifi_cmd_fix_tx_rate *umac_cmd_data = NULL;
+	int len = 0;
+
+	len = sizeof(*umac_cmd_data);
+
+	umac_cmd = umac_cmd_alloc(fmac_dev_ctx,
+				  NRF_WIFI_HOST_RPU_MSG_TYPE_SYSTEM,
+				  len);
+
+	if (!umac_cmd) {
+		wifi_nrf_osal_log_err(fmac_dev_ctx->fpriv->opriv,
+				      "%s: umac_cmd_alloc failed\n",
+				      __func__);
+		goto out;
+	}
+
+	umac_cmd_data = (struct nrf_wifi_cmd_fix_tx_rate *)(umac_cmd->msg);
+
+	umac_cmd_data->sys_head.cmd_event = NRF_WIFI_CMD_TX_FIX_DATA_RATE;
+	umac_cmd_data->sys_head.len = len;
+
+	umac_cmd_data->rate_flags = rate_flag;
+	umac_cmd_data->fixed_rate = data_rate;
+
+	status = wifi_nrf_hal_ctrl_cmd_send(fmac_dev_ctx->hal_dev_ctx,
+					    umac_cmd,
+					    (sizeof(*umac_cmd) + len));
+out:
+	return status;
+}
+#endif /* CONFIG_NRF700X_UTIL */

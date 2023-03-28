@@ -47,6 +47,8 @@ void event_handler(const struct nrf_cloud_evt *const evt)
 		break;
 	case NRF_CLOUD_EVT_TRANSPORT_CONNECTING:
 		atomic_set(&transport_connecting, 1);
+		break;
+	case NRF_CLOUD_EVT_TRANSPORT_CONNECT_ERROR:
 		status = evt->status;
 		break;
 	case NRF_CLOUD_EVT_ERROR:
@@ -205,15 +207,17 @@ static void run_before(void *fixture)
 	RESET_FAKE(nct_dc_stream);
 	RESET_FAKE(nct_dc_send);
 	RESET_FAKE(nct_dc_bulk_send);
-	RESET_FAKE(nrf_cloud_device_status_shadow_encode);
+	RESET_FAKE(nrf_cloud_shadow_dev_status_encode);
 	RESET_FAKE(nrf_cloud_device_status_free);
-	RESET_FAKE(nrf_cloud_encode_sensor_data);
+	RESET_FAKE(nrf_cloud_sensor_data_encode);
 	RESET_FAKE(nrf_cloud_os_mem_hooks_init);
 	RESET_FAKE(nrf_cloud_free);
 	RESET_FAKE(poll);
 
 	/* Set the default fake for poll */
 	poll_fake.custom_fake = fake_poll__pollnval;
+
+	atomic_set(&transport_connecting, 0);
 }
 
 /* This function runs after each completed test */
@@ -753,7 +757,7 @@ ZTEST(nrf_cloud_test, test_shadow_device_status_update_not_dc_connected)
 	nct_dc_send_fake.custom_fake = fake_nct_dc_send__succeeds;
 	nct_dc_bulk_send_fake.custom_fake = fake_nct_dc_bulk_send__succeeds;
 	/* Custom fakes for shadow device status update */
-	nrf_cloud_device_status_shadow_encode_fake.custom_fake =
+	nrf_cloud_shadow_dev_status_encode_fake.custom_fake =
 		fake_device_status_shadow_encode__succeeds;
 
 	/* Cloud is in idle state */
@@ -793,7 +797,7 @@ ZTEST(nrf_cloud_test, test_shadow_device_status_update_status_encode_failed)
 	nct_dc_send_fake.custom_fake = fake_nct_dc_send__succeeds;
 	nct_dc_bulk_send_fake.custom_fake = fake_nct_dc_bulk_send__succeeds;
 	/* Custom fakes for shadow device status update */
-	nrf_cloud_device_status_shadow_encode_fake.custom_fake =
+	nrf_cloud_shadow_dev_status_encode_fake.custom_fake =
 		fake_device_status_shadow_encode__fails;
 
 	zassert_equal(STATE_IDLE, nfsm_get_current_state(),
@@ -827,7 +831,7 @@ ZTEST(nrf_cloud_test, test_shadow_device_status_update_cloud_send_failed)
 	nct_dc_send_fake.custom_fake = fake_nct_dc_send__succeeds;
 	nct_dc_bulk_send_fake.custom_fake = fake_nct_dc_bulk_send__succeeds;
 	/* Custom fakes for shadow device status update */
-	nrf_cloud_device_status_shadow_encode_fake.custom_fake =
+	nrf_cloud_shadow_dev_status_encode_fake.custom_fake =
 		fake_device_status_shadow_encode__succeeds;
 
 	zassert_equal(STATE_IDLE, nfsm_get_current_state(),
@@ -861,7 +865,7 @@ ZTEST(nrf_cloud_test, test_shadow_device_status_update_success)
 	nct_dc_send_fake.custom_fake = fake_nct_dc_send__succeeds;
 	nct_dc_bulk_send_fake.custom_fake = fake_nct_dc_bulk_send__succeeds;
 	/* Custom fakes for shadow device status update */
-	nrf_cloud_device_status_shadow_encode_fake.custom_fake =
+	nrf_cloud_shadow_dev_status_encode_fake.custom_fake =
 		fake_device_status_shadow_encode__succeeds;
 
 	zassert_equal(STATE_IDLE, nfsm_get_current_state(),
@@ -937,7 +941,7 @@ ZTEST(nrf_cloud_test, test_cloud_sensor_data_send_sensor_encode_failed)
 	/* Connect to the cloud successfully with dc_connect */
 	connect_cloud_dc_success();
 
-	nrf_cloud_encode_sensor_data_fake.custom_fake = fake_nrf_cloud_encode_sensor_data__fails;
+	nrf_cloud_sensor_data_encode_fake.custom_fake = fake_nrf_cloud_sensor_data_encode__fails;
 
 	int ret = nrf_cloud_sensor_data_send(&sensor_param);
 
@@ -956,7 +960,7 @@ ZTEST(nrf_cloud_test, test_cloud_sensor_data_send_dc_send_failed)
 	/* Connect to the cloud successfully with dc_connect */
 	connect_cloud_dc_success();
 
-	nrf_cloud_encode_sensor_data_fake.custom_fake = fake_nrf_cloud_encode_sensor_data__succeeds;
+	nrf_cloud_sensor_data_encode_fake.custom_fake = fake_nrf_cloud_sensor_data_encode__succeeds;
 	nct_dc_send_fake.custom_fake = fake_nct_dc_send__fails;
 
 	int ret = nrf_cloud_sensor_data_send(&sensor_param);
@@ -978,7 +982,7 @@ ZTEST(nrf_cloud_test, test_cloud_sensor_data_send_success)
 	/* Connect to the cloud successfully with dc_connect */
 	connect_cloud_dc_success();
 
-	nrf_cloud_encode_sensor_data_fake.custom_fake = fake_nrf_cloud_encode_sensor_data__succeeds;
+	nrf_cloud_sensor_data_encode_fake.custom_fake = fake_nrf_cloud_sensor_data_encode__succeeds;
 	nct_dc_send_fake.custom_fake = fake_nct_dc_send__succeeds;
 
 	int ret = nrf_cloud_sensor_data_send(&sensor_param);
@@ -1045,7 +1049,7 @@ ZTEST(nrf_cloud_test, test_cloud_sensor_data_stream_sensor_encode_failed)
 	/* Connect to the cloud successfully with dc_connect */
 	connect_cloud_dc_success();
 
-	nrf_cloud_encode_sensor_data_fake.custom_fake = fake_nrf_cloud_encode_sensor_data__fails;
+	nrf_cloud_sensor_data_encode_fake.custom_fake = fake_nrf_cloud_sensor_data_encode__fails;
 
 	int ret = nrf_cloud_sensor_data_stream(&sensor_param);
 
@@ -1064,7 +1068,7 @@ ZTEST(nrf_cloud_test, test_cloud_sensor_data_stream_dc_stream_failed)
 	/* Connect to the cloud successfully with dc_connect */
 	connect_cloud_dc_success();
 
-	nrf_cloud_encode_sensor_data_fake.custom_fake = fake_nrf_cloud_encode_sensor_data__succeeds;
+	nrf_cloud_sensor_data_encode_fake.custom_fake = fake_nrf_cloud_sensor_data_encode__succeeds;
 	nct_dc_stream_fake.custom_fake = fake_nct_dc_stream__fails;
 
 	int ret = nrf_cloud_sensor_data_stream(&sensor_param);
@@ -1086,7 +1090,7 @@ ZTEST(nrf_cloud_test, test_cloud_sensor_data_stream_success)
 	/* Connect to the cloud successfully with dc_connect */
 	connect_cloud_dc_success();
 
-	nrf_cloud_encode_sensor_data_fake.custom_fake = fake_nrf_cloud_encode_sensor_data__succeeds;
+	nrf_cloud_sensor_data_encode_fake.custom_fake = fake_nrf_cloud_sensor_data_encode__succeeds;
 	nct_dc_stream_fake.custom_fake = fake_nct_dc_stream__succeeds;
 
 	int ret = nrf_cloud_sensor_data_stream(&sensor_param);

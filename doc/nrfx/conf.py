@@ -1,3 +1,9 @@
+#
+# Copyright (c) 2023 Nordic Semiconductor
+#
+# SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
+#
+
 # nrfx documentation build configuration file
 
 from pathlib import Path
@@ -70,4 +76,4 @@ ncs_cache_manifest = NRF_BASE / "west.yml"
 
 
 def setup(app):
-    utils.add_google_analytics(app)
+    utils.add_google_analytics(app, html_theme_options)

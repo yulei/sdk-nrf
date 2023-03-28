@@ -6,19 +6,19 @@
 
 #include "audio_datapath.h"
 
-#include <zephyr/kernel.h>
-#include <nrfx_clock.h>
-#include <zephyr/shell/shell.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <ctype.h>
+#include <zephyr/kernel.h>
+#include <zephyr/shell/shell.h>
+#include <nrfx_clock.h>
 
+#include "nrf5340_audio_common.h"
 #include "macros_common.h"
 #include "board.h"
 #include "led.h"
 #include "audio_i2s.h"
 #include "sw_codec_select.h"
-#include "audio_sync_timer.h"
 #include "audio_system.h"
 #include "tone.h"
 #include "contin_array.h"
@@ -41,7 +41,7 @@ LOG_MODULE_REGISTER(audio_datapath, CONFIG_AUDIO_DATAPATH_LOG_LEVEL);
 #define BLK_PERIOD_US 1000
 
 /* Total sample FIFO period in microseconds */
-#define FIFO_SMPL_PERIOD_US (MAX_PRES_DLY_US * 2)
+#define FIFO_SMPL_PERIOD_US (CONFIG_AUDIO_MAX_PRES_DLY_US * 2)
 #define FIFO_NUM_BLKS NUM_BLKS(FIFO_SMPL_PERIOD_US)
 #define MAX_FIFO_SIZE (FIFO_NUM_BLKS * BLK_SIZE_SAMPLES(CONFIG_AUDIO_SAMPLE_RATE_HZ) * 2)
 
@@ -123,7 +123,11 @@ static struct {
 	} in;
 
 	struct {
+#if CONFIG_AUDIO_BIT_DEPTH_16
 		int16_t __aligned(sizeof(uint32_t)) fifo[MAX_FIFO_SIZE];
+#elif CONFIG_AUDIO_BIT_DEPTH_32
+		int32_t __aligned(sizeof(uint32_t)) fifo[MAX_FIFO_SIZE];
+#endif
 		uint16_t prod_blk_idx; /* Output producer audio block index */
 		uint16_t cons_blk_idx; /* Output consumer audio block index */
 		uint32_t prod_blk_ts[FIFO_NUM_BLKS];
@@ -588,7 +592,7 @@ static void audio_datapath_i2s_blk_complete(uint32_t frame_start_ts, uint32_t *r
 				}
 
 				tx_buf = (uint8_t *)&ctrl_blk.out
-						 .fifo[next_out_blk_idx * BLK_MONO_SIZE_OCTETS];
+						 .fifo[next_out_blk_idx * BLK_STEREO_NUM_SAMPS];
 
 			} else {
 				if (stream_state_get() == STATE_STREAMING) {
@@ -719,31 +723,23 @@ static void audio_datapath_i2s_stop(void)
 	alt_buffer_free_both();
 }
 
-int audio_datapath_pres_delay_us_set(uint32_t delay_us)
-{
-	if (delay_us > MAX_PRES_DLY_US || delay_us < MIN_PRES_DLY_US) {
-		LOG_WRN("Presentation delay not supported: %d", delay_us);
-		return -EINVAL;
-	}
-
-	ctrl_blk.pres_comp.pres_delay_us = delay_us;
-
-	LOG_DBG("Presentation delay set to %d us", delay_us);
-
-	return 0;
-}
-
-void audio_datapath_pres_delay_us_get(uint32_t *delay_us)
-{
-	*delay_us = ctrl_blk.pres_comp.pres_delay_us;
-}
-
-void audio_datapath_just_in_time_check_and_adjust(uint32_t sdu_ref_us)
+/**
+ * @brief Adjust timing to make sure audio data is sent just in time for BLE event
+ *
+ * @note  The time from last anchor point is checked and then blocks of 1ms
+ *        can be dropped to allow the sending of encoded data to be sent just
+ *        before the connection interval opens up. This is done to reduce overall
+ *        latency.
+ *
+ * @param[in]  sdu_ref_us  The SDU reference, in µs, to the previous sent packet
+ */
+static void audio_datapath_just_in_time_check_and_adjust(uint32_t sdu_ref_us)
 {
 	static int32_t count;
 	int ret;
 
-	uint32_t curr_frame_ts = audio_sync_timer_curr_time_get();
+	uint32_t curr_frame_ts = nrfx_timer_capture(&audio_sync_timer_instance,
+						    AUDIO_SYNC_TIMER_CURR_TIME_CAPTURE_CHANNEL);
 	int diff = curr_frame_ts - sdu_ref_us;
 
 	if (count++ % 100 == 0) {
@@ -762,12 +758,37 @@ void audio_datapath_just_in_time_check_and_adjust(uint32_t sdu_ref_us)
 	}
 }
 
-void audio_datapath_sdu_ref_update(uint32_t sdu_ref_us)
+int audio_datapath_pres_delay_us_set(uint32_t delay_us)
 {
-	if (ctrl_blk.stream_started) {
-		ctrl_blk.previous_sdu_ref_us = sdu_ref_us;
-	} else {
-		LOG_WRN("Stream not startet - Can not update sdu_ref_us");
+	if (!IN_RANGE(delay_us, CONFIG_AUDIO_MIN_PRES_DLY_US, CONFIG_AUDIO_MAX_PRES_DLY_US)) {
+		LOG_WRN("Presentation delay not supported: %d", delay_us);
+		return -EINVAL;
+	}
+
+	ctrl_blk.pres_comp.pres_delay_us = delay_us;
+
+	LOG_DBG("Presentation delay set to %d us", delay_us);
+
+	return 0;
+}
+
+void audio_datapath_pres_delay_us_get(uint32_t *delay_us)
+{
+	*delay_us = ctrl_blk.pres_comp.pres_delay_us;
+}
+
+void audio_datapath_sdu_ref_update(uint32_t sdu_ref_us, bool adjust)
+{
+	if (IS_ENABLED(CONFIG_AUDIO_SOURCE_I2S)) {
+		if (ctrl_blk.stream_started) {
+			ctrl_blk.previous_sdu_ref_us = sdu_ref_us;
+
+			if (adjust) {
+				audio_datapath_just_in_time_check_and_adjust(sdu_ref_us);
+			}
+		} else {
+			LOG_WRN("Stream not startet - Can not update sdu_ref_us");
+		}
 	}
 }
 
@@ -860,9 +881,15 @@ void audio_datapath_stream_out(const uint8_t *buf, size_t size, uint32_t sdu_ref
 	uint32_t out_blk_idx = ctrl_blk.out.prod_blk_idx;
 
 	for (uint32_t i = 0; i < NUM_BLKS_IN_FRAME; i++) {
+#if CONFIG_AUDIO_BIT_DEPTH_16
 		memcpy(&ctrl_blk.out.fifo[out_blk_idx * BLK_STEREO_NUM_SAMPS],
 		       &((int16_t *)ctrl_blk.decoded_data)[i * BLK_STEREO_NUM_SAMPS],
 		       BLK_STEREO_SIZE_OCTETS);
+#elif CONFIG_AUDIO_BIT_DEPTH_32
+		memcpy(&ctrl_blk.out.fifo[out_blk_idx * BLK_STEREO_NUM_SAMPS],
+		       &((int32_t *)ctrl_blk.decoded_data)[i * BLK_STEREO_NUM_SAMPS],
+		       BLK_STEREO_SIZE_OCTETS);
+#endif
 
 		/* Record producer block start reference */
 		ctrl_blk.out.prod_blk_ts[out_blk_idx] = recv_frame_ts_us + (i * BLK_PERIOD_US);
@@ -918,7 +945,7 @@ int audio_datapath_init(void)
 	audio_i2s_blk_comp_cb_register(audio_datapath_i2s_blk_complete);
 	ctrl_blk.datapath_initialized = true;
 	ctrl_blk.drift_comp.hfclkaudio_comp_enabled = true;
-	ctrl_blk.pres_comp.pres_delay_us = DEFAULT_PRES_DLY_US;
+	ctrl_blk.pres_comp.pres_delay_us = CONFIG_BT_AUDIO_PRESENTATION_DELAY_US;
 
 	return 0;
 }

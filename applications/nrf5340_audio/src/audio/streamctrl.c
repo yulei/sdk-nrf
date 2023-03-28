@@ -6,14 +6,15 @@
 
 #include "streamctrl.h"
 
-#include <zephyr/kernel.h>
 #include <stddef.h>
 #include <string.h>
 #include <errno.h>
+#include <zephyr/kernel.h>
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/device.h>
 #include <zephyr/debug/stack.h>
 
+#include "nrf5340_audio_common.h"
 #include "ctrl_events.h"
 #include "led.h"
 #include "button_assignments.h"
@@ -24,7 +25,6 @@
 #include "board.h"
 #include "le_audio.h"
 #include "audio_datapath.h"
-#include "audio_sync_timer.h"
 
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(streamctrl, CONFIG_STREAMCTRL_LOG_LEVEL);
@@ -107,7 +107,8 @@ static void le_audio_rx_data_handler(uint8_t const *const p_data, size_t data_si
 				     uint32_t sdu_ref, enum audio_channel channel_index)
 {
 	/* Capture timestamp of when audio frame is received */
-	uint32_t recv_frame_ts = audio_sync_timer_curr_time_get();
+	uint32_t recv_frame_ts = nrfx_timer_capture(&audio_sync_timer_instance,
+						    AUDIO_SYNC_TIMER_CURR_TIME_CAPTURE_CHANNEL);
 
 	/* Since the audio datapath thread is preemptive, no actions on the
 	 * FIFO can happen whilst in this handler.
@@ -401,7 +402,7 @@ static void le_audio_evt_handler(enum le_audio_evt_type event)
 		uint32_t bitrate;
 		uint32_t sampling_rate;
 
-		ret = le_audio_config_get(&bitrate, &sampling_rate);
+		ret = le_audio_config_get(&bitrate, &sampling_rate, NULL);
 		if (ret) {
 			LOG_WRN("Failed to get config");
 			break;
@@ -409,6 +410,24 @@ static void le_audio_evt_handler(enum le_audio_evt_type event)
 
 		LOG_DBG("Sampling rate: %d Hz", sampling_rate);
 		LOG_DBG("Bitrate: %d kbps", bitrate);
+		break;
+
+	case LE_AUDIO_EVT_PRES_DELAY_SET:
+		uint32_t pres_delay;
+
+		ret = le_audio_config_get(NULL, NULL, &pres_delay);
+		if (ret) {
+			LOG_ERR("Failed to get config");
+			break;
+		}
+
+		ret = audio_datapath_pres_delay_us_set(pres_delay);
+		if (ret) {
+			LOG_ERR("Failed to set presentation delay to %d", pres_delay);
+			break;
+		}
+
+		LOG_INF("Presentation delay %d us is set by initiator", pres_delay);
 		break;
 
 	default:
@@ -456,7 +475,7 @@ int streamctrl_start(void)
 	ret = k_thread_name_set(audio_datapath_thread_id, "AUDIO DATAPATH");
 	ERR_CHK(ret);
 
-	ret = le_audio_enable(le_audio_rx_data_handler);
+	ret = le_audio_enable(le_audio_rx_data_handler, audio_datapath_sdu_ref_update);
 	ERR_CHK_MSG(ret, "Failed to enable LE Audio");
 
 	return 0;

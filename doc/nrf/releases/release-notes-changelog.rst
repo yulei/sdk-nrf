@@ -84,14 +84,18 @@ Bluetooth mesh
 Matter
 ------
 
-|no_changes_yet_note|
+* Added the Matter Nordic UART Service (NUS) feature to the :ref:`matter_lock_sample`.
+  This feature allows using Nordic UART Service to control the device remotely through Bluetooth LE and adding custom text commands to a Matter sample.
+  The Matter NUS implementation allows controlling the device regardless of whether the device is connected to a Matter network or not.
+  The feature is dedicated for the nRF5340 and the nRF52840 DKs.
+* Updated the :ref:`ug_matter` protocol page with a table that lists compatibility versions for the |NCS|, the Matter SDK, and the Matter specification.
 
 See `Matter samples`_ for the list of changes for the Matter samples.
 
 Matter fork
 +++++++++++
 
-The Matter fork in the |NCS| (``sdk-connectedhomeip``) contains all commits from the upstream Matter repository up to, and including, the ``1.0.0.2`` tag.
+The Matter fork in the |NCS| (``sdk-connectedhomeip``) contains all commits from the upstream Matter repository up to, and including, the ``SVE RC2`` tag.
 
 The following list summarizes the most important changes inherited from the upstream Matter:
 
@@ -114,7 +118,19 @@ See `Zigbee samples`_ for the list of changes for the Zigbee samples.
 Enhanced ShockBurst (ESB)
 -------------------------
 
-|no_changes_yet_note|
+* Added support for bigger payload size.
+  ESB supports a payload with a size of 64 bytes or more.
+
+* Added:
+
+  * The `use_fast_ramp_up` feature that reduces radio ramp-up delay from 130 µs to 40 µs.
+  * The :kconfig:option:`CONFIG_ESB_NEVER_DISABLE_TX` Kconfig option as an experimental feature that enables the radio peripheral to remain in TXIDLE state instead of TXDISABLE when transmission is pending.
+
+* Updated:
+
+  * The number of PPI/DPPI channels used from three to six.
+  * Events 6 and 7 from the EGU0 instance by assigning them to the ESB module.
+  * The type parameter of the :c:func:`esb_set_tx_power` function to ``int8_t``.
 
 nRF IEEE 802.15.4 radio driver
 ------------------------------
@@ -134,17 +150,33 @@ This section provides detailed lists of changes by :ref:`application <applicatio
 nRF9160: Asset Tracker v2
 -------------------------
 
-|no_changes_yet_note|
+* Updated:
+
+  * Use defines from the :ref:`lib_nrf_cloud` library for nRF Cloud related string values.
+  * The application now integrates the :ref:`lib_lwm2m_client_utils` FOTA callback functionality.
 
 nRF9160: Serial LTE modem
 -------------------------
 
-|no_changes_yet_note|
+* Added:
+
+  * AT command ``#XWIFIPOS`` to get Wi-Fi location from nRF Cloud.
+
+* Updated:
+
+  * Use defines from the :ref:`lib_nrf_cloud` library for nRF Cloud related string values.
+
+* Fixed:
+
+  * A bug in receiving large MQTT Publish message.
 
 nRF5340 Audio
 -------------
 
-|no_changes_yet_note|
+* Moved the LE Audio controller for the network core to the standalone :ref:`lib_bt_ll_acs_nrf53_readme` library.
+
+* Added  Kconfig options for setting periodic and extended advertising intervals..
+  Search :ref:`Kconfig Reference <kconfig-search>` for ``BLE_ACL_PER_ADV_INT_`` and ``BLE_ACL_EXT_ADV_INT_`` to list all of them.
 
 nRF Machine Learning (Edge Impulse)
 -----------------------------------
@@ -154,7 +186,15 @@ nRF Machine Learning (Edge Impulse)
 nRF Desktop
 -----------
 
-|no_changes_yet_note|
+* Added the :ref:`nrf_desktop_swift_pair_app`. The module is used to enable or disable the Swift Pair Bluetooth advertising payload depending on the selected Bluetooth peer (used local identity).
+
+* Updated:
+
+  * The :ref:`nrf_desktop_dfu` automatically enables 8-bit write block size emulation (:kconfig:option:`CONFIG_SOC_FLASH_NRF_EMULATE_ONE_BYTE_WRITE_ACCESS`) to ensure that update images with sizes unaligned to word size can be successfully stored in the internal FLASH.
+    The feature is not enabled if the MCUboot bootloader is used and the secondary slot is placed in an external FLASH (when :kconfig:option:`CONFIG_PM_EXTERNAL_FLASH_MCUBOOT_SECONDARY` is enabled).
+  * In the Fast Pair configurations, the bond erase operation is enabled for the dongle peer, which will let you change the bonded Bluetooth Central.
+  * The `Swift Pair`_ payload is, by default, included for all of the Bluetooth local identities apart from the dedicated local identity used for connection with an nRF Desktop dongle.
+    If a configuration supports both Fast Pair and a dedicated dongle peer (:ref:`CONFIG_DESKTOP_BLE_DONGLE_PEER_ENABLE <config_desktop_app_options>`), the `Swift Pair`_ payload is, by default, included only for the dongle peer.
 
 Samples
 =======
@@ -162,7 +202,17 @@ Samples
 Bluetooth samples
 -----------------
 
-|no_changes_yet_note|
+* Removed:
+
+  * The Bluetooth 3-wire coex sample because of the removal of the 3-wire implementation.
+
+* :ref:`peripheral_hids_mouse` sample:
+
+  * The :kconfig:option:`CONFIG_BT_SMP` Kconfig option is included when ``CONFIG_BT_HIDS_SECURITY_ENABLED`` is selected.
+
+* :ref:`direct_test_mode` sample:
+
+  * Removed a compilation warning when used with minimal pinout Skyworks FEM.
 
 Bluetooth mesh samples
 ----------------------
@@ -172,7 +222,30 @@ Bluetooth mesh samples
 nRF9160 samples
 ---------------
 
-|no_changes_yet_note|
+* :ref:`modem_shell_application` sample:
+
+  * Updated:
+
+    * Use defines from the :ref:`lib_nrf_cloud` library for nRF Cloud related string values.
+      Remove the inclusion of the file :file:`nrf_cloud_codec.h`.
+
+* :ref:`slm_shell_sample` sample:
+
+  * Added:
+
+    * Support for the nRF7002 DK PCA10143.
+
+* :ref:`lwm2m_client` sample:
+
+  * Updated:
+
+    * The sample now integrates the :ref:`lib_lwm2m_client_utils` FOTA callback functionality.
+
+* :ref:`nrf_cloud_mqtt_multi_service` sample:
+
+  * Updated:
+
+    * Increased the MCUboot partition size to the minimum necessary to allow bootloader FOTA.
 
 Peripheral samples
 ------------------
@@ -192,7 +265,10 @@ Thread samples
 Matter samples
 --------------
 
-|no_changes_yet_note|
+* :ref:`matter_lock_sample`:
+
+    * Added the Matter Nordic UART Service (NUS) feature, which allows controlling the door lock device remotely through Bluetooth LE using two simple commands: ``Lock`` and ``Unlock``.
+      This feature is dedicated for the nRF52840 and the nRF5340 DKs.
 
 NFC samples
 -----------
@@ -239,12 +315,19 @@ This section provides detailed lists of changes by :ref:`library <libraries>`.
 Binary libraries
 ----------------
 
-|no_changes_yet_note|
+* Added the standalone :ref:`lib_bt_ll_acs_nrf53_readme` library, originally a part of the :ref:`nrf53_audio_app` application.
 
 Bluetooth libraries and services
 --------------------------------
 
-|no_changes_yet_note|
+* :ref:`bt_le_adv_prov_readme` library:
+
+  * Added API to enable or disable the Swift Pair provider (:c:func:`bt_le_adv_prov_swift_pair_enable`).
+
+* :ref:`bt_fast_pair_readme`:
+
+  * Added the :c:func:`bt_fast_pair_info_cb_register` function and the :c:struct:`bt_fast_pair_info_cb` structure to register Fast Pair information callbacks.
+    The :c:member:`bt_fast_pair_info_cb.account_key_written` callback can be used to notify the application about the Account Key writes.
 
 Bootloader libraries
 --------------------
@@ -254,12 +337,53 @@ Bootloader libraries
 Modem libraries
 ---------------
 
-|no_changes_yet_note|
+* :ref:`nrf_modem_lib_readme` library:
+
+  * Added:
+
+    * The function :c:func:`nrf_modem_lib_fault_strerror` to retrieve a statically allocated textual description of a given modem fault.
+      The function can be enabled using the new Kconfig option :kconfig:option:`CONFIG_NRF_MODEM_LIB_FAULT_STRERROR`.
+
+  * Updated:
+
+    * The Kconfig option :kconfig:option:`CONFIG_NRF_MODEM_LIB_IPC_PRIO_OVERRIDE` is now deprecated.
+
+  * Removed:
+
+    * The deprecated function ``nrf_modem_lib_get_init_ret``.
+    * The deprecated function ``nrf_modem_lib_shutdown_wait``.
+    * The deprecated Kconfig option ``CONFIG_NRF_MODEM_LIB_TRACE_ENABLED``.
 
 Libraries for networking
 ------------------------
 
-|no_changes_yet_note|
+* :ref:`lib_nrf_cloud` library:
+
+  * Added:
+
+    * A public header file :file:`nrf_cloud_defs.h` that contains common defines for interacting with nRF Cloud and the :ref:`lib_nrf_cloud` library.
+    * A new event :c:enum:`NRF_CLOUD_EVT_TRANSPORT_CONNECT_ERROR` to indicate an error while the transport connection is being established when the :kconfig:option:`CONFIG_NRF_CLOUD_CONNECTION_POLL_THREAD` Kconfig option is enabled.
+      Earlier this was indicated with a second :c:enum:`NRF_CLOUD_EVT_TRANSPORT_CONNECTING` event with an error status.
+
+  * Removed:
+
+    * Unused internal codec function ``nrf_cloud_format_single_cell_pos_req_json()``.
+
+  * Updated:
+
+    * The :c:func:`nrf_cloud_device_status_msg_encode` function now includes the service info when encoding the device status.
+    * Renamed files :file:`nrf_cloud_codec.h` and :file:`nrf_cloud_codec.c` to :file:`nrf_cloud_codec_internal.h` and :file:`nrf_cloud_codec_internal.c` respectively.
+    * Standarized encode and decode function names in the codec.
+
+* :ref:`lib_lwm2m_client_utils` library:
+
+  * Updated:
+
+    * :file:`lwm2m_client_utils.h` includes new API for FOTA to register application callback to receive state changes and requests for the update process.
+
+  * Removed:
+
+    * The old API ``lwm2m_firmware_get_update_state_cb()``.
 
 Libraries for NFC
 -----------------
@@ -312,7 +436,7 @@ The code for integrating MCUboot into |NCS| is located in the :file:`ncs/nrf/mod
 
 The following list summarizes both the main changes inherited from upstream MCUboot and the main changes applied to the |NCS| specific additions:
 
-|no_changes_yet_note|
+* Added support for the downgrade prevention feature using hardware security counters (:kconfig:option:`MCUBOOT_HARDWARE_DOWNGRADE_PREVENTION`).
 
 Zephyr
 ======

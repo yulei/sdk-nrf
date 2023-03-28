@@ -27,7 +27,7 @@ LOG_MODULE_REGISTER(nrf_cloud_pgps, CONFIG_NRF_CLOUD_GPS_LOG_LEVEL);
 #include "nrf_cloud_fsm.h"
 #include "nrf_cloud_pgps_schema_v1.h"
 #include "nrf_cloud_pgps_utils.h"
-#include "nrf_cloud_codec.h"
+#include "nrf_cloud_codec_internal.h"
 
 #define FORCE_HTTP_DL			0 /* set to 1 to force HTTP instead of HTTPS */
 #define PGPS_DEBUG			0 /* set to 1 for extra logging */
@@ -918,7 +918,7 @@ int nrf_cloud_pgps_process(const char *buf, size_t buf_len)
 		return -EINVAL;
 	}
 
-	err = nrf_cloud_parse_pgps_response(buf, &pgps_dl);
+	err = nrf_cloud_pgps_response_decode(buf, &pgps_dl);
 	if (err) {
 		return err;
 	}

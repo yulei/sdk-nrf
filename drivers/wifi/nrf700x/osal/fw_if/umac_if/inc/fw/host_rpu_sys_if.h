@@ -191,6 +191,8 @@ enum nrf_wifi_sys_commands {
 	NRF_WIFI_CMD_HE_GI_LTF_CONFIG,
 	NRF_WIFI_CMD_UMAC_INT_STATS,
 	NRF_WIFI_CMD_RADIO_TEST_INIT,
+	NRF_WIFI_CMD_RT_REQ_SET_REG,
+	NRF_WIFI_CMD_TX_FIX_DATA_RATE,
 };
 
 /**
@@ -383,6 +385,7 @@ struct nrf_wifi_interface_stats {
 	unsigned int rx_beacon_success_count;
 	unsigned int rx_beacon_miss_count;
 	unsigned int rx_bytes;
+	unsigned int rx_checksum_error_count;
 } __NRF_WIFI_PKD;
 
 struct rpu_umac_stats {
@@ -564,12 +567,31 @@ struct nrf_wifi_sys_params {
 } __NRF_WIFI_PKD;
 
 /**
+ * struct nrf_wifi_cmd_radiotest_req_set_reg - command for setting regulatory
+ * @sys_head: UMAC header, See &struct nrf_wifi_sys_head
+ * @nrf_wifi_alpha: regulatory country code.
+ *
+ */
+#define NRF_WIFI_CMD_RT_REQ_SET_REG_ALPHA_VALID (1 << 0)
+
+struct nrf_wifi_radiotest_req_set_reg {
+		unsigned int valid_fields;
+		unsigned char nrf_wifi_alpha[3];
+} __NRF_WIFI_PKD;
+
+struct nrf_wifi_cmd_radiotest_req_set_reg {
+	struct nrf_wifi_sys_head sys_head;
+	struct nrf_wifi_radiotest_req_set_reg set_reg_info;
+} __NRF_WIFI_PKD;
+
+/**
  * struct nrf_wifi_cmd_sys_init - Initialize UMAC
  * @sys_head: umac header, see &nrf_wifi_sys_head
  * @wdev_id : id of the interface.
  * @sys_params: iftype, mac address, see nrf_wifi_sys_params
  * @rx_buf_pools: LMAC Rx buffs pool params, see struct rx_buf_pool_params
  * @data_config_params: Data configuration params, see struct nrf_wifi_data_config_params
+ * @tcp_ip_checksum_offload: 0: Native checksum, 1: Offload checksum
  * After host driver bringup host sends the NRF_WIFI_CMD_INIT to the RPU.
  * then RPU initializes and responds with NRF_WIFI_EVENT_BUFF_CONFIG.
  */
@@ -581,6 +603,8 @@ struct nrf_wifi_cmd_sys_init {
 	struct rx_buf_pool_params rx_buf_pools[MAX_NUM_OF_RX_QUEUES];
 	struct nrf_wifi_data_config_params data_config_params;
 	struct temp_vbat_config temp_vbat_config_params;
+	unsigned char tcp_ip_checksum_offload;
+	struct nrf_wifi_radiotest_req_set_reg set_reg_info;
 } __NRF_WIFI_PKD;
 
 /**
@@ -692,6 +716,7 @@ struct rpu_conf_params {
 	unsigned char lna_gain;
 	unsigned char bb_gain;
 	unsigned short int capture_length;
+	unsigned char bypass_regulatory;
 } __NRF_WIFI_PKD;
 
 /**
@@ -808,6 +833,21 @@ struct nrf_wifi_event_coex_config {
 	struct rpu_evnt_coex_config_info coex_config_info;
 } __NRF_WIFI_PKD;
 
+/**
+ * struct nrf_wifi_cmd_fix_tx_rate - UMAC deinitialization done
+ * @sys_head: UMAC header, See &struct nrf_wifi_sys_head.
+ * rate_flags: refer &enum rpu_tput_mode.
+ * fixed_rate: -1 Disable fixed rate and use ratecontrol selected rate.
+ *             >0 legacy rates: 1,2,55,11,6,9,12,18,24,36,48,54.
+ *                11N VHT HE  : MCS index 0 to 7.
+ */
+
+struct nrf_wifi_cmd_fix_tx_rate {
+	struct nrf_wifi_sys_head sys_head;
+	unsigned char rate_flags;
+	int fixed_rate;
+} __NRF_WIFI_PKD;
+
 struct rpu_cmd_rftest_info {
 	unsigned int len;
 	unsigned char rfcmd[0];
@@ -878,7 +918,7 @@ struct nrf_wifi_umac_event_stats {
  *
  */
 enum nrf_wifi_radio_test_err_status {
-		NRF_WIFI_UMAC_CMD_SUCCESS,
+		NRF_WIFI_UMAC_CMD_SUCCESS = 1,
 		NRF_WIFI_UMAC_INVALID_CHNL
 };
 

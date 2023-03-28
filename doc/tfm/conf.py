@@ -1,3 +1,9 @@
+#
+# Copyright (c) 2023 Nordic Semiconductor
+#
+# SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
+#
+
 # TFM documentation build configuration file
 
 from pathlib import Path
@@ -49,8 +55,13 @@ html_last_updated_fmt = None
 html_show_sourcelink = True
 html_show_sphinx = False
 html_show_copyright = False
+html_title = "Trusted Firmware-M documentation (nRF Connect SDK)"
 
-html_theme_options = {"docset": "tfm", "docsets": utils.ALL_DOCSETS}
+html_theme_options = {
+    "docset": "tfm",
+    "docsets": utils.ALL_DOCSETS,
+    "subtitle": "nRF Connect SDK",
+}
 
 # Options for autosectionlabel -------------------------------------------------
 
@@ -77,4 +88,4 @@ def setup(app):
     app.add_css_file("css/common.css")
     app.add_css_file("css/tfm.css")
 
-    utils.add_google_analytics(app)
+    utils.add_google_analytics(app, html_theme_options)

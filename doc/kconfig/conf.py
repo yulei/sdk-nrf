@@ -1,3 +1,9 @@
+#
+# Copyright (c) 2023 Nordic Semiconductor
+#
+# SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
+#
+
 # Kconfig documentation build configuration file
 
 import os
@@ -72,4 +78,4 @@ os.environ["NCS_MEMFAULT_FIRMWARE_SDK_KCONFIG"] = str(
 def setup(app):
     app.add_css_file("css/kconfig.css")
 
-    utils.add_google_analytics(app)
+    utils.add_google_analytics(app, html_theme_options)

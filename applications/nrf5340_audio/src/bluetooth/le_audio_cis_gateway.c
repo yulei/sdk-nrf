@@ -14,7 +14,6 @@
 
 #include "macros_common.h"
 #include "ctrl_events.h"
-#include "audio_datapath.h"
 #include "ble_hci_vsc.h"
 #include "ble_audio_services.h"
 #include "channel_assignment.h"
@@ -55,6 +54,8 @@ struct le_audio_headset {
 	atomic_t iso_tx_pool_alloc;
 	struct k_work_delayable stream_start_sink_work;
 	struct k_work_delayable stream_start_source_work;
+	bool qos_reconfigure;
+	uint32_t reconfigure_pd;
 };
 
 struct worker_data {
@@ -87,6 +88,7 @@ BUILD_ASSERT(ARRAY_SIZE(headsets) >= CONFIG_BT_AUDIO_UNICAST_CLIENT_ASE_SRC_COUN
 	     "We need to have at least one headset device per ASE SOURCE");
 
 static le_audio_receive_cb receive_cb;
+static le_audio_timestamp_cb timestamp_cb;
 
 static struct bt_audio_unicast_group *unicast_group;
 
@@ -107,6 +109,78 @@ static struct bt_audio_discover_params audio_source_discover_param[CONFIG_BT_MAX
 
 static int discover_source(struct bt_conn *conn);
 #endif /* CONFIG_STREAM_BIDIRECTIONAL */
+
+/**
+ * @brief  Get the common presentation delay for all headsets.
+ *
+ * @param  index        The index of the headset to test against
+ * @param  pres_dly_us  A pointer where the presentation delay is stored
+ *
+ * @return 0 if successful, -EINVAL on an error
+ */
+static int headset_pres_delay_find(uint8_t index, uint32_t *pres_dly_us)
+{
+	uint32_t pres_dly_min = headsets[index].sink_ep->qos_pref.pd_min;
+	uint32_t pres_dly_max = headsets[index].sink_ep->qos_pref.pd_max;
+	uint32_t pref_dly_min = headsets[index].sink_ep->qos_pref.pref_pd_min;
+	uint32_t pref_dly_max = headsets[index].sink_ep->qos_pref.pref_pd_max;
+
+	for (int i = 0; i < ARRAY_SIZE(headsets); i++) {
+		if (headsets[i].sink_ep != NULL) {
+			pres_dly_min = MAX(pres_dly_min, headsets[i].sink_ep->qos_pref.pd_min);
+			pres_dly_max = MIN(pres_dly_max, headsets[i].sink_ep->qos_pref.pd_max);
+			pref_dly_min = MAX(pref_dly_min, headsets[i].sink_ep->qos_pref.pref_pd_min);
+			pref_dly_max = MIN(pref_dly_max, headsets[i].sink_ep->qos_pref.pref_pd_max);
+		}
+	}
+
+	if (IS_ENABLED(CONFIG_BT_AUDIO_PRES_DELAY_SRCH_MIN)) {
+		*pres_dly_us = pres_dly_min;
+
+		return 0;
+	}
+
+	if (IS_ENABLED(CONFIG_BT_AUDIO_PRES_DELAY_SRCH_MAX)) {
+		*pres_dly_us = pres_dly_max;
+
+		return 0;
+	}
+
+	if (IS_ENABLED(CONFIG_BT_AUDIO_PRES_DELAY_SRCH_PREF_MIN)) {
+		*pres_dly_us = pref_dly_min;
+
+		return 0;
+	}
+
+	if (IS_ENABLED(CONFIG_BT_AUDIO_PRES_DELAY_SRCH_PREF_MAX)) {
+		*pres_dly_us = pref_dly_max;
+
+		return 0;
+	}
+
+	if (IS_ENABLED(CONFIG_BT_AUDIO_PRES_DELAY_SRCH_PREF_MIN)) {
+		if (IN_RANGE(CONFIG_BT_AUDIO_PRESENTATION_DELAY_US, pres_dly_min, pres_dly_max)) {
+			*pres_dly_us = CONFIG_BT_AUDIO_PRESENTATION_DELAY_US;
+		} else {
+			LOG_WRN("Preferred local presentaion delay outside of range");
+
+			if (pres_dly_max < CONFIG_BT_AUDIO_PRESENTATION_DELAY_US) {
+				*pres_dly_us = pres_dly_max;
+
+				LOG_WRN("Selecting maximum common delay: %d us ", pres_dly_max);
+			} else {
+				*pres_dly_us = pres_dly_min;
+
+				LOG_WRN("Selecting minimum common delay: %d us ", pres_dly_min);
+			}
+		}
+
+		return 0;
+	}
+
+	LOG_ERR("Trying to use unrecognised search mode");
+	return -EINVAL;
+}
 
 /**
  * @brief  Check if an endpoint is in the given state
@@ -173,6 +247,46 @@ static uint32_t get_and_incr_seq_num(const struct bt_audio_stream *stream)
 	return 0;
 }
 
+static int update_sink_stream_qos(struct le_audio_headset *headset, uint32_t pres_delay_us)
+{
+	int ret;
+
+	if (headset->sink_stream.qos == NULL) {
+		LOG_WRN("No QoS found for %p", &headset->sink_stream);
+		return -ENXIO;
+	}
+
+	if (headset->sink_stream.qos->pd != pres_delay_us) {
+		if (playing_state) {
+			LOG_DBG("Update streaming %s headset, connection %p, stream %p",
+				headset->ch_name, &headset->headset_conn, &headset->sink_stream);
+
+			headset->qos_reconfigure = true;
+			headset->reconfigure_pd = pres_delay_us;
+
+			ret = bt_audio_stream_disable(&headset->sink_stream);
+			if (ret) {
+				LOG_ERR("Unable to disable stream: %d", ret);
+				return ret;
+			}
+		} else {
+			LOG_DBG("Reset %s headset, connection %p, stream %p", headset->ch_name,
+				&headset->headset_conn, &headset->sink_stream);
+
+			headset->sink_stream.qos->pd = pres_delay_us;
+
+			ret = bt_audio_stream_qos(headset->headset_conn, unicast_group);
+			if (ret) {
+				LOG_ERR("Unable to configure %s headset: %d", headset->ch_name,
+					ret);
+				return ret;
+			}
+		}
+	}
+
+	return 0;
+}
+
 static void unicast_client_location_cb(struct bt_conn *conn, enum bt_audio_dir dir,
 				       enum bt_audio_location loc)
 {
@@ -209,7 +323,7 @@ static void available_contexts_cb(struct bt_conn *conn, enum bt_audio_context sn
 	LOG_DBG("conn: %s, snk ctx %d src ctx %d\n", addr, snk_ctx, src_ctx);
 }
 
-const struct bt_audio_unicast_client_cb unicast_client_cbs = {
+static const struct bt_audio_unicast_client_cb unicast_client_cbs = {
 	.location = unicast_client_location_cb,
 	.available_contexts = available_contexts_cb,
 };
@@ -232,6 +346,7 @@ static void stream_configured_cb(struct bt_audio_stream *stream,
 {
 	int ret;
 	uint8_t channel_index;
+	uint32_t new_pres_dly_us;
 
 	ret = channel_index_get(stream->conn, &channel_index);
 	if (ret) {
@@ -248,6 +363,12 @@ static void stream_configured_cb(struct bt_audio_stream *stream,
 		return;
 	}
 
+	ret = headset_pres_delay_find(channel_index, &new_pres_dly_us);
+	if (ret) {
+		LOG_ERR("Cannot get a valid presentation delay");
+		return;
+	}
+
 #if CONFIG_STREAM_BIDIRECTIONAL
 	if (ep_state_check(headsets[channel_index].sink_stream.ep,
 			   BT_AUDIO_EP_STATE_CODEC_CONFIGURED) &&
@@ -255,9 +376,26 @@ static void stream_configured_cb(struct bt_audio_stream *stream,
 			   BT_AUDIO_EP_STATE_CODEC_CONFIGURED))
 #endif /* CONFIG_STREAM_BIDIRECTIONAL */
 	{
+		for (int i = 0; i < ARRAY_SIZE(headsets); i++) {
+			if (i != channel_index && headsets[i].headset_conn != NULL) {
+				ret = update_sink_stream_qos(&headsets[i], new_pres_dly_us);
+				if (ret) {
+					LOG_ERR("Presentation delay not set for %s headset: %d",
+						headsets[channel_index].ch_name, ret);
+				}
+			}
+		}
+
+		LOG_DBG("Set %s headset, connection %p, stream %p", headsets[channel_index].ch_name,
+			&headsets[channel_index].headset_conn,
+			&headsets[channel_index].sink_stream);
+
+		headsets[channel_index].sink_stream.qos->pd = new_pres_dly_us;
+
 		ret = bt_audio_stream_qos(headsets[channel_index].headset_conn, unicast_group);
 		if (ret) {
-			LOG_ERR("Unable to set up QoS for headset %d: %d", channel_index, ret);
+			LOG_ERR("QoS not set for %s headset: %d", headsets[channel_index].ch_name,
+				ret);
 		}
 	}
 }
@@ -265,14 +403,35 @@ static void stream_configured_cb(struct bt_audio_stream *stream,
 static void stream_qos_set_cb(struct bt_audio_stream *stream)
 {
 	int ret;
+	uint8_t channel_index;
 
-	LOG_DBG("Stream QOS set: %p", stream);
+	ret = channel_index_get(stream->conn, &channel_index);
 
-	if (playing_state) {
-		ret = bt_audio_stream_enable(stream, lc3_preset_sink.codec.meta,
-					     lc3_preset_sink.codec.meta_count);
+	if (headsets[channel_index].qos_reconfigure) {
+		LOG_DBG("Reconfiguring: %s to PD: %d", headsets[channel_index].ch_name,
+			headsets[channel_index].reconfigure_pd);
+
+		headsets[channel_index].qos_reconfigure = false;
+		headsets[channel_index].sink_stream.qos->pd =
+			headsets[channel_index].reconfigure_pd;
+
+		ret = bt_audio_stream_qos(headsets[channel_index].headset_conn, unicast_group);
 		if (ret) {
-			LOG_ERR("Unable to enable stream: %d", ret);
+			LOG_ERR("Unable to reconfigure %s: %d", headsets[channel_index].ch_name,
+				ret);
+		}
+	} else {
+		LOG_DBG("Set %s to PD: %d", headsets[channel_index].ch_name, stream->qos->pd);
+
+		if (playing_state) {
+			ret = bt_audio_stream_enable(stream, lc3_preset_sink.codec.meta,
+						     lc3_preset_sink.codec.meta_count);
+			if (ret) {
+				LOG_ERR("Unable to enable stream: %d", ret);
+				return;
+			}
+
+			LOG_INF("Enable stream %p", stream);
 		}
 	}
 }
@@ -397,6 +556,7 @@ static void stream_recv_cb(struct bt_audio_stream *stream, const struct bt_iso_r
 	int ret;
 	bool bad_frame = false;
 	uint8_t channel_index;
+	static uint32_t data_size_mismatch_cnt;
 
 	if (receive_cb == NULL) {
 		LOG_ERR("The RX callback has not been set");
@@ -410,6 +570,18 @@ static void stream_recv_cb(struct bt_audio_stream *stream, const struct bt_iso_r
 	ret = channel_index_get(stream->conn, &channel_index);
 	if (ret) {
 		LOG_ERR("Channel index not found");
+		return;
+	}
+
+	uint32_t octets_per_frame = bt_codec_cfg_get_octets_per_frame(stream->codec);
+
+	if (buf->len != octets_per_frame) {
+		data_size_mismatch_cnt++;
+		if ((data_size_mismatch_cnt % 500) == 1) {
+			LOG_DBG("Data size mismatch, received: %d, codec: %d, total: %d", buf->len,
+				octets_per_frame, data_size_mismatch_cnt);
+		}
+
 		return;
 	}
 
@@ -1129,7 +1301,7 @@ static int iso_stream_send(uint8_t const *const data, size_t size, struct le_aud
 	return 0;
 }
 
-static int initialize(le_audio_receive_cb recv_cb)
+static int initialize(le_audio_receive_cb recv_cb, le_audio_timestamp_cb timestmp_cb)
 {
 	int ret;
 	static bool initialized;
@@ -1144,6 +1316,19 @@ static int initialize(le_audio_receive_cb recv_cb)
 		LOG_WRN("Already initialized");
 		return -EALREADY;
 	}
+
+	if (recv_cb == NULL) {
+		LOG_ERR("Receieve callback is NULL");
+		return -EINVAL;
+	}
+
+	if (timestmp_cb == NULL) {
+		LOG_ERR("Timestamp callback is NULL");
+		return -EINVAL;
+	}
+
+	receive_cb = recv_cb;
+	timestamp_cb = timestmp_cb;
 
 	for (int i = 0; i < ARRAY_SIZE(headsets); i++) {
 		headsets[i].sink_stream.ops = &stream_ops;
@@ -1228,8 +1413,6 @@ static int initialize(le_audio_receive_cb recv_cb)
 	}
 #endif /* CONFIG_BT_MCS */
 
-	receive_cb = recv_cb;
-
 	bt_conn_cb_register(&conn_callbacks);
 
 	initialized = true;
@@ -1242,9 +1425,10 @@ int le_audio_user_defined_button_press(enum le_audio_user_defined_action action)
 	return 0;
 }
 
-int le_audio_config_get(uint32_t *bitrate, uint32_t *sampling_rate)
+int le_audio_config_get(uint32_t *bitrate, uint32_t *sampling_rate, uint32_t *pres_delay)
 {
-	return 0;
+	LOG_WRN("Getting config from gateway is not yet supported");
+	return -ENOTSUP;
 }
 
 int le_audio_volume_up(void)
@@ -1338,10 +1522,9 @@ int le_audio_send(struct encoded_audio enc_audio)
 	}
 
 	if (tx_info.ts != 0 && !ret) {
-#if ((CONFIG_AUDIO_SOURCE_I2S) && !(CONFIG_STREAM_BIDIRECTIONAL))
-		audio_datapath_sdu_ref_update(tx_info.ts);
-#endif /* ((CONFIG_AUDIO_SOURCE_I2S) && !(CONFIG_STREAM_BIDIRECTIONAL)) */
-		audio_datapath_just_in_time_check_and_adjust(tx_info.ts);
+		if (!IS_ENABLED(CONFIG_STREAM_BIDIRECTIONAL)) {
+			timestamp_cb(tx_info.ts, true);
+		}
 	}
 
 	ret = iso_stream_send(enc_audio.data, data_size_pr_stream, headsets[AUDIO_CH_L]);
@@ -1362,11 +1545,11 @@ int le_audio_send(struct encoded_audio enc_audio)
 	return 0;
 }
 
-int le_audio_enable(le_audio_receive_cb recv_cb)
+int le_audio_enable(le_audio_receive_cb recv_cb, le_audio_timestamp_cb timestmp_cb)
 {
 	int ret;
 
-	ret = initialize(recv_cb);
+	ret = initialize(recv_cb, timestmp_cb);
 	if (ret) {
 		return ret;
 	}

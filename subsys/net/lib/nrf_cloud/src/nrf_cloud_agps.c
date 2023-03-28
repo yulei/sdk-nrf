@@ -9,6 +9,7 @@
 #include <nrf_modem_gnss.h>
 #include <cJSON.h>
 #include <modem/modem_info.h>
+#include <net/nrf_cloud_defs.h>
 #include <net/nrf_cloud_agps.h>
 #if defined(CONFIG_NRF_CLOUD_PGPS)
 #include <net/nrf_cloud_pgps.h>
@@ -18,11 +19,9 @@
 
 LOG_MODULE_REGISTER(nrf_cloud_agps, CONFIG_NRF_CLOUD_GPS_LOG_LEVEL);
 
-#include "nrf_cloud_codec.h"
+#include "nrf_cloud_codec_internal.h"
 #include "nrf_cloud_transport.h"
 #include "nrf_cloud_agps_schema_v1.h"
-
-#define AGPS_JSON_TYPES_KEY		"types"
 
 extern void agps_print(enum nrf_cloud_agps_type type, void *data);
 
@@ -67,7 +66,7 @@ static int json_add_types_array(cJSON * const obj, enum nrf_cloud_agps_type *typ
 		return -EINVAL;
 	}
 
-	array = cJSON_AddArrayToObject(obj, AGPS_JSON_TYPES_KEY);
+	array = cJSON_AddArrayToObject(obj, NRF_CLOUD_JSON_KEY_AGPS_TYPES);
 	if (!array) {
 		return -ENOMEM;
 	}
@@ -77,7 +76,7 @@ static int json_add_types_array(cJSON * const obj, enum nrf_cloud_agps_type *typ
 	}
 
 	if (cJSON_GetArraySize(array) != type_count) {
-		cJSON_DeleteItemFromObject(obj, AGPS_JSON_TYPES_KEY);
+		cJSON_DeleteItemFromObject(obj, NRF_CLOUD_JSON_KEY_AGPS_TYPES);
 		return -ENOMEM;
 	}
 
@@ -179,7 +178,7 @@ int nrf_cloud_agps_request(const struct nrf_modem_gnss_agps_data_frame *request)
 	cJSON *mask;
 
 	mask = cJSON_AddNumberToObjectCS(data_obj,
-					 NRF_CLOUD_JSON_ELEVATION_MASK_KEY,
+					 NRF_CLOUD_JSON_KEY_ELEVATION_MASK,
 					 CONFIG_NRF_CLOUD_AGPS_ELEVATION_MASK);
 	if (!mask) {
 		err = -ENOMEM;
@@ -190,7 +189,7 @@ int nrf_cloud_agps_request(const struct nrf_modem_gnss_agps_data_frame *request)
 #endif
 
 	/* Add modem info and A-GPS types to the data object */
-	err = nrf_cloud_json_add_modem_info(data_obj);
+	err = nrf_cloud_network_info_json_encode(data_obj);
 	if (err) {
 		LOG_ERR("Failed to add modem info to A-GPS request: %d", err);
 		goto cleanup;
@@ -227,6 +226,7 @@ int nrf_cloud_agps_request_all(void)
 		.data_flags =
 			NRF_MODEM_GNSS_AGPS_GPS_UTC_REQUEST |
 			NRF_MODEM_GNSS_AGPS_KLOBUCHAR_REQUEST |
+			NRF_MODEM_GNSS_AGPS_NEQUICK_REQUEST |
 			NRF_MODEM_GNSS_AGPS_SYS_TIME_AND_SV_TOW_REQUEST |
 			NRF_MODEM_GNSS_AGPS_POSITION_REQUEST |
 			NRF_MODEM_GNSS_AGPS_INTEGRITY_REQUEST
@@ -344,6 +344,22 @@ static int copy_klobuchar(struct nrf_modem_gnss_agps_data_klobuchar *dst,
 	return 0;
 }
 
+static int copy_nequick(struct nrf_modem_gnss_agps_data_nequick *dst,
+			struct nrf_cloud_apgs_element *src)
+{
+	if ((src == NULL) || (dst == NULL)) {
+		return -EINVAL;
+	}
+
+	dst->ai0 = src->ion_correction.nequick->ai0;
+	dst->ai1 = src->ion_correction.nequick->ai1;
+	dst->ai2 = src->ion_correction.nequick->ai2;
+	dst->storm_cond = src->ion_correction.nequick->storm_cond;
+	dst->storm_valid = src->ion_correction.nequick->storm_valid;
+
+	return 0;
+}
+
 static int copy_location(struct nrf_modem_gnss_agps_data_location *dst,
 			 struct nrf_cloud_apgs_element *src)
 {
@@ -448,6 +464,16 @@ static int agps_send_to_modem(struct nrf_cloud_apgs_element *agps_data)
 		return send_to_modem(&klobuchar, sizeof(klobuchar),
 				     NRF_MODEM_GNSS_AGPS_KLOBUCHAR_IONOSPHERIC_CORRECTION);
 	}
+	case NRF_CLOUD_AGPS_NEQUICK_CORRECTION: {
+		struct nrf_modem_gnss_agps_data_nequick nequick;
+
+		processed.data_flags |= NRF_MODEM_GNSS_AGPS_NEQUICK_REQUEST;
+		copy_nequick(&nequick, agps_data);
+		LOG_DBG("A-GPS type: NRF_CLOUD_AGPS_NEQUICK_CORRECTION");
+
+		return send_to_modem(&nequick, sizeof(nequick),
+				     NRF_MODEM_GNSS_AGPS_NEQUICK_IONOSPHERIC_CORRECTION);
+	}
 	case NRF_CLOUD_AGPS_GPS_SYSTEM_CLOCK: {
 		struct nrf_modem_gnss_agps_data_system_time_and_sv_tow time_and_tow;
 
@@ -488,7 +514,8 @@ static int agps_send_to_modem(struct nrf_cloud_apgs_element *agps_data)
 }
 
 static size_t get_next_agps_element(struct nrf_cloud_apgs_element *element,
-				    const char *buf)
+				    const char *buf,
+				    size_t buf_len)
 {
 	static uint16_t elements_left_to_process;
 	static enum nrf_cloud_agps_type element_type;
@@ -499,6 +526,12 @@ static size_t get_next_agps_element(struct nrf_cloud_apgs_element *element,
 	 * each element.
 	 */
 	if (elements_left_to_process == 0) {
+		/* Check that there's enough data for type and count. */
+		if (buf_len < NRF_CLOUD_AGPS_BIN_TYPE_SIZE + NRF_CLOUD_AGPS_BIN_COUNT_SIZE) {
+			LOG_ERR("Unexpected end of data");
+			return 0;
+		}
+
 		element->type =
 			(enum nrf_cloud_agps_type)buf[NRF_CLOUD_AGPS_BIN_TYPE_OFFSET];
 		element_type = element->type;
@@ -529,6 +562,11 @@ static size_t get_next_agps_element(struct nrf_cloud_apgs_element *element,
 			(struct nrf_cloud_agps_klobuchar *)(buf + len);
 		len += sizeof(struct nrf_cloud_agps_klobuchar);
 		break;
+	case NRF_CLOUD_AGPS_NEQUICK_CORRECTION:
+		element->ion_correction.nequick =
+			(struct nrf_cloud_agps_nequick *)(buf + len);
+		len += sizeof(struct nrf_cloud_agps_nequick);
+		break;
 	case NRF_CLOUD_AGPS_GPS_SYSTEM_CLOCK:
 		element->time_and_tow =
 			(struct nrf_cloud_agps_system_time *)(buf + len);
@@ -551,6 +589,14 @@ static size_t get_next_agps_element(struct nrf_cloud_apgs_element *element,
 		break;
 	default:
 		LOG_DBG("Unhandled A-GPS data type: %d", element->type);
+		elements_left_to_process = 0;
+		return 0;
+	}
+
+	/* Check that there's enough data for the element. */
+	if (buf_len < len) {
+		LOG_ERR("Unexpected end of data");
+		elements_left_to_process = 0;
 		return 0;
 	}
 
@@ -576,7 +622,7 @@ int nrf_cloud_agps_process(const char *buf, size_t buf_len)
 	/* Check for a potential A-GPS JSON error message from nRF Cloud */
 	enum nrf_cloud_error nrf_err;
 
-	err = nrf_cloud_handle_error_message(buf, NRF_CLOUD_JSON_APPID_VAL_AGPS,
+	err = nrf_cloud_error_msg_decode(buf, NRF_CLOUD_JSON_APPID_VAL_AGPS,
 		NRF_CLOUD_JSON_MSG_TYPE_VAL_DATA, &nrf_err);
 	if (!err) {
 		LOG_ERR("nRF Cloud returned A-GPS error: %d", nrf_err);
@@ -608,7 +654,7 @@ int nrf_cloud_agps_process(const char *buf, size_t buf_len)
 
 	while (parsed_len < buf_len) {
 		size_t element_size =
-			get_next_agps_element(&element, &buf[parsed_len]);
+			get_next_agps_element(&element, &buf[parsed_len], buf_len - parsed_len);
 
 		if (element_size == 0) {
 			LOG_DBG("Parsing finished\n");

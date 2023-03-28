@@ -41,6 +41,8 @@ void wifi_nrf_if_rx_frm(void *os_vif_ctx, void *frm)
 	struct wifi_nrf_fmac_dev_ctx *fmac_dev_ctx = rpu_ctx_zep->rpu_ctx;
 	struct rpu_host_stats *host_stats = &fmac_dev_ctx->host_stats;
 
+	host_stats->total_rx_pkts++;
+
 	pkt = net_pkt_from_nbuf(iface, frm);
 	if (!pkt) {
 		LOG_DBG("Failed to allocate net_pkt");
@@ -102,7 +104,14 @@ static bool is_eapol(struct net_pkt *pkt)
 
 enum ethernet_hw_caps wifi_nrf_if_caps_get(const struct device *dev)
 {
-	return (ETHERNET_LINK_10BASE_T | ETHERNET_LINK_100BASE_T | ETHERNET_LINK_1000BASE_T);
+	enum ethernet_hw_caps caps = (ETHERNET_LINK_10BASE_T |
+			ETHERNET_LINK_100BASE_T | ETHERNET_LINK_1000BASE_T);
+
+#ifdef CONFIG_NRF700X_TCP_IP_CHECKSUM_OFFLOAD
+	caps |= ETHERNET_HW_TX_CHKSUM_OFFLOAD |
+		ETHERNET_HW_RX_CHKSUM_OFFLOAD;
+#endif /* CONFIG_NRF700X_TCP_IP_CHECKSUM_OFFLOAD */
+	return caps;
 }
 
 int wifi_nrf_if_send(const struct device *dev,
@@ -624,7 +633,8 @@ int wifi_nrf_stats_get(const struct device *dev, struct net_stats_wifi *zstats)
 	zstats->pkts.tx = stats.host.total_tx_pkts;
 	zstats->pkts.rx = stats.host.total_rx_pkts;
 	zstats->errors.tx = stats.host.total_tx_drop_pkts;
-	zstats->errors.rx = stats.host.total_rx_drop_pkts;
+	zstats->errors.rx = stats.host.total_rx_drop_pkts +
+			stats.fw.umac.interface_data_stats.rx_checksum_error_count;
 	zstats->bytes.received = stats.fw.umac.interface_data_stats.rx_bytes;
 	zstats->bytes.sent = stats.fw.umac.interface_data_stats.tx_bytes;
 	zstats->sta_mgmt.beacons_rx = stats.fw.umac.interface_data_stats.rx_beacon_success_count;

@@ -22,7 +22,7 @@
 #include <cJSON.h>
 
 #include "nrf_cloud_mem.h"
-#include "nrf_cloud_codec.h"
+#include "nrf_cloud_codec_internal.h"
 
 LOG_MODULE_REGISTER(nrf_cloud_rest, CONFIG_NRF_CLOUD_REST_LOG_LEVEL);
 
@@ -264,7 +264,7 @@ static int do_rest_client_request(struct nrf_cloud_rest_context *const rest_ctx,
 	rest_ctx->nrf_err = NRF_CLOUD_ERROR_NONE;
 	if ((ret == 0) && (rest_ctx->status >= NRF_CLOUD_HTTP_STATUS__ERROR_BEGIN) &&
 	    rest_ctx->response && rest_ctx->response_len) {
-		(void)nrf_cloud_parse_rest_error(rest_ctx->response, &rest_ctx->nrf_err);
+		(void)nrf_cloud_rest_error_decode(rest_ctx->response, &rest_ctx->nrf_err);
 
 		if ((rest_ctx->nrf_err != NRF_CLOUD_ERROR_NONE) &&
 		    (rest_ctx->nrf_err != NRF_CLOUD_ERROR_NOT_FOUND_NO_ERROR)) {
@@ -368,7 +368,7 @@ int nrf_cloud_rest_shadow_device_status_update(struct nrf_cloud_rest_context *co
 
 	(void)nrf_cloud_codec_init(NULL);
 
-	ret = nrf_cloud_device_status_shadow_encode(dev_status, &data_out, false);
+	ret = nrf_cloud_shadow_dev_status_encode(dev_status, &data_out, false);
 	if (ret) {
 		LOG_ERR("Failed to encode device status, error: %d", ret);
 		return ret;
@@ -571,7 +571,7 @@ int nrf_cloud_rest_fota_job_get(struct nrf_cloud_rest_context *const rest_ctx,
 	job->type = NRF_CLOUD_FOTA_TYPE__INVALID;
 
 	if (rest_ctx->status == NRF_CLOUD_HTTP_STATUS_OK) {
-		ret = nrf_cloud_rest_fota_execution_parse(rest_ctx->response, job);
+		ret = nrf_cloud_rest_fota_execution_decode(rest_ctx->response, job);
 		if (ret) {
 			LOG_ERR("Failed to parse job execution response, error: %d", ret);
 		}
@@ -631,7 +631,7 @@ int nrf_cloud_rest_location_get(struct nrf_cloud_rest_context *const rest_ctx,
 	req.header_fields = (const char **)headers;
 
 	/* Get payload */
-	ret = nrf_cloud_format_location_req(request->cell_info, request->wifi_info, &payload);
+	ret = nrf_cloud_location_req_json_encode(request->cell_info, request->wifi_info, &payload);
 	if (ret) {
 		LOG_ERR("Failed to generate location request, err: %d", ret);
 		goto clean_up;
@@ -647,7 +647,7 @@ int nrf_cloud_rest_location_get(struct nrf_cloud_rest_context *const rest_ctx,
 	}
 
 	if (result) {
-		ret = nrf_cloud_parse_location_response(rest_ctx->response, result);
+		ret = nrf_cloud_location_response_decode(rest_ctx->response, result);
 		if (ret != 0) {
 			if (ret > 0) {
 				ret = -EBADMSG;
@@ -1457,7 +1457,7 @@ int nrf_cloud_rest_device_status_message_send(struct nrf_cloud_rest_context *con
 		goto clean_up;
 	}
 
-	err = nrf_cloud_device_status_msg_encode(dev_status, timestamp_ms, msg_obj);
+	err = nrf_cloud_dev_status_json_encode(dev_status, timestamp_ms, msg_obj);
 	if (err) {
 		goto clean_up;
 	}

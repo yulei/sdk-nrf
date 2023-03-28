@@ -11,7 +11,7 @@
 #include <net/nrf_cloud_location.h>
 
 #include "nrf_cloud_fsm.h"
-#include "nrf_cloud_codec.h"
+#include "nrf_cloud_codec_internal.h"
 #include "nrf_cloud_transport.h"
 
 LOG_MODULE_REGISTER(nrf_cloud_location, CONFIG_NRF_CLOUD_LOG_LEVEL);
@@ -67,7 +67,7 @@ int nrf_cloud_location_request_json_get(const struct lte_lc_cells_info *const ce
 	}
 
 	if (cells_inf) {
-		err = nrf_cloud_format_cell_pos_req_json(cells_inf, data_obj);
+		err = nrf_cloud_cell_pos_req_json_encode(cells_inf, data_obj);
 		if (err) {
 			LOG_ERR("Failed to add cell info to location request, error: %d", err);
 			goto cleanup;
@@ -75,7 +75,7 @@ int nrf_cloud_location_request_json_get(const struct lte_lc_cells_info *const ce
 	}
 
 	if (wifi_inf) {
-		err = nrf_cloud_format_wifi_req_json(wifi_inf, data_obj);
+		err = nrf_cloud_wifi_req_json_encode(wifi_inf, data_obj);
 		if (err) {
 			LOG_ERR("Failed to add WiFi info to location request, error: %d", err);
 			goto cleanup;
@@ -104,7 +104,7 @@ int nrf_cloud_location_process(const char *buf, struct nrf_cloud_location_result
 		return -EINVAL;
 	}
 
-	err = nrf_cloud_parse_location_response(buf, result);
+	err = nrf_cloud_location_response_decode(buf, result);
 	if (err == -EFAULT) {
 		LOG_ERR("nRF Cloud location error: %d", result->err);
 	} else if (err < 0) {

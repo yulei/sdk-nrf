@@ -25,6 +25,9 @@
     - sample.matter.lock.release
     - sample.matter.lock.smp_dfu
     - sample.matter.lock.no_dfu
+    - sample.matter.lock.release.ffs
+    - sample.matter.lock.debug.ffs
+    - sample.matter.lock.release.smp_dfu_ffs
     - sample.matter.light_bulb.debug
     - sample.matter.light_bulb.release
     - sample.matter.light_bulb.smp_dfu
@@ -45,3 +48,10 @@
   platforms:
     - all
   comment: "Disable building selected Matter samples to limit resources usage"
+
+- scenarios:
+    - applications.asset_tracker_v2.nrf7002ek_wifi-debug
+    - applications.asset_tracker_v2.nrf7002ek_wifi-release
+  platforms:
+    - all
+  comment: "Temporary disable till the issue is fixed"

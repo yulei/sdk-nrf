@@ -55,6 +55,10 @@ if(CONFIG_CHIP_OTA_REQUESTOR OR CONFIG_MCUMGR_SMP_BT)
     target_sources(app PRIVATE ${COMMON_ROOT}/src/ota_util.cpp)
 endif()
 
+if(CONFIG_CHIP_NUS)
+    target_sources(app PRIVATE ${COMMON_ROOT}/src/bt_nus_service.cpp)
+endif()
+
 if(CONFIG_MCUMGR_SMP_BT)
     target_sources(app PRIVATE ${COMMON_ROOT}/src/dfu_over_smp.cpp)
 endif()
@@ -70,6 +74,7 @@ endif()
 chip_configure_data_model(app
     INCLUDE_SERVER
     BYPASS_IDL
+    GEN_DIR src/zap-generated
     ZAP_FILE ${CMAKE_CURRENT_SOURCE_DIR}/src/lock.zap
 )
 

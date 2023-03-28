@@ -5,7 +5,7 @@
  */
 
 #include "nrf_cloud_fsm.h"
-#include "nrf_cloud_codec.h"
+#include "nrf_cloud_codec_internal.h"
 #include "nrf_cloud_mem.h"
 #include <zephyr/kernel.h>
 #include <net/nrf_cloud_alerts.h>
@@ -164,9 +164,9 @@ static int state_ua_pin_wait(void)
 	};
 
 	/* Publish report to the cloud on current status. */
-	err = nrf_cloud_encode_state(STATE_UA_PIN_WAIT, false, &msg.data);
+	err = nrf_cloud_state_encode(STATE_UA_PIN_WAIT, false, &msg.data);
 	if (err) {
-		LOG_ERR("nrf_cloud_encode_state failed %d", err);
+		LOG_ERR("nrf_cloud_state_encode failed %d", err);
 		return err;
 	}
 
@@ -205,10 +205,10 @@ static int handle_device_config_update(const struct nct_evt *const evt,
 		return -ENOENT;
 	}
 
-	err = nrf_cloud_encode_config_response(&evt->param.cc->data, &msg.data,
+	err = nrf_cloud_shadow_config_response_encode(&evt->param.cc->data, &msg.data,
 					       config_found);
 	if ((err) && (err != -ESRCH)) {
-		LOG_ERR("nrf_cloud_encode_config_response failed %d", err);
+		LOG_ERR("nrf_cloud_shadow_config_response_encode failed %d", err);
 		return err;
 	}
 
@@ -265,7 +265,7 @@ static int handle_device_control_update(const struct nct_evt *const evt,
 #endif /* CONFIG_NRF_CLOUD_ALERTS */
 	ctrl_data.log_level = nrf_cloud_log_control_get();
 
-	err = nrf_cloud_decode_control(&evt->param.cc->data, &status, &ctrl_data);
+	err = nrf_cloud_shadow_control_decode(&evt->param.cc->data, &status, &ctrl_data);
 	if (err) {
 		return (err == -ESRCH) ? 0 : err;
 	}
@@ -285,9 +285,9 @@ static int handle_device_control_update(const struct nct_evt *const evt,
 			.message_id = NCT_MSG_ID_STATE_REPORT,
 		};
 
-		err = nrf_cloud_encode_control_response(&ctrl_data, &msg.data);
+		err = nrf_cloud_shadow_control_response_encode(&ctrl_data, &msg.data);
 		if (err) {
-			LOG_ERR("nrf_cloud_encode_control_response failed %d", err);
+			LOG_ERR("nrf_cloud_shadow_control_response_encode failed %d", err);
 			return err;
 		}
 
@@ -312,9 +312,9 @@ static int state_ua_pin_complete(void)
 		.message_id = NCT_MSG_ID_PAIR_STATUS_REPORT,
 	};
 
-	err = nrf_cloud_encode_state(STATE_UA_PIN_COMPLETE, c2d_topic_modified, &msg.data);
+	err = nrf_cloud_state_encode(STATE_UA_PIN_COMPLETE, c2d_topic_modified, &msg.data);
 	if (err) {
-		LOG_ERR("nrf_cloud_encode_state failed %d", err);
+		LOG_ERR("nrf_cloud_state_encode failed %d", err);
 		return err;
 	}
 
@@ -452,9 +452,9 @@ static int handle_pin_complete(const struct nct_evt *nct_evt)
 	struct nrf_cloud_data bulk;
 	struct nrf_cloud_data endpoint;
 
-	err = nrf_cloud_decode_data_endpoint(payload, &tx, &rx, &bulk, &endpoint);
+	err = nrf_cloud_data_endpoint_decode(payload, &tx, &rx, &bulk, &endpoint);
 	if (err) {
-		LOG_ERR("nrf_cloud_decode_data_endpoint failed %d", err);
+		LOG_ERR("nrf_cloud_data_endpoint_decode failed %d", err);
 		return err;
 	}
 
@@ -476,7 +476,7 @@ static int cc_rx_data_handler(const struct nct_evt *nct_evt)
 	bool control_found = false;
 	const enum nfsm_state current_state = nfsm_get_current_state();
 
-	LOG_INF("CC RX on topic %s: %s",
+	LOG_DBG("CC RX on topic %s: %s",
 		(const char *)nct_evt->param.cc->topic.ptr,
 		(const char *)nct_evt->param.cc->data.ptr);
 	handle_device_config_update(nct_evt, &config_found);
@@ -495,12 +495,12 @@ static int cc_rx_data_handler(const struct nct_evt *nct_evt)
 		nfsm_set_current_state_and_notify(current_state, &cloud_evt);
 	}
 
-	err = nrf_cloud_decode_requested_state(payload, &new_state);
+	err = nrf_cloud_requested_state_decode(payload, &new_state);
 
 	if (err) {
 #ifndef CONFIG_NRF_CLOUD_GATEWAY
 		if (!config_found && !control_found) {
-			LOG_ERR("nrf_cloud_decode_requested_state Failed %d",
+			LOG_ERR("nrf_cloud_requested_state_decode Failed %d",
 				err);
 			return err;
 		}
@@ -710,7 +710,7 @@ static int dc_rx_data_handler(const struct nct_evt *nct_evt)
 		.topic = nct_evt->param.dc->topic,
 	};
 
-	switch (nrf_cloud_decode_dc_rx_topic(cloud_evt.topic.ptr)) {
+	switch (nrf_cloud_dc_rx_topic_decode(cloud_evt.topic.ptr)) {
 	case NRF_CLOUD_RCV_TOPIC_AGPS:
 		agps_process(cloud_evt.data.ptr, cloud_evt.data.len);
 		return 0;
@@ -731,7 +731,7 @@ static int dc_rx_data_handler(const struct nct_evt *nct_evt)
 	case NRF_CLOUD_RCV_TOPIC_GENERAL:
 	default:
 		cloud_evt.type = NRF_CLOUD_EVT_RX_DATA_GENERAL;
-		discon_req = nrf_cloud_detect_disconnection_request(cloud_evt.data.ptr);
+		discon_req = nrf_cloud_disconnection_request_decode(cloud_evt.data.ptr);
 		break;
 	}
 
