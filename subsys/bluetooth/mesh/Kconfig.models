@@ -31,18 +31,6 @@ config BT_MESH_MOD_ACKD_TIMEOUT_PER_HOP
 
 endmenu
 
-if BT_SETTINGS
-
-config BT_MESH_MODEL_SRV_STORE_TIMEOUT
-	int "Delay (in seconds) before storing changes to mesh model servers"
-	range 0 1000000
-	default 0
-	help
-	  Time to wait before storing changes to the mesh model servers.
-	  Effectively the minimum interval of changes.
-
-endif
-
 rsource "vnd/Kconfig"
 
 config BT_MESH_ONOFF_SRV
@@ -301,6 +289,18 @@ config BT_MESH_LIGHT_CTRL_REG_SPEC_INTERVAL
 	  Update interval of the specification-defined illuminance regulator (in milliseconds).
 
 endif #BT_MESH_LIGHT_CTRL_REG_SPEC
+
+config BT_MESH_LIGHT_CTRL_AMB_LIGHT_LEVEL_TIMEOUT
+	int "Ambient light level report timeout (seconds)"
+	default 300
+	range 0 16777
+	help
+	  Defines time in seconds the Light Lightness Control Server waits after receiving the
+	  Sensor Status message with the present ambient light level property ID before setting
+	  the ambient light level to zero and passing it to the regulator. This option helps
+	  avoiding an issue with the regulator getting stuck with an old output value, and not
+	  triggering new report from the sensor. When set to zero, the timeout is disabled.
+
 endif #BT_MESH_LIGHT_CTRL_REG
 
 menuconfig BT_MESH_LIGHT_CTRL_SRV
@@ -610,6 +610,7 @@ menuconfig BT_MESH_SENSOR_SRV
 	bool "Sensor Server"
 	select BT_MESH_NRF_MODELS
 	select BT_MESH_SENSOR
+	select BT_MESH_MODEL_EXTENSIONS
 	help
 	  Enable mesh Sensor Server model.
 

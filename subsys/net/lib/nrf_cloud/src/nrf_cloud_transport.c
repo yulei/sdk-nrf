@@ -111,6 +111,7 @@ static struct nct {
 	struct mqtt_utf8 dc_rx_endp;
 	struct mqtt_utf8 dc_m_endp;
 	struct mqtt_utf8 dc_bulk_endp;
+	struct mqtt_utf8 dc_bin_endp;
 	uint16_t message_id;
 	uint8_t rx_buf[CONFIG_NRF_CLOUD_MQTT_MESSAGE_BUFFER_LEN];
 	uint8_t tx_buf[CONFIG_NRF_CLOUD_MQTT_MESSAGE_BUFFER_LEN];
@@ -142,6 +143,9 @@ static void dc_endpoint_reset(void)
 
 	nct.dc_bulk_endp.utf8 = NULL;
 	nct.dc_bulk_endp.size = 0;
+
+	nct.dc_bin_endp.utf8 = NULL;
+	nct.dc_bin_endp.size = 0;
 }
 
 /* Get the next unused message id. */
@@ -175,18 +179,12 @@ static uint16_t get_message_id(const uint16_t requested_id)
  */
 static void dc_endpoint_free(void)
 {
-	if (nct.dc_rx_endp.utf8 != NULL) {
-		nrf_cloud_free((void *)nct.dc_rx_endp.utf8);
-	}
-	if (nct.dc_tx_endp.utf8 != NULL) {
-		nrf_cloud_free((void *)nct.dc_tx_endp.utf8);
-	}
-	if (nct.dc_m_endp.utf8 != NULL) {
-		nrf_cloud_free((void *)nct.dc_m_endp.utf8);
-	}
-	if (nct.dc_bulk_endp.utf8 != NULL) {
-		nrf_cloud_free((void *)nct.dc_bulk_endp.utf8);
-	}
+
+	nrf_cloud_free((void *)nct.dc_rx_endp.utf8);
+	nrf_cloud_free((void *)nct.dc_tx_endp.utf8);
+	nrf_cloud_free((void *)nct.dc_m_endp.utf8);
+	nrf_cloud_free((void *)nct.dc_bulk_endp.utf8);
+	nrf_cloud_free((void *)nct.dc_bin_endp.utf8);
 
 	dc_endpoint_reset();
 #if defined(CONFIG_NRF_CLOUD_FOTA)
@@ -194,48 +192,23 @@ static void dc_endpoint_free(void)
 #endif
 }
 
-static uint32_t dc_send(const struct nct_dc_data *dc_data, uint8_t qos)
-{
-	if (dc_data == NULL) {
-		return -EINVAL;
-	}
-
-	struct mqtt_publish_param publish = {
-		.message_id = 0,
-		.message.topic.qos = qos,
-		.message.topic.topic.size = nct.dc_tx_endp.size,
-		.message.topic.topic.utf8 = nct.dc_tx_endp.utf8,
-	};
-
-	/* Populate payload. */
-	if ((dc_data->data.len != 0) && (dc_data->data.ptr != NULL)) {
-		publish.message.payload.data = (uint8_t *)dc_data->data.ptr;
-		publish.message.payload.len = dc_data->data.len;
-	}
-
-	if (qos != MQTT_QOS_0_AT_MOST_ONCE) {
-		publish.message_id = get_message_id(dc_data->message_id);
-	}
-
-	return mqtt_publish(&nct.client, &publish);
-}
-
-static int bulk_send(const struct nct_dc_data *dc_data, enum mqtt_qos qos)
+static int endp_send(const struct nct_dc_data *dc_data, struct mqtt_utf8 *endp, enum mqtt_qos qos)
 {
 	if (dc_data == NULL) {
 		LOG_DBG("Passed in structure cannot be NULL");
 		return -EINVAL;
 	}
 
-	if (qos != MQTT_QOS_0_AT_MOST_ONCE && qos != MQTT_QOS_1_AT_LEAST_ONCE) {
+	if ((qos != MQTT_QOS_0_AT_MOST_ONCE) && (qos != MQTT_QOS_1_AT_LEAST_ONCE)) {
 		LOG_DBG("Unsupported MQTT QoS level");
 		return -EINVAL;
 	}
 
 	struct mqtt_publish_param publish = {
+		.message_id = 0,
 		.message.topic.qos = qos,
-		.message.topic.topic.size = nct.dc_bulk_endp.size,
-		.message.topic.topic.utf8 = nct.dc_bulk_endp.utf8,
+		.message.topic.topic.size = endp->size,
+		.message.topic.topic.utf8 = endp->utf8,
 	};
 
 	/* Populate payload. */
@@ -302,7 +275,7 @@ static int nct_client_id_set(const char * const client_id)
 		}
 	} else {
 		if (client_id) {
-			LOG_WRN("Not configured to for runtime client ID, ignoring");
+			LOG_WRN("Not configured for runtime client ID, ignoring");
 		}
 		len = nrf_cloud_configured_client_id_length_get();
 	}
@@ -312,10 +285,8 @@ static int nct_client_id_set(const char * const client_id)
 		return -ENOMSG;
 	}
 
-	if (client_id_buf) {
-		nrf_cloud_free(client_id_buf);
-		client_id_buf = NULL;
-	}
+	nrf_cloud_free(client_id_buf);
+	client_id_buf = NULL;
 
 	/* Add one for NULL terminator */
 	++len;
@@ -435,26 +406,16 @@ static int allocate_and_format_topic(char **topic_buf, const char * const topic_
 
 static void nct_reset_topics(void)
 {
-	if (accepted_topic) {
-		nrf_cloud_free(accepted_topic);
-		accepted_topic = NULL;
-	}
-	if (rejected_topic) {
-		nrf_cloud_free(rejected_topic);
-		rejected_topic = NULL;
-	}
-	if (update_delta_topic) {
-		nrf_cloud_free(update_delta_topic);
-		update_delta_topic = NULL;
-	}
-	if (update_topic) {
-		nrf_cloud_free(update_topic);
-		update_topic = NULL;
-	}
-	if (shadow_get_topic) {
-		nrf_cloud_free(shadow_get_topic);
-		shadow_get_topic = NULL;
-	}
+	nrf_cloud_free(accepted_topic);
+	accepted_topic = NULL;
+	nrf_cloud_free(rejected_topic);
+	rejected_topic = NULL;
+	nrf_cloud_free(update_delta_topic);
+	update_delta_topic = NULL;
+	nrf_cloud_free(update_topic);
+	update_topic = NULL;
+	nrf_cloud_free(shadow_get_topic);
+	shadow_get_topic = NULL;
 
 	memset(nct_cc_rx_list, 0, sizeof(nct_cc_rx_list[0]) * CC_RX_LIST_CNT);
 	memset(nct_cc_tx_list, 0, sizeof(nct_cc_tx_list[0]) * CC_TX_LIST_CNT);
@@ -1088,10 +1049,8 @@ void nct_uninit(void)
 	dc_endpoint_free();
 	nct_reset_topics();
 
-	if (client_id_buf) {
-		nrf_cloud_free(client_id_buf);
-		client_id_buf = NULL;
-	}
+	nrf_cloud_free(client_id_buf);
+	client_id_buf = NULL;
 
 	memset(&nct, 0, sizeof(nct));
 	mqtt_client_initialized = false;
@@ -1260,6 +1219,7 @@ int nct_cc_disconnect(void)
 void nct_dc_endpoint_set(const struct nrf_cloud_data *tx_endp,
 			 const struct nrf_cloud_data *rx_endp,
 			 const struct nrf_cloud_data *bulk_endp,
+			 const struct nrf_cloud_data *bin_endp,
 			 const struct nrf_cloud_data *m_endp)
 {
 	LOG_DBG("nct_dc_endpoint_set");
@@ -1277,6 +1237,9 @@ void nct_dc_endpoint_set(const struct nrf_cloud_data *tx_endp,
 
 	nct.dc_bulk_endp.utf8 = (const uint8_t *)bulk_endp->ptr;
 	nct.dc_bulk_endp.size = bulk_endp->len;
+
+	nct.dc_bin_endp.utf8 = (const uint8_t *)bin_endp->ptr;
+	nct.dc_bin_endp.size = bin_endp->len;
 
 	if (m_endp != NULL) {
 		nct.dc_m_endp.utf8 = (const uint8_t *)m_endp->ptr;
@@ -1297,6 +1260,7 @@ void nct_dc_endpoint_set(const struct nrf_cloud_data *tx_endp,
 void nct_dc_endpoint_get(struct nrf_cloud_data *const tx_endp,
 			 struct nrf_cloud_data *const rx_endp,
 			 struct nrf_cloud_data *const bulk_endp,
+			 struct nrf_cloud_data *const bin_endp,
 			 struct nrf_cloud_data *const m_endp)
 {
 	LOG_DBG("nct_dc_endpoint_get");
@@ -1310,6 +1274,11 @@ void nct_dc_endpoint_get(struct nrf_cloud_data *const tx_endp,
 	if (bulk_endp != NULL) {
 		bulk_endp->ptr = nct.dc_bulk_endp.utf8;
 		bulk_endp->len = nct.dc_bulk_endp.size;
+	}
+
+	if (bin_endp != NULL) {
+		bin_endp->ptr = nct.dc_bin_endp.utf8;
+		bin_endp->len = nct.dc_bin_endp.size;
 	}
 
 	if (m_endp != NULL) {
@@ -1341,17 +1310,22 @@ int nct_dc_connect(void)
 
 int nct_dc_send(const struct nct_dc_data *dc_data)
 {
-	return dc_send(dc_data, MQTT_QOS_1_AT_LEAST_ONCE);
+	return endp_send(dc_data, &nct.dc_tx_endp, MQTT_QOS_1_AT_LEAST_ONCE);
 }
 
 int nct_dc_stream(const struct nct_dc_data *dc_data)
 {
-	return dc_send(dc_data, MQTT_QOS_0_AT_MOST_ONCE);
+	return endp_send(dc_data, &nct.dc_tx_endp, MQTT_QOS_0_AT_MOST_ONCE);
 }
 
 int nct_dc_bulk_send(const struct nct_dc_data *dc_data, enum mqtt_qos qos)
 {
-	return bulk_send(dc_data, qos);
+	return endp_send(dc_data, &nct.dc_bulk_endp, qos);
+}
+
+int nct_dc_bin_send(const struct nct_dc_data *dc_data, enum mqtt_qos qos)
+{
+	return endp_send(dc_data, &nct.dc_bin_endp, qos);
 }
 
 int nct_dc_disconnect(void)

@@ -249,6 +249,8 @@ def clean_sub_partitions(reqs, sub_partitions):
 
 def convert_str_to_list(with_str):
     for k, v in with_str.items():
+        if k == 'extra_params':
+            continue
         if isinstance(v, dict):
             convert_str_to_list(v)
         elif isinstance(v, str) and k not in PERMITTED_STR_KEYS:
@@ -647,11 +649,12 @@ def set_size_addr(entry, size, address):
 
 def set_sub_partition_address_and_size(reqs, sub_partitions):
     for sp_name, sp_value in sub_partitions.items():
-        size = sum([reqs[part]['size'] for part in sp_value['span']])
+        end = max(((reqs[part]['address'] + reqs[part]['size']) for part in sp_value['span']))
+        address = min((reqs[part]['address'] for part in sp_value['span']))
+        size = end - address
         if size == 0:
             raise PartitionError(
                 f'No compatible parent partition found for {sp_name}')
-        address = min([reqs[part]['address'] for part in sp_value['span']])
 
         reqs[sp_name] = sp_value
         reqs[sp_name]['span'] = reqs[sp_name]['orig_span']  # Restore "backup".
@@ -679,7 +682,7 @@ def load_reqs(input_config):
                 if loaded_reqs is None:
                     continue
                 for key in loaded_reqs.keys():
-                    if key in reqs.keys() and loaded_reqs[key] != reqs[key]:
+                    if key in reqs and loaded_reqs[key] != reqs[key]:
                         raise PartitionError(
                             f"Conflicting configuration found for '{f.name}'"
                             f" value for key '{key}' differs. val1: "
@@ -826,7 +829,7 @@ def verify_static_conf_simple(size, start, placement_strategy, static_conf):
         return
 
     if placement_strategy == START_TO_END:
-        start_end_correct = gaps[0][0] == start + size
+        start_end_correct = gaps[0][1] == start + size
     else:
         start_end_correct = gaps[0][0] == start
 
@@ -1441,16 +1444,33 @@ def test():
     assert 'spm' in test_config
     assert test_config['spm']['address'] == 0
 
+    # Verify that mixing one static partition and a dynamic in a START_TO_END region configuration is allowed
+    static_config = {'secondary': {'size': 200, 'address': 2000, 'region': 'extflash'}}
+    td = {'b': {'size': 100, 'region': 'extflash'}}
+    test_region = {'name': 'extflash',
+                   'size': 1000,
+                   'base_address': 2000,
+                   'placement_strategy': START_TO_END,
+                   'device': 'some-driver-device'}
+    get_region_config(td, test_region, static_config)
+    assert td['secondary']['address'] == 2000
+    assert td['secondary']['size'] == 200
+    assert td['b']['address'] == 2200
+    assert td['extflash']['address'] == 2300
+    assert td['extflash']['size'] == 700
+
     # Test a single partition with alignment where the address is smaller than the alignment value.
     td = {'without_alignment': {'placement': {'before': 'with_alignment'}, 'size': 100},
           'with_alignment': {'placement': {'before': 'app', 'align': {'start': 200}}, 'size': 100},
-          'app': {'region': 'flash_primary',}}
+          'app': {'region': 'flash_primary',},
+          'span_with_alignment': {'span': ['without_alignment', 'with_alignment', 'app']}}
     s, sub_partitions = resolve(td, 'app')
     set_addresses_and_align(td, sub_partitions, s, 1000, 'app')
     set_sub_partition_address_and_size(td, sub_partitions)
     calculate_end_address(td)
     expect_addr_size(td, 'EMPTY_0', 100, 100)
     expect_addr_size(td, 'with_alignment', 200, 100)
+    expect_addr_size(td, 'span_with_alignment', 0, 1000)
 
     # Test alignment after 'app'
     td = {'without_alignment': {'placement': {'after': 'app'}, 'size': 100},
@@ -1608,7 +1628,8 @@ def test():
           'mcuboot_secondary': {'placement': {'after': 'mcuboot_primary', 'align': {'start': 0x1000}, 'align_next': 0x1000}, 'share_size': 'mcuboot_primary'},
           'mcuboot_scratch': {'placement': {'after': 'app', 'align': {'start': 0x1000}}, 'size': 0x1e000},
           'mcuboot_storage': {'placement': {'after': 'mcuboot_scratch'}, 'size': 0x4000},
-          'provision': {'placement': {'before': 'end', 'align': {'start': 0x1000}}, 'size': 0x1000}}
+          'provision': {'placement': {'before': 'end', 'align': {'start': 0x1000}}, 'size': 0x1000},
+          's0_and_s1': {'span': ['s0', 's1']}}
     fix_syntactic_sugar(td)
     s, sub_partitions = resolve(td, 'app')
     set_addresses_and_align(td, sub_partitions, s, 0x100000, 'app')
@@ -1617,6 +1638,7 @@ def test():
     expect_addr_size(td, 'EMPTY_0', 0x14200, 0xe00)
     expect_addr_size(td, 'EMPTY_1', 0x21200, 0xe00)
     expect_addr_size(td, 'EMPTY_2', 0xdc000, 0x1000)
+    expect_addr_size(td, 's0_and_s1', 0x8000, 0xc200 + 0xc200 + 0xe00) # Check that size includes EMPTY_0
     assert td['mcuboot_secondary']['size'] == td['mcuboot_primary']['size']
 
     # Verify that if a partition X uses 'share_size' with a non-existing partition, then partition X is given size 0,
@@ -1627,7 +1649,7 @@ def test():
     s, sub_partitions = resolve(td, 'app')
     set_addresses_and_align(td, sub_partitions, s, 1000, 'app')
     set_sub_partition_address_and_size(td, sub_partitions)
-    assert 'should_not_exist' not in td.keys()
+    assert 'should_not_exist' not in td
 
     # Verify that if a partition X uses 'share_size' with a non-existing partition, but has set a default size,
     # then partition X is created with the default size.

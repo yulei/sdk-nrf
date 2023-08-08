@@ -291,6 +291,10 @@ static int write_resource_to_settings(int inst, int res, uint8_t *data, uint16_t
 {
 	char path[sizeof(LWM2M_FIRM_PREFIX "/65535/0/10")];
 
+	if ((inst < 0 || inst > 9) || (res < 0 || res > 99)) {
+		return -EINVAL;
+	}
+
 	snprintk(path, sizeof(path), LWM2M_FIRM_PREFIX "/%d/%d/%d", ENABLED_LWM2M_FIRMWARE_OBJECT,
 		 inst, res);
 	if (settings_save_one(path, data, data_len)) {
@@ -500,9 +504,9 @@ static uint8_t apply_fmfu_from_ext_flash(void)
 		return RESULT_UPDATE_FAILED;
 	}
 
-	ret = nrf_modem_lib_init(BOOTLOADER_MODE);
+	ret = nrf_modem_lib_bootloader_init();
 	if (ret != 0) {
-		LOG_ERR("nrf_modem_lib_init(BOOTLOADER_MODE) failed: %d\n", ret);
+		LOG_ERR("nrf_modem_lib_bootloader_init() failed: %d\n", ret);
 		return RESULT_UPDATE_FAILED;
 	}
 
@@ -552,7 +556,7 @@ static uint8_t apply_firmware_delta_modem_update(void)
 
 	lte_lc_deinit();
 	nrf_modem_lib_shutdown();
-	ret = nrf_modem_lib_init(NORMAL_MODE);
+	ret = nrf_modem_lib_init();
 
 	ret = modem_lib_init_result;
 	switch (ret) {
@@ -1235,12 +1239,16 @@ static void lwm2m_firmware_register_write_callbacks(int instance_id)
 static void firmware_update_check_linked_instances(int instance_id)
 {
 #if defined(CONFIG_LWM2M_CLIENT_UTILS_ADV_FIRMWARE_UPDATE_OBJ_SUPPORT)
+	/* TODO: When Advanced Firmware object supports more than two
+	 * resources, this needs to be changed so that it checks all linked
+	 * instances. Now we just assume that there could be only one link
+	 */
 	struct lwm2m_obj_path path;
 	struct lwm2m_objlnk object_link;
 	uint8_t result;
 
 	path = LWM2M_OBJ(ENABLED_LWM2M_FIRMWARE_OBJECT, instance_id,
-			 LWM2M_ADV_FOTA_LINKED_INSTANCES_ID);
+			 LWM2M_ADV_FOTA_LINKED_INSTANCES_ID, 0);
 
 	if (lwm2m_get_objlnk(&path, &object_link)) {
 		return;
@@ -1272,9 +1280,8 @@ static void firmware_update_check_linked_instances(int instance_id)
 #endif
 		}
 	}
-	object_link.obj_inst = 0;
-	object_link.obj_id = 0;
-	lwm2m_set_objlnk(&path, &object_link);
+	/* Remove link */
+	lwm2m_delete_res_inst(&path);
 #endif
 }
 

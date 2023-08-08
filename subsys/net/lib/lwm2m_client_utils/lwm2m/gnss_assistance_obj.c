@@ -136,16 +136,26 @@ static int gnss_assist_write_pgps(uint8_t *data, uint16_t data_len, bool last_bl
 
 	if (bytes_downloaded == 0) {
 		err = nrf_cloud_pgps_begin_update();
-	}
-	err = nrf_cloud_pgps_process_update(data, data_len);
-	if (last_block) {
+
 		if (err) {
-			LOG_WRN("Unable to process P-GPS data, error: %d", err);
-		} else {
-			LOG_INF("P-GPS data processed");
+			LOG_ERR("Unable to begin P-GPS update, error: %d", err);
+			return err;
 		}
+	}
+
+	err = nrf_cloud_pgps_process_update(data, data_len);
+
+	if (err) {
+		LOG_ERR("Unable to process P-GPS data, error: %d", err);
+		nrf_cloud_pgps_finish_update();
+		return err;
+	}
+
+	if (last_block) {
+		LOG_INF("P-GPS data processed");
 		err = nrf_cloud_pgps_finish_update();
 	}
+
 	return err;
 }
 #endif
@@ -363,7 +373,7 @@ static struct lwm2m_engine_obj_inst *gnss_assist_create(uint16_t obj_inst_id)
 	return &inst;
 }
 
-static int lwm2m_gnss_assist_init(const struct device *dev)
+static int lwm2m_gnss_assist_init(void)
 {
 	struct lwm2m_engine_obj_inst *obj_inst = NULL;
 	int ret = 0;

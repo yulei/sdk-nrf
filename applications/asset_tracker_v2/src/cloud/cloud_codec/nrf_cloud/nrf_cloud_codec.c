@@ -11,6 +11,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <date_time.h>
+#include <net/nrf_cloud_codec.h>
 #include <net/nrf_cloud_location.h>
 #include <cloud_codec.h>
 
@@ -30,7 +31,7 @@ enum batch_data_type {
 	 * in the nrf_cloud library; see CONFIG_NRF_CLOUD_SEND_DEVICE_STATUS.
 	 */
 	MODEM_DYNAMIC,
-	VOLTAGE,
+	BATTERY,
 	IMPACT,
 };
 
@@ -533,9 +534,9 @@ static int add_batch_data(cJSON *array, enum batch_data_type type, void *buf, si
 				LOG_ERR("Cannot convert pressure to string, buffer too small");
 			}
 
-			if (data[i].bsec_air_quality >= 0) {
+			if ((data[i].bsec_air_quality >= 0) || (data[i].bsec_air_quality <= 500)) {
 				len = snprintk(bsec_air_quality, sizeof(bsec_air_quality), "%d",
-					data[i].bsec_air_quality);
+					       data[i].bsec_air_quality);
 				if ((len < 0) || (len >= sizeof(bsec_air_quality))) {
 					LOG_ERR("Cannot convert BSEC air quality to string, "
 						"buffer too small");
@@ -657,18 +658,18 @@ static int add_batch_data(cJSON *array, enum batch_data_type type, void *buf, si
 
 			break;
 		}
-		case VOLTAGE: {
+		case BATTERY: {
 			int err, len;
-			char voltage[5];
+			char batt_lvl[5];
 			struct cloud_data_battery *data = (struct cloud_data_battery *)buf;
 
-			len = snprintk(voltage, sizeof(voltage), "%d", data[i].bat);
-			if ((len < 0) || (len >= sizeof(voltage))) {
-				LOG_ERR("Cannot convert voltage to string, buffer too small");
+			len = snprintk(batt_lvl, sizeof(batt_lvl), "%d", data[i].bat);
+			if ((len < 0) || (len >= sizeof(batt_lvl))) {
+				LOG_ERR("Cannot convert battery level to string, buffer too small");
 				return -ENOMEM;
 			}
 
-			err = add_data(array, NULL, APP_ID_VOLTAGE, voltage, &data[i].bat_ts,
+			err = add_data(array, NULL, APP_ID_BATTERY, batt_lvl, &data[i].bat_ts,
 				       data[i].queued, NULL, true);
 			if (err && err != -ENODATA) {
 				return err;
@@ -701,8 +702,8 @@ int cloud_codec_encode_cloud_location(
 {
 #if defined(CONFIG_NRF_CLOUD_LOCATION)
 	int err;
-	char *buffer;
-	cJSON *root_obj = NULL;
+
+	NRF_CLOUD_OBJ_JSON_DEFINE(location_req_obj);
 
 	__ASSERT_NO_MSG(output != NULL);
 	__ASSERT_NO_MSG(cloud_location != NULL);
@@ -727,22 +728,22 @@ int cloud_codec_encode_cloud_location(
 		return -ENODATA;
 	}
 
-	err = nrf_cloud_location_request_json_get(
+	err = nrf_cloud_obj_location_request_create(
+		&location_req_obj,
 		cloud_location->neighbor_cells_valid ? &cell_info : NULL,
 #if defined(CONFIG_LOCATION_METHOD_WIFI)
 		cloud_location->wifi_access_points_valid ? &wifi_info : NULL,
 #else
 		NULL,
 #endif
-		true,
-		&root_obj);
+		true);
 	if (err) {
-		LOG_ERR("nrf_cloud_location_request_json_get, error: %d", err);
-		return -ENOMEM;
+		LOG_ERR("nrf_cloud_location_request_msg_json_encode, error: %d", err);
+		goto exit;
 	}
 
-	buffer = cJSON_PrintUnformatted(root_obj);
-	if (buffer == NULL) {
+	err = nrf_cloud_obj_cloud_encode(&location_req_obj);
+	if (err) {
 		LOG_ERR("Failed to allocate memory for JSON string");
 
 		err = -ENOMEM;
@@ -750,15 +751,17 @@ int cloud_codec_encode_cloud_location(
 	}
 
 	if (IS_ENABLED(CONFIG_CLOUD_CODEC_LOG_LEVEL_DBG)) {
-		json_print_obj("Encoded message:\n", root_obj);
+		json_print_obj("Encoded message:\n", location_req_obj.json);
 	}
 
-	output->buf = buffer;
-	output->len = strlen(buffer);
+	output->buf = (char *)location_req_obj.encoded_data.ptr;
+	output->len = location_req_obj.encoded_data.len;
 
 exit:
-	cloud_location->queued = false;
-	cJSON_Delete(root_obj);
+	if (!err) {
+		cloud_location->queued = false;
+	}
+	(void)nrf_cloud_obj_free(&location_req_obj);
 	return err;
 #endif /* CONFIG_NRF_CLOUD_LOCATION */
 
@@ -1082,7 +1085,7 @@ int cloud_codec_encode_batch_data(struct cloud_codec_data *output,
 		goto exit;
 	}
 
-	err = add_batch_data(root_array, VOLTAGE, bat_buf, bat_buf_count);
+	err = add_batch_data(root_array, BATTERY, bat_buf, bat_buf_count);
 	if (err) {
 		LOG_ERR("Failed adding battery data to array, error: %d", err);
 		goto exit;

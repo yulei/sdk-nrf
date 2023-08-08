@@ -132,14 +132,15 @@ int cpu_load_init(void)
 	uint8_t ch_wakeup;
 	uint8_t ch_tick = 0;
 	nrfx_err_t err;
-	nrfx_timer_config_t config = NRFX_TIMER_DEFAULT_CONFIG;
+	uint32_t base_frequency = NRF_TIMER_BASE_FREQUENCY_GET(timer.p_reg);
+	nrfx_timer_config_t config = NRFX_TIMER_DEFAULT_CONFIG(base_frequency);
 	int ret = 0;
 
 	if (ready) {
 		return 0;
 	}
 
-	config.frequency = NRF_TIMER_FREQ_1MHz;
+	config.frequency = NRFX_MHZ_TO_HZ(1);
 	config.bit_width = NRF_TIMER_BIT_WIDTH_32;
 
 	if (IS_ENABLED(CONFIG_CPU_LOAD_ALIGNED_CLOCKS)) {

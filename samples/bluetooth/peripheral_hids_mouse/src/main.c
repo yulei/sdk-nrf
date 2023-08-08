@@ -381,7 +381,7 @@ static void hid_init(void)
 	int err;
 	struct bt_hids_init_param hids_init_param = { 0 };
 	struct bt_hids_inp_rep *hids_inp_rep;
-	static const uint8_t mouse_movement_mask[ceiling_fraction(INPUT_REP_MOVEMENT_LEN, 8)] = {0};
+	static const uint8_t mouse_movement_mask[DIV_ROUND_UP(INPUT_REP_MOVEMENT_LEN, 8)] = {0};
 
 	static const uint8_t report_map[] = {
 		0x05, 0x01,     /* Usage Page (Generic Desktop) */
@@ -755,7 +755,7 @@ static void bas_notify(void)
 }
 
 
-void main(void)
+int main(void)
 {
 	int err;
 
@@ -765,26 +765,26 @@ void main(void)
 		err = bt_conn_auth_cb_register(&conn_auth_callbacks);
 		if (err) {
 			printk("Failed to register authorization callbacks.\n");
-			return;
+			return 0;
 		}
 
 		err = bt_conn_auth_info_cb_register(&conn_auth_info_callbacks);
 		if (err) {
 			printk("Failed to register authorization info callbacks.\n");
-			return;
+			return 0;
 		}
 	}
+
+	/* DIS initialized at system boot with SYS_INIT macro. */
+	hid_init();
 
 	err = bt_enable(NULL);
 	if (err) {
 		printk("Bluetooth init failed (err %d)\n", err);
-		return;
+		return 0;
 	}
 
 	printk("Bluetooth initialized\n");
-
-	/* DIS initialized at system boot with SYS_INIT macro. */
-	hid_init();
 
 	k_work_init(&hids_work, mouse_handler);
 	k_work_init(&adv_work, advertising_process);

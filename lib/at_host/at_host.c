@@ -48,6 +48,11 @@ static struct k_work cmd_send_work;
 
 static inline void write_uart_string(const char *str)
 {
+	if (IS_ENABLED(CONFIG_LOG_BACKEND_UART)) {
+		LOG_RAW("%s", str);
+		return;
+	}
+
 	/* Send characters until, but not including, null */
 	for (size_t i = 0; str[i]; i++) {
 		uart_poll_out(uart_dev, str[i]);
@@ -222,12 +227,11 @@ static int at_uart_init(const struct device *uart_dev)
 	return err;
 }
 
-static int at_host_init(const struct device *arg)
+static int at_host_init(void)
 {
 	int err;
 	enum term_modes mode = CONFIG_AT_HOST_TERMINATION;
 
-	ARG_UNUSED(arg);
 
 	/* Choosing the termination mode */
 	if (mode < MODE_COUNT) {

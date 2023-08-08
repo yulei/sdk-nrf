@@ -20,7 +20,7 @@ The sample also shows how to program the user region of FICR parameters on the d
 Requirements
 ************
 
-The sample supports the following development kit:
+The sample supports the following development kits:
 
 .. table-from-sample-yaml::
 
@@ -64,12 +64,12 @@ The following is an example of the CLI command:
 
    west build -b nrf7002dk_nrf5340_cpuapp
 
-To build for the nRF7002 EK and nRF5340 DK, use the ``nrf5340dk_nrf5340_cpuapp`` build target with the ``SHIELD`` CMake option set to ``nrf7002_ek``.
+To build for the nRF7002 EK and nRF5340 DK, use the ``nrf5340dk_nrf5340_cpuapp`` build target with the ``SHIELD`` CMake option set to ``nrf7002ek``.
 The following is an example of the CLI command:
 
 .. code-block:: console
 
-   west build -b nrf5340dk_nrf5340_cpuapp -- -DSHIELD=nrf7002_ek
+   west build -b nrf5340dk_nrf5340_cpuapp -- -DSHIELD=nrf7002ek
 
 See also :ref:`cmake_options` for instructions on how to provide CMake options.
 
@@ -103,7 +103,7 @@ Testing
               tx_pkt_preamble = 1
               tx_pkt_mcs = 0
               tx_pkt_rate = 6
-              tx_pkt_gap = 200
+              tx_pkt_gap = 0
               phy_calib_rxdc = 1
               phy_calib_txdc = 1
               phy_calib_txpow = 0
@@ -123,7 +123,9 @@ Testing
               rx_lna_gain = 0
               rx_capture_length = 0
               wlan_ant_switch_ctrl = 0
-
+              tx_pkt_cw = 15
+              reg_domain = 00
+              bypass_reg_domian = 0
 
          * To run a continuous Orthogonal frequency-division multiplexing (OFDM) TX traffic sequence with the following configuration:
 
@@ -557,7 +559,52 @@ Testing
               [00:24:25.202,606] <inf> otp_prog: Written REGION_DEFAULTS (0x154) : 0xfffffffb
               [00:24:25.203,002] <inf> otp_prog: Finished Writing OTP params
 
+
+         * To set a regulatory domain with the following configuration:
+
+           * Regulatory domain: US
+
+           Execute the following command:
+
+           .. code-block:: console
+
+              wifi_radio_test reg_domain US
+
+           The sample shows the following output:
+
+           .. code-block:: console
+
+              wifi_radio_test show_config
+              reg_domain = US
+
+         .. note::
+
+            The default regulatory domain is ``00`` (World regulatory).
+
+         * To bypass regulatory domain, set ``bypass_reg_domain`` to ``1`` using the following command:
+
+           .. code-block:: console
+
+              wifi_radio_test bypass_reg_domain 1
+
+           The sample shows the following output:
+
+           .. code-block:: console
+
+               wifi_radio_test show_config
+               reg_domain = US
+               bypass_reg_domain = 1
+
+         .. note::
+
+            Bypass regulatory domain is false by default.
+
+            If ``bypass_reg_domain`` is ``0``, then TX power of the channel will be configured to the minimum value of the user configured TX power value and maximum power supported in the configured regulatory domain.
+
+            If ``bypass_reg_domain`` is ``1``, then user configured TX power value will be set overriding current configured regulatory domain maximum TX power for the channel.
+
          See :ref:`wifi_radio_ficr_prog_subcmds` for a list of available subcommands.
+
 
 Dependencies
 ************

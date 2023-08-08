@@ -280,7 +280,7 @@ int bytes_from_str(const char *str, uint8_t *bytes, size_t bytes_len)
 	return 0;
 }
 
-void main(void)
+int main(void)
 {
 	int i;
 	memset(&context, 0, sizeof(context));
@@ -301,7 +301,8 @@ void main(void)
 	LOG_INF("Starting %s with CPU frequency: %d MHz", CONFIG_BOARD, SystemCoreClock/MHZ(1));
 	k_sleep(K_SECONDS(1));
 
-#ifdef CONFIG_BOARD_NRF7002DK_NRF5340
+#if defined(CONFIG_BOARD_NRF7002DK_NRF7001_NRF5340_CPUAPP) || \
+	defined(CONFIG_BOARD_NRF7002DK_NRF5340_CPUAPP)
 	if (strlen(CONFIG_NRF700X_QSPI_ENCRYPTION_KEY)) {
 		char key[QSPI_KEY_LEN_BYTES];
 		int ret;
@@ -309,7 +310,7 @@ void main(void)
 		ret = bytes_from_str(CONFIG_NRF700X_QSPI_ENCRYPTION_KEY, key, sizeof(key));
 		if (ret) {
 			LOG_ERR("Failed to parse encryption key: %d\n", ret);
-			return;
+			return 0;
 		}
 
 		LOG_DBG("QSPI Encryption key: ");
@@ -321,13 +322,13 @@ void main(void)
 		ret = qspi_enable_encryption(key);
 		if (ret) {
 			LOG_ERR("Failed to enable encryption: %d\n", ret);
-			return;
+			return 0;
 		}
 		LOG_INF("QSPI Encryption enabled");
 	} else {
 		LOG_INF("QSPI Encryption disabled");
 	}
-#endif
+#endif /* CONFIG_BOARD_NRF700XDK_NRF5340 */
 
 	LOG_INF("Static IP address (overridable): %s/%s -> %s",
 		CONFIG_NET_CONFIG_MY_IPV4_ADDR,
@@ -350,4 +351,6 @@ void main(void)
 			LOG_ERR("Connection Timed Out");
 		}
 	}
+
+	return 0;
 }

@@ -34,7 +34,8 @@ LOG_MODULE_REGISTER(pdn, CONFIG_PDN_LOG_LEVEL);
 
 static K_MUTEX_DEFINE(list_mutex);
 
-static sys_slist_t pdn_contexts;
+static sys_slist_t pdn_contexts = SYS_SLIST_STATIC_INIT(&pdn_context);
+
 struct pdn {
 	sys_snode_t node; /* list handling */
 	pdn_event_handler_t callback;
@@ -46,16 +47,19 @@ static struct {
 	int8_t cid;
 	int8_t esm;
 	int8_t reason;
-	struct k_sem sem_cgev;
-	struct k_sem sem_cnec;
-} pdn_act_notif;
+} pdn_act_notif = {
+	.cid = CID_UNASSIGNED
+};
+
 static K_MUTEX_DEFINE(pdn_act_mutex);
+static K_SEM_DEFINE(sem_cgev, 0, 1);
+static K_SEM_DEFINE(sem_cnec, 0, 1);
 
 /* Use one monitor for all CGEV events and distinguish
  * between the different type of events later (ME, IPV6, etc).
  */
-AT_MONITOR(pdn_cgev, "+CGEV", on_cgev, PAUSED);
-AT_MONITOR(pdn_cnec_esm, "+CNEC_ESM", on_cnec_esm, PAUSED);
+AT_MONITOR(pdn_cgev, "+CGEV", on_cgev);
+AT_MONITOR(pdn_cnec_esm, "+CNEC_ESM", on_cnec_esm);
 
 static struct pdn *pdn_find(int cid)
 {
@@ -113,14 +117,14 @@ static void on_cnec_esm(const char *notif)
 
 	if (cid == pdn_act_notif.cid) {
 		pdn_act_notif.esm = esm_err;
-		k_sem_give(&pdn_act_notif.sem_cnec);
+		k_sem_give(&sem_cnec);
 	}
 }
 
 static void on_cgev(const char *notif)
 {
 	char *p;
-	uint8_t cid;
+	int8_t cid;
 	struct pdn *pdn;
 
 	const struct {
@@ -130,6 +134,8 @@ static void on_cgev(const char *notif)
 		{"ME PDN ACT",	 PDN_EVENT_ACTIVATED},	 /* +CGEV: ME PDN ACT <cid>[,<reason>] */
 		{"ME PDN DEACT", PDN_EVENT_DEACTIVATED}, /* +CGEV: ME PDN DEACT <cid> */
 		{"NW PDN DEACT", PDN_EVENT_DEACTIVATED}, /* +CGEV: NW PDN DEACT <cid> */
+		{"ME DETACH",	 PDN_EVENT_NETWORK_DETACH},	 /* +CGEV: ME DETACH */
+		{"NW DETACH",	 PDN_EVENT_NETWORK_DETACH},	 /* +CGEV: NW DETACH */
 		/* Order is important */
 		{"IPV6 FAIL",	 PDN_EVENT_IPV6_DOWN},	 /* +CGEV: IPV6 FAIL <cid> */
 		{"IPV6",	 PDN_EVENT_IPV6_UP},	 /* +CGEV: IPV6 <cid> */
@@ -141,19 +147,25 @@ static void on_cgev(const char *notif)
 			continue;
 		}
 
-		cid = strtoul(p + strlen(map[i].notif), &p, 10);
+		p += strlen(map[i].notif);
+		if (*p == ' ') {
+			cid = strtoul(p, &p, 10);
+		} else {
+			cid = CID_UNASSIGNED;
+		}
+
 		if (cid == pdn_act_notif.cid && map[i].event == PDN_EVENT_ACTIVATED) {
 			if (*p == ',') {
 				pdn_act_notif.reason = strtol(p + 1, NULL, 10);
 			} else {
 				pdn_act_notif.reason = PDN_ACT_REASON_NONE;
 			}
-			k_sem_give(&pdn_act_notif.sem_cgev);
+			k_sem_give(&sem_cgev);
 		}
 
 		SYS_SLIST_FOR_EACH_CONTAINER(&pdn_contexts, pdn, node) {
-			if (pdn->context_id == cid && pdn->callback) {
-				pdn->callback(cid, map[i].event, 0);
+			if ((pdn->context_id == cid || cid == CID_UNASSIGNED) && pdn->callback) {
+				pdn->callback(pdn->context_id, map[i].event, 0);
 			}
 		}
 
@@ -168,13 +180,24 @@ static void on_modem_init(int ret, void *ctx)
 	int err;
 	(void) err;
 
+	if (ret != 0) {
+		/* Return if modem initialization failed */
+		return;
+	}
+
 #if defined(CONFIG_PDN_LEGACY_PCO)
 	err = nrf_modem_at_printf("AT%%XEPCO=0");
 	if (err) {
 		LOG_ERR("Failed to set legacy PCO mode, err %d", err);
 		return;
 	}
-#endif
+#else
+	err = nrf_modem_at_printf("AT%%XEPCO=1");
+	if (err) {
+		LOG_ERR("Failed to set ePCO mode, err %d", err);
+		return;
+	}
+#endif /* CONFIG_PDN_LEGACY_PCO */
 
 #if defined(CONFIG_PDN_DEFAULTS_OVERRIDE)
 	err = pdn_ctx_configure(0, CONFIG_PDN_DEFAULT_APN,
@@ -246,6 +269,19 @@ int pdn_default_ctx_cb_dereg(pdn_event_handler_t cb)
 	return 0;
 }
 
+static void pdn_ctx_free(struct pdn *pdn)
+{
+	if (!pdn) {
+		return;
+	}
+
+	k_mutex_lock(&list_mutex, K_FOREVER);
+	sys_slist_find_and_remove(&pdn_contexts, &pdn->node);
+	k_mutex_unlock(&list_mutex);
+
+	k_free(pdn);
+}
+
 int pdn_ctx_create(uint8_t *cid, pdn_event_handler_t cb)
 {
 	int err;
@@ -263,11 +299,13 @@ int pdn_ctx_create(uint8_t *cid, pdn_event_handler_t cb)
 
 	err = nrf_modem_at_scanf("AT%XNEWCID?", "%%XNEWCID: %d", &ctx_id_tmp);
 	if (err < 0) {
+		pdn_ctx_free(pdn);
 		return err;
 	}
 
 	if (ctx_id_tmp > SCHAR_MAX || ctx_id_tmp < SCHAR_MIN) {
 		LOG_ERR("Context ID (%d) out of bounds", ctx_id_tmp);
+		pdn_ctx_free(pdn);
 		return -EFAULT;
 	}
 
@@ -275,9 +313,8 @@ int pdn_ctx_create(uint8_t *cid, pdn_event_handler_t cb)
 
 	*cid = pdn->context_id;
 
-	if (cb) {
-		pdn->callback = cb;
-	}
+	/* The callback is uninitialized, assign regardless of whether the input is NULL. */
+	pdn->callback = cb;
 
 	return 0;
 }
@@ -288,11 +325,7 @@ int pdn_ctx_configure(uint8_t cid, const char *apn, enum pdn_fam fam,
 	int err;
 	char family[] = "IPV4V6"; /* longest family */
 
-	if (!apn) {
-		return -EFAULT;
-	}
-
-	if (strlen(apn) >= APN_STR_MAX_LEN) {
+	if (apn != NULL && strlen(apn) >= APN_STR_MAX_LEN) {
 		return -EINVAL;
 	}
 
@@ -309,6 +342,9 @@ int pdn_ctx_configure(uint8_t cid, const char *apn, enum pdn_fam fam,
 	case PDN_FAM_NONIP:
 		strncpy(family, "Non-IP", sizeof(family));
 		break;
+	default:
+		LOG_ERR("Wrong family %d", fam);
+		return -EINVAL;
 	}
 
 	if (opt) {
@@ -322,7 +358,11 @@ int pdn_ctx_configure(uint8_t cid, const char *apn, enum pdn_fam fam,
 			opt->nslpi,
 			opt->secure_pco);
 	} else {
-		err = nrf_modem_at_printf("AT+CGDCONT=%u,%s,%s", cid, family, apn);
+		if (apn != NULL) {
+			err = nrf_modem_at_printf("AT+CGDCONT=%u,%s,%s", cid, family, apn);
+		} else {
+			err = nrf_modem_at_printf("AT+CGDCONT=%u,%s", cid, family);
+		}
 	}
 
 	if (err) {
@@ -383,11 +423,7 @@ int pdn_ctx_destroy(uint8_t cid)
 		/* cleanup regardless */
 	}
 
-	k_mutex_lock(&list_mutex, K_FOREVER);
-	sys_slist_find_and_remove(&pdn_contexts, &pdn->node);
-	k_mutex_unlock(&list_mutex);
-
-	k_free(pdn);
+	pdn_ctx_free(pdn);
 
 	return err;
 }
@@ -419,7 +455,7 @@ int pdn_activate(uint8_t cid, int *esm, enum pdn_fam *fam)
 
 	err = cgact(cid, true);
 	if (!err && fam) {
-		k_sem_take(&pdn_act_notif.sem_cgev, K_FOREVER);
+		k_sem_take(&sem_cgev, K_FOREVER);
 		if (pdn_act_notif.reason == PDN_ACT_REASON_IPV4_ONLY) {
 			*fam = PDN_FAM_IPV4;
 		} else if (pdn_act_notif.reason == PDN_ACT_REASON_IPV6_ONLY) {
@@ -427,7 +463,7 @@ int pdn_activate(uint8_t cid, int *esm, enum pdn_fam *fam)
 		}
 	}
 	if (esm) {
-		timeout = k_sem_take(&pdn_act_notif.sem_cnec, K_MSEC(CONFIG_PDN_ESM_TIMEOUT));
+		timeout = k_sem_take(&sem_cnec, K_MSEC(CONFIG_PDN_ESM_TIMEOUT));
 		if (!timeout) {
 			*esm = pdn_act_notif.esm;
 		} else if (timeout == -EAGAIN) {
@@ -519,24 +555,3 @@ static void on_cfun(enum lte_lc_func_mode mode, void *ctx)
 	}
 }
 #endif /* CONFIG_LTE_LINK_CONTROL */
-
-static int pdn_sys_init(const struct device *unused)
-{
-	pdn_act_notif.cid = CID_UNASSIGNED;
-
-	k_sem_init(&pdn_act_notif.sem_cgev, 0, 1);
-	k_sem_init(&pdn_act_notif.sem_cnec, 0, 1);
-
-	sys_slist_init(&pdn_contexts);
-
-	/* Do not process notifications until the PDN contexts
-	 * and the semaphores are initialized.
-	 */
-
-	at_monitor_resume(&pdn_cgev);
-	at_monitor_resume(&pdn_cnec_esm);
-
-	return 0;
-}
-
-SYS_INIT(pdn_sys_init, APPLICATION, CONFIG_PDN_INIT_PRIORITY);

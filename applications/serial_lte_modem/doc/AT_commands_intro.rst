@@ -36,10 +36,9 @@ The modem-specific AT commands are documented in the `nRF91 AT Commands Referenc
 
    Generic_AT_commands
    SOCKET_AT_commands
-   TCPIP_AT_commands
+   TCPUDP_AT_commands
    ICMP_AT_commands
    FOTA_AT_commands
-   DFU_AT_commands
    SMS_AT_commands
    FTP_AT_commands
    GNSS_AT_commands
@@ -48,3 +47,4 @@ The modem-specific AT commands are documented in the `nRF91 AT Commands Referenc
    TWI_AT_commands
    GPIO_AT_commands
    CARRIER_AT_commands
+   NRFCLOUD_AT_commands

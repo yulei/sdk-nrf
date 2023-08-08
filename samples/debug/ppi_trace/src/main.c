@@ -17,12 +17,20 @@ LOG_MODULE_REGISTER(app);
 
 #define ALARM_PERIOD_US 50000
 
-#if IS_ENABLED(CONFIG_USE_RTC2)
-#define RTC       NRF_RTC2
-#define RTC_NODE  DT_NODELABEL(rtc2)
+#define ZEPHYR_USER_NODE DT_PATH(zephyr_user)
+#if DT_NODE_HAS_PROP(ZEPHYR_USER_NODE, ppi_trace_rtc)
+#define RTC_NODE DT_PROP(ZEPHYR_USER_NODE, ppi_trace_rtc)
+#define RTC ((NRF_RTC_Type*)DT_REG_ADDR(RTC_NODE))
 #else
-#define RTC       NRF_RTC0
-#define RTC_NODE  DT_NODELABEL(rtc0)
+/*
+ * This sample now relies on the /zephyr,user node having a
+ * ppi-trace-rtc property that is a phandle to the RTC node you wish
+ * to use on your board. See the overlay files in the boards/
+ * subdirectory of this sample for examples.
+ */
+#error "Missing ppi-trace-rtc property in /zephyr,user; see source comments for details"
+#define RTC_NODE DT_INVALID_NODE
+#define RTC ((NRF_RTC_Type*)0)
 #endif
 
 static void alarm_callback(const struct device *dev, uint8_t chan_id, uint32_t ticks,
@@ -92,7 +100,7 @@ static void counter_setup(void)
 	__ASSERT_NO_MSG(err == 0);
 }
 
-void main(void)
+int main(void)
 {
 	ppi_trace_setup();
 	counter_setup();
@@ -100,4 +108,6 @@ void main(void)
 	if (IS_ENABLED(CONFIG_BT)) {
 		bluetooth_enable();
 	}
+
+	return 0;
 }

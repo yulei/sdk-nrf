@@ -6,18 +6,16 @@
 
 cmake_minimum_required(VERSION 3.20.0)
 
-get_filename_component(MATTER_MODULE_ROOT $ENV{ZEPHYR_BASE}/../modules/lib/matter REALPATH)
-
 # Set Kconfig root files that will be processed as a first Kconfig for used child images.
-set(mcuboot_KCONFIG_ROOT ${MATTER_MODULE_ROOT}/config/nrfconnect/chip-module/Kconfig.mcuboot.root)
-set(multiprotocol_rpmsg_KCONFIG_ROOT ${MATTER_MODULE_ROOT}/config/nrfconnect/chip-module/Kconfig.multiprotocol_rpmsg.root)
+set(mcuboot_KCONFIG_ROOT "\\\${ZEPHYR_CONNECTEDHOMEIP_MODULE_DIR}/config/nrfconnect/chip-module/Kconfig.mcuboot.root")
+set(multiprotocol_rpmsg_KCONFIG_ROOT "\\\${ZEPHYR_CONNECTEDHOMEIP_MODULE_DIR}/config/nrfconnect/chip-module/Kconfig.multiprotocol_rpmsg.root")
 
 # For prj.conf the CONF_FILE is empty. In other case extract the exact file name from the path string.
 if(CONF_FILE)
     get_filename_component(CONFIG_FILE_NAME ${CONF_FILE} NAME)
 endif()
 
-if(NOT CONFIG_FILE_NAME STREQUAL "prj_no_dfu.conf")
+if(NOT "${CONFIG_FILE_NAME}" STREQUAL "prj_no_dfu.conf")
     set(PM_STATIC_YML_FILE ${CMAKE_CURRENT_SOURCE_DIR}/configuration/${BOARD}/pm_static_dfu.yml)
 endif()
 
@@ -49,12 +47,16 @@ target_sources(app PRIVATE
     ${COMMON_ROOT}/src/pwm_device.cpp
 )
 
-if(CONFIG_CHIP_OTA_REQUESTOR OR CONFIG_MCUMGR_SMP_BT)
+if(CONFIG_CHIP_OTA_REQUESTOR OR CONFIG_MCUMGR_TRANSPORT_BT)
     target_sources(app PRIVATE ${COMMON_ROOT}/src/ota_util.cpp)
 endif()
 
-if(CONFIG_MCUMGR_SMP_BT)
+if(CONFIG_MCUMGR_TRANSPORT_BT)
     target_sources(app PRIVATE ${COMMON_ROOT}/src/dfu_over_smp.cpp)
+endif()
+
+if(CONFIG_CHIP_ICD_SUBSCRIPTION_HANDLING)
+    target_sources(app PRIVATE ${COMMON_ROOT}/src/icd_util.cpp)
 endif()
 
 chip_configure_data_model(app

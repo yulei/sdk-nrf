@@ -16,12 +16,16 @@
 #include <fcntl.h>
 #include <zephyr/init.h>
 #include <zephyr/net/socket_offload.h>
+#include <zephyr/net/offloaded_netdev.h>
 #include <nrf_socket.h>
 #include <nrf_errno.h>
 #include <nrf_gai_errors.h>
 #include <sockets_internal.h>
 #include <zephyr/sys/fdtable.h>
 #include <zephyr/kernel.h>
+#include <zephyr/net/offloaded_netdev.h>
+#include <zephyr/net/conn_mgr_connectivity.h>
+#include <zephyr/net/net_if.h>
 
 #if defined(CONFIG_POSIX_API)
 #include <zephyr/posix/poll.h>
@@ -29,13 +33,11 @@
 #include <zephyr/posix/sys/socket.h>
 #endif
 
+#if defined(CONFIG_LTE_CONNECTIVITY)
+#include "lte_connectivity/lte_connectivity.h"
+#endif /* CONFIG_LTE_CONNECTIVITY */
+
 #if defined(CONFIG_NET_SOCKETS_OFFLOAD)
-
-#if defined(CONFIG_NRF91_SOCKET_ENABLE_DEBUG_LOGS)
-/* TODO: Add debug */
-#endif
-
-#define PROTO_WILDCARD 0
 
 #define OBJ_TO_SD(obj) (((struct nrf_sock_ctx *)obj)->nrf_fd)
 #define OBJ_TO_CTX(obj) ((struct nrf_sock_ctx *)obj)
@@ -164,6 +166,24 @@ static int z_to_nrf_optname(int z_in_level, int z_in_optname,
 			break;
 		case TLS_DTLS_HANDSHAKE_TIMEO:
 			*nrf_out_optname = NRF_SO_SEC_DTLS_HANDSHAKE_TIMEO;
+			break;
+		case TLS_CIPHERSUITE_USED:
+			*nrf_out_optname = NRF_SO_SEC_CIPHERSUITE_USED;
+			break;
+		case TLS_DTLS_CID:
+			*nrf_out_optname = NRF_SO_SEC_DTLS_CID;
+			break;
+		case TLS_DTLS_CID_STATUS:
+			*nrf_out_optname = NRF_SO_SEC_DTLS_CID_STATUS;
+			break;
+		case TLS_DTLS_CONN_SAVE:
+			*nrf_out_optname = NRF_SO_SEC_DTLS_CONN_SAVE;
+			break;
+		case TLS_DTLS_CONN_LOAD:
+			*nrf_out_optname = NRF_SO_SEC_DTLS_CONN_LOAD;
+			break;
+		case TLS_DTLS_HANDSHAKE_STATUS:
+			*nrf_out_optname = NRF_SO_SEC_HANDSHAKE_STATUS;
 			break;
 		default:
 			retval = -1;
@@ -521,20 +541,18 @@ static ssize_t nrf91_socket_offload_recvfrom(void *obj, void *buf, size_t len,
 	ssize_t retval;
 
 	if (ctx->lock) {
-		k_mutex_unlock(ctx->lock);
+		(void) k_mutex_unlock(ctx->lock);
 	}
 
 	if (from == NULL || fromlen == NULL) {
-		retval = nrf_recvfrom(ctx->nrf_fd, buf, len, flags,
-				      NULL, NULL);
+		retval = nrf_recvfrom(ctx->nrf_fd, buf, len, flags, NULL, NULL);
 	} else {
 		/* Allocate space for maximum of IPv4 and IPv6 family type. */
-		struct nrf_sockaddr_in6 cliaddr_storage = { 0 };
+		struct nrf_sockaddr_in6 cliaddr_storage = {0};
 		nrf_socklen_t sock_len = sizeof(struct nrf_sockaddr_in6);
 		struct nrf_sockaddr *cliaddr = (struct nrf_sockaddr *)&cliaddr_storage;
 
-		retval = nrf_recvfrom(ctx->nrf_fd, buf, len, flags,
-				      cliaddr, &sock_len);
+		retval = nrf_recvfrom(ctx->nrf_fd, buf, len, flags, cliaddr, &sock_len);
 		if (retval < 0) {
 			goto exit;
 		}
@@ -545,18 +563,17 @@ static ssize_t nrf91_socket_offload_recvfrom(void *obj, void *buf, size_t len,
 			*fromlen = sizeof(struct sockaddr_in);
 		} else if (cliaddr->sa_family == NRF_AF_INET6 &&
 			   sock_len == sizeof(struct nrf_sockaddr_in6)) {
-			nrf_to_z_ipv6(from, (struct nrf_sockaddr_in6 *)
-					  cliaddr);
+			nrf_to_z_ipv6(from, (struct nrf_sockaddr_in6 *)cliaddr);
 			*fromlen = sizeof(struct sockaddr_in6);
 		}
 	}
 
 exit:
+	/* Context might have been freed during this call.
+	 * Check again before accessing.
+	 */
 	if (ctx->lock) {
-		/* don't touch this if the context has been released
-		 * as a consequence of the socket being closed
-		 */
-		k_mutex_lock(ctx->lock, K_FOREVER);
+		(void) k_mutex_lock(ctx->lock, K_FOREVER);
 	}
 
 	return retval;
@@ -568,28 +585,37 @@ static ssize_t nrf91_socket_offload_sendto(void *obj, const void *buf,
 					   socklen_t tolen)
 {
 	int sd = OBJ_TO_SD(obj);
+	struct nrf_sock_ctx *ctx = OBJ_TO_CTX(obj);
 	ssize_t retval;
 
+	if (ctx->lock) {
+		(void)k_mutex_unlock(ctx->lock);
+	}
+
 	if (to == NULL) {
-		retval = nrf_sendto(sd, buf, len, flags, NULL,
-				    0);
+		retval = nrf_sendto(sd, buf, len, flags, NULL, 0);
 	} else if (to->sa_family == AF_INET) {
 		struct nrf_sockaddr_in ipv4;
 		nrf_socklen_t sock_len = sizeof(struct nrf_sockaddr_in);
 
 		z_to_nrf_ipv4(to, &ipv4);
-		retval = nrf_sendto(sd, buf, len, flags,
-				    (struct nrf_sockaddr*)&ipv4, sock_len);
+		retval = nrf_sendto(sd, buf, len, flags, (struct nrf_sockaddr *)&ipv4, sock_len);
 	} else if (to->sa_family == AF_INET6) {
 		struct nrf_sockaddr_in6 ipv6;
 		nrf_socklen_t sock_len = sizeof(struct nrf_sockaddr_in6);
 
 		z_to_nrf_ipv6(to, &ipv6);
-		retval = nrf_sendto(sd, buf, len, flags,
-				    (struct nrf_sockaddr*)&ipv6, sock_len);
+		retval = nrf_sendto(sd, buf, len, flags, (struct nrf_sockaddr *)&ipv6, sock_len);
 	} else {
 		errno = EAFNOSUPPORT;
 		retval = -1;
+	}
+
+	/* Context might have been freed during this call.
+	 * Check again before accessing.
+	 */
+	if (ctx->lock) {
+		(void) k_mutex_lock(ctx->lock, K_FOREVER);
 	}
 
 	return retval;
@@ -1049,7 +1075,7 @@ NET_SOCKET_REGISTER(nrf91_socket, NRF91_SOCKET_PRIORITY, AF_UNSPEC,
 
 /* Create a network interface for nRF91 */
 
-static int nrf91_nrf_modem_lib_socket_offload_init(const struct device *arg)
+static int nrf91_socket_offload_init(const struct device *arg)
 {
 	ARG_UNUSED(arg);
 
@@ -1065,28 +1091,59 @@ static const struct socket_dns_offload nrf91_socket_dns_offload_ops = {
 	.freeaddrinfo = nrf91_socket_offload_freeaddrinfo,
 };
 
-static struct nrf91_socket_iface_data {
+static struct nrf91_iface_data {
 	struct net_if *iface;
-} nrf91_socket_iface_data;
+} nrf91_iface_data;
 
-static void nrf91_socket_iface_init(struct net_if *iface)
+static void nrf91_iface_api_init(struct net_if *iface)
 {
-	nrf91_socket_iface_data.iface = iface;
+	nrf91_iface_data.iface = iface;
 
 	iface->if_dev->socket_offload = nrf91_socket_create;
 
 	socket_offload_dns_register(&nrf91_socket_dns_offload_ops);
+
+	if (!IS_ENABLED(CONFIG_NRF_MODEM_LIB_NET_IF_AUTO_START)) {
+		net_if_flag_set(iface, NET_IF_NO_AUTO_START);
+	}
 }
 
-static struct net_if_api nrf91_if_api = {
-	.init = nrf91_socket_iface_init,
+static int nrf91_iface_enable(const struct net_if *iface, bool enabled)
+{
+	/* Enables or disable the device (in response to admin state change) */
+#if defined(CONFIG_LTE_CONNECTIVITY)
+	return enabled ? lte_connectivity_enable() : lte_connectivity_disable();
+#else
+	ARG_UNUSED(iface);
+	ARG_UNUSED(enabled);
+	return 0;
+#endif /* CONFIG_NRF9160_CONNECTIVITY */
+}
+
+static struct offloaded_if_api nrf91_iface_offload_api = {
+	.iface_api.init = nrf91_iface_api_init,
+	.enable = nrf91_iface_enable,
 };
 
 /* TODO Get the actual MTU for the nRF91 LTE link. */
 NET_DEVICE_OFFLOAD_INIT(nrf91_socket, "nrf91_socket",
-			nrf91_nrf_modem_lib_socket_offload_init,
+			nrf91_socket_offload_init,
 			NULL,
-			&nrf91_socket_iface_data, NULL,
-			0, &nrf91_if_api, 1280);
+			&nrf91_iface_data, NULL,
+			0, &nrf91_iface_offload_api, 1280);
 
-#endif
+#if defined(CONFIG_LTE_CONNECTIVITY)
+/* Bind l2 connectity APIs. */
+static struct conn_mgr_conn_api conn_api = {
+	.init = lte_connectivity_init,
+	.connect = lte_connectivity_connect,
+	.disconnect = lte_connectivity_disconnect,
+	.set_opt = lte_connectivity_options_set,
+	.get_opt = lte_connectivity_options_get,
+};
+
+CONN_MGR_CONN_DEFINE(LTE_CONNECTIVITY, &conn_api);
+CONN_MGR_BIND_CONN(nrf91_socket, LTE_CONNECTIVITY);
+#endif /* CONFIG_LTE_CONNECTIVITY */
+
+#endif /* CONFIG_NET_SOCKETS_OFFLOAD */

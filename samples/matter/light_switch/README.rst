@@ -44,7 +44,7 @@ IPv6 network support
 The development kits for this sample offer the following IPv6 network support for Matter:
 
 * Matter over Thread is supported for ``nrf52840dk_nrf52840``, ``nrf5340dk_nrf5340_cpuapp``, and ``nrf21540dk_nrf52840``.
-* Matter over Wi-Fi is supported for ``nrf5340dk_nrf5340_cpuapp`` with the ``nrf7002_ek`` shield attached or for ``nrf7002dk_nrf5340_cpuapp``.
+* Matter over Wi-Fi is supported for ``nrf5340dk_nrf5340_cpuapp`` with the ``nrf7002ek`` shield attached or for ``nrf7002dk_nrf5340_cpuapp``.
 
 Overview
 ********
@@ -91,13 +91,19 @@ This allows the light switch more than one lighting devices at the same time.
 Binding
 =======
 
+.. matter_light_switch_sample_binding_start
+
 Binding refers to establishing a relationship between endpoints on the local and remote nodes.
 With binding, local endpoints are pointed and bound to the corresponding remote endpoints.
 Both must belong to the same cluster type.
 Binding lets the local endpoint know which endpoints are going to be the target for the client-generated actions on one or more remote nodes.
 
+.. matter_light_switch_sample_binding_end
+
 In this sample, the light switch controls one or more lighting devices, but does not know the remote endpoints of the lights (on remote nodes).
 Using binding, the light switch device updates its Binding cluster with all relevant information about the lighting devices, such as their IPv6 address, node ID, and the IDs of the remote endpoints that contains the On/Off cluster and the LevelControl cluster, respectively.
+
+
 
 Configuration
 *************
@@ -267,14 +273,14 @@ Before you start testing the application, you can select one of the `Matter ligh
 Selecting a build type in |VSC|
 -------------------------------
 
-.. include:: /getting_started/modifying.rst
+.. include:: /config_and_build/modifying.rst
    :start-after: build_types_selection_vsc_start
    :end-before: build_types_selection_vsc_end
 
 Selecting a build type from command line
 ----------------------------------------
 
-.. include:: /getting_started/modifying.rst
+.. include:: /config_and_build/modifying.rst
    :start-after: build_types_selection_cmd_start
    :end-before: For example, you can replace the
 
@@ -460,6 +466,8 @@ For this sample, you can use one of the following :ref:`onboarding information f
 
        - MT:4CT9142C00KA0648G00
        - 34970112332
+
+|matter_cd_info_note_for_samples|
 
 Upgrading the device firmware
 =============================

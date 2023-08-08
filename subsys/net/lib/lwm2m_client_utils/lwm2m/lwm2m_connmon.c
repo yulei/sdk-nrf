@@ -134,7 +134,7 @@ static void modem_signal_update(struct k_work *work)
 		return;
 	}
 
-	lwm2m_set_s8(&LWM2M_OBJ(4, 0, 2), modem_rsrp);
+	lwm2m_set_s16(&LWM2M_OBJ(4, 0, 2), modem_rsrp);
 	timestamp_prev = k_uptime_get_32();
 }
 
@@ -194,7 +194,7 @@ static void connmon_lte_notify_handler(const struct lte_lc_evt *const evt)
 	}
 }
 
-int lwm2m_init_connmon(const struct device *dev)
+int lwm2m_init_connmon(void)
 {
 	int ret;
 

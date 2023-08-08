@@ -99,12 +99,12 @@ config DOWNLOAD_CLIENT_STACK_SIZE
 config DOWNLOAD_CLIENT_MAX_HOSTNAME_SIZE
 	int "Maximum hostname length (stack)"
 	range 8 256
-	default 64
+	default 255
 
 config DOWNLOAD_CLIENT_MAX_FILENAME_SIZE
 	int "Maximum filename length (stack)"
 	range 8 2048
-	default 192
+	default 255
 
 config DOWNLOAD_CLIENT_TCP_SOCK_TIMEO_MS
 	int "Receive timeout on TCP sockets, in milliseconds"
@@ -127,6 +127,7 @@ config DOWNLOAD_CLIENT_COAP_MAX_RETRANSMIT_REQUEST_COUNT
 
 config DOWNLOAD_CLIENT_RANGE_REQUESTS
 	bool "Always use HTTP Range requests"
+	default y
 	help
 	  Always use HTTP Range requests when downloading (RFC 7233).
 	  This option can be useful to limit the amount of incoming data from the server

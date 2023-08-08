@@ -24,7 +24,7 @@ static void timer_handler(nrf_timer_event_t event_type, void *context)
 #define FULL_LOAD 100000
 #define SMALL_LOAD 3000
 
-void test_cpu_load(void)
+ZTEST(cpu_load, test_cpu_load)
 {
 	int err;
 	uint32_t load;
@@ -36,13 +36,14 @@ void test_cpu_load(void)
 
 #ifdef DPPI_PRESENT
 	static nrfx_timer_t timer = NRFX_TIMER_INSTANCE(1);
-	nrfx_timer_config_t config = NRFX_TIMER_DEFAULT_CONFIG;
+	uint32_t base_frequency = NRF_TIMER_BASE_FREQUENCY_GET(timer.p_reg);
+	nrfx_timer_config_t config = NRFX_TIMER_DEFAULT_CONFIG(base_frequency);
 	uint8_t ch;
 	uint32_t evt = nrf_power_event_address_get(NRF_POWER,
 						NRF_POWER_EVENT_SLEEPENTER);
 	uint32_t tsk = nrfx_timer_task_address_get(&timer, NRF_TIMER_TASK_COUNT);
 
-	config.frequency = NRF_TIMER_FREQ_1MHz;
+	config.frequency = NRFX_MHZ_TO_HZ(1);
 	config.bit_width = NRF_TIMER_BIT_WIDTH_32;
 
 	err = nrfx_timer_init(&timer, &config, timer_handler);
@@ -84,10 +85,4 @@ void test_cpu_load(void)
 	zassert_true(load < SMALL_LOAD, "Unexpected load:%d", load);
 }
 
-void test_main(void)
-{
-	ztest_test_suite(cpu_load,
-		ztest_unit_test(test_cpu_load)
-	);
-	ztest_run_test_suite(cpu_load);
-}
+ZTEST_SUITE(cpu_load, NULL, NULL, NULL, NULL, NULL);

@@ -78,7 +78,7 @@ const static struct cloud_data_ui ui_data_example = {
 
 #define BAT_BATCH_EXAMPLE \
 "[{"\
-	"\"appId\":\"VOLTAGE\","\
+	"\"appId\":\"BATTERY\","\
 	"\"messageType\":\"DATA\","\
 	"\"ts\":1563968747123,"\
 	"\"data\":\"50\""\
@@ -187,7 +187,7 @@ void test_enc_cloud_location_empty(void)
 	ret = cloud_codec_encode_cloud_location(&codec, &data);
 
 	TEST_ASSERT_EQUAL(-ENOTSUP, ret);
-	TEST_ASSERT_EQUAL(NULL, codec.buf);
+	TEST_ASSERT_EQUAL_PTR(NULL, codec.buf);
 	TEST_ASSERT_EQUAL(true, data.queued);
 }
 
@@ -199,7 +199,7 @@ void test_enc_agps_req(void)
 	ret = cloud_codec_encode_agps_request(&codec, &data);
 
 	TEST_ASSERT_EQUAL(-ENOTSUP, ret);
-	TEST_ASSERT_EQUAL(NULL, codec.buf);
+	TEST_ASSERT_EQUAL_PTR(NULL, codec.buf);
 	TEST_ASSERT_EQUAL(false, data.queued);
 }
 
@@ -211,7 +211,7 @@ void test_enc_pgps_req(void)
 	ret = cloud_codec_encode_pgps_request(&codec, &data);
 
 	TEST_ASSERT_EQUAL(-ENOTSUP, ret);
-	TEST_ASSERT_EQUAL(NULL, codec.buf);
+	TEST_ASSERT_EQUAL_PTR(NULL, codec.buf);
 	TEST_ASSERT_EQUAL(false, data.queued);
 }
 
@@ -392,7 +392,7 @@ void test_enc_data_empty(void)
 				&impact_buf,
 				&bat_buf);
 	TEST_ASSERT_EQUAL(-ENOTSUP, ret);
-	TEST_ASSERT_EQUAL(NULL, codec.buf);
+	TEST_ASSERT_EQUAL_PTR(NULL, codec.buf);
 }
 
 /* tests batch encoding zero-length buffers */
@@ -417,7 +417,7 @@ void test_enc_batch_data_empty(void)
 				0, 0, 0, 0, 0, 0, 0);
 
 	TEST_ASSERT_EQUAL(-ENODATA, ret);
-	TEST_ASSERT_EQUAL(NULL, codec.buf);
+	TEST_ASSERT_EQUAL_PTR(NULL, codec.buf);
 }
 
 /* tests batch encoding single-element empty buffers */
@@ -441,7 +441,7 @@ void test_enc_batch_data_single_empty_element(void)
 				&bat_buf,
 				1, 1, 1, 1, 1, 1, 1);
 	TEST_ASSERT_EQUAL(-ENODATA, ret);
-	TEST_ASSERT_EQUAL(NULL, codec.buf);
+	TEST_ASSERT_EQUAL_PTR(NULL, codec.buf);
 }
 
 /* tests batch encoding typical battery data */
@@ -627,13 +627,14 @@ void test_enc_batch_data_ui_toobig(void)
 }
 
 
-/* It is required to be added to each test. That is because unity is using
- * different main signature (returns int) and zephyr expects main which does
- * not return value.
+/* It is required to be added to each test. That is because unity's
+ * main may return nonzero, while zephyr's main currently must
+ * return 0 in all cases (other values are reserved).
  */
 extern int unity_main(void);
 
-void main(void)
+int main(void)
 {
 	(void)unity_main();
+	return 0;
 }

@@ -26,8 +26,9 @@ endmacro()
 # Load static configuration if found.
 # Try user defined file first, then file found in configuration directory,
 # finally file from board directory.
-
-set(user_def_pm_static ${PM_STATIC_YML_FILE})
+if(DEFINED PM_STATIC_YML_FILE)
+  string(CONFIGURE "${PM_STATIC_YML_FILE}" user_def_pm_static)
+endif()
 
 ncs_file(CONF_FILES ${APPLICATION_CONFIG_DIR}
          PM conf_dir_pm_static
@@ -56,7 +57,7 @@ elseif (EXISTS ${board_dir_pm_static_common})
   set(static_configuration_file ${board_dir_pm_static_common})
 endif()
 
-if (EXISTS ${static_configuration_file})
+if (EXISTS "${static_configuration_file}" AND NOT SYSBUILD)
   message(STATUS "Found partition manager static configuration: "
                  "${static_configuration_file}"
   )
@@ -71,6 +72,22 @@ if (NOT static_configuration AND CONFIG_PM_IMAGE_NOT_BUILT_FROM_SOURCE)
     the 'Scripts -> Partition Manager -> Static configuration' chapter in the \
     documentation. Without this information, the build system is not able to \
     place the image correctly in flash.")
+endif()
+
+if (NOT static_configuration AND
+  (CONFIG_BOOTLOADER_MCUBOOT OR CONFIG_SECURE_BOOT))
+      message(WARNING "
+        ---------------------------------------------------------------------
+        --- WARNING: Using a bootloader without pm_static.yml.            ---
+        --- There are cases where a deployed product can consist of       ---
+        --- multiple images, and only a subset of these images can be     ---
+        --- upgraded through a firmware update mechanism. In such cases,  ---
+        --- the upgradable images must have partitions that are static    ---
+        --- and are matching the partition map used by the bootloader     ---
+        --- programmed onto the device.                                   ---
+        ---------------------------------------------------------------------
+        \n"
+      )
 endif()
 
 
@@ -106,7 +123,9 @@ if (NOT (
   (NOT IMAGE_NAME AND PM_IMAGES) OR
   (NOT IMAGE_NAME AND PM_DOMAINS) OR
   (PM_SUBSYS_PREPROCESSED AND CONFIG_PM_SINGLE_IMAGE)
-  ))
+  )
+  OR SYSBUILD
+  )
   return()
 endif()
 
@@ -177,8 +196,8 @@ list(APPEND header_files ${ZEPHYR_BINARY_DIR}/${generated_path}/pm_config.h)
 # Add subsys defined pm.yml to the input_files
 list(APPEND input_files ${PM_SUBSYS_PREPROCESSED})
 
-if (DEFINED CONFIG_SOC_NRF9160)
-  # See nRF9160 Product Specification, chapter "UICR"
+if (DEFINED CONFIG_SOC_SERIES_NRF91X)
+  # See nRF91 Product Specification, chapter "UICR"
   set(otp_start_addr "0xff8108")
   set(otp_size 756) # 189 * 4
 elseif (DEFINED CONFIG_SOC_NRF5340_CPUAPP)
@@ -197,7 +216,7 @@ add_region(
 
 math(EXPR flash_size "${CONFIG_FLASH_SIZE} * 1024" OUTPUT_FORMAT HEXADECIMAL)
 
-if (CONFIG_SOC_NRF9160 OR CONFIG_SOC_NRF5340_CPUAPP)
+if (CONFIG_SOC_SERIES_NRF91X OR CONFIG_SOC_NRF5340_CPUAPP)
   add_region(
     NAME otp
     SIZE ${otp_size}
@@ -275,7 +294,7 @@ set(pm_out_dotconf_file ${APPLICATION_BINARY_DIR}/pm${UNDERSCORE_DOMAIN}.config)
 
 set(pm_cmd
   ${PYTHON_EXECUTABLE}
-  ${NRF_DIR}/scripts/partition_manager.py
+  ${ZEPHYR_NRF_MODULE_DIR}/scripts/partition_manager.py
   --input-files ${input_files}
   --regions ${regions}
   --output-partitions ${pm_out_partition_file}
@@ -287,7 +306,7 @@ set(pm_cmd
 
 set(pm_output_cmd
   ${PYTHON_EXECUTABLE}
-  ${NRF_DIR}/scripts/partition_manager_output.py
+  ${ZEPHYR_NRF_MODULE_DIR}/scripts/partition_manager_output.py
   --input-partitions ${pm_out_partition_file}
   --input-regions ${pm_out_region_file}
   --config-file ${pm_out_dotconf_file}
@@ -610,7 +629,7 @@ to the external flash")
   # available. Generate the global pm_config.h, and provide it to all images.
   set(pm_global_output_cmd
     ${PYTHON_EXECUTABLE}
-    ${NRF_DIR}/scripts/partition_manager_output.py
+    ${ZEPHYR_NRF_MODULE_DIR}/scripts/partition_manager_output.py
     --input-partitions ${pm_out_partition_file}
     --input-regions ${pm_out_region_file}
     --header-files ${header_files}

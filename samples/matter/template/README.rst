@@ -33,7 +33,7 @@ IPv6 network support
 The development kits for this sample offer the following IPv6 network support for Matter:
 
 * Matter over Thread is supported for ``nrf52840dk_nrf52840``, ``nrf5340dk_nrf5340_cpuapp``, and ``nrf21540dk_nrf52840``.
-* Matter over Wi-Fi is supported for ``nrf5340dk_nrf5340_cpuapp`` with the ``nrf7002_ek`` shield attached or for ``nrf7002dk_nrf5340_cpuapp``.
+* Matter over Wi-Fi is supported for ``nrf5340dk_nrf5340_cpuapp`` with the ``nrf7002ek`` shield attached or for ``nrf7002dk_nrf5340_cpuapp``.
 
 Overview
 ********
@@ -87,6 +87,8 @@ For this sample, you can use one of the following :ref:`onboarding information f
 
        - MT:Y.K9042C00KA0648G00
        - 34970112332
+
+|matter_cd_info_note_for_samples|
 
 Configuration
 *************
@@ -142,14 +144,14 @@ Before you start testing the application, you can select one of the `Matter temp
 Selecting a build type in |VSC|
 -------------------------------
 
-.. include:: /getting_started/modifying.rst
+.. include:: /config_and_build/modifying.rst
    :start-after: build_types_selection_vsc_start
    :end-before: build_types_selection_vsc_end
 
 Selecting a build type from command line
 ----------------------------------------
 
-.. include:: /getting_started/modifying.rst
+.. include:: /config_and_build/modifying.rst
    :start-after: build_types_selection_cmd_start
    :end-before: For example, you can replace the
 

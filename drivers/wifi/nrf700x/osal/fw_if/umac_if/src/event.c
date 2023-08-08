@@ -9,6 +9,7 @@
  * FMAC IF Layer of the Wi-Fi driver.
  */
 
+#include "queue.h"
 #include "host_rpu_umac_if.h"
 #include "hal_mem.h"
 #include "fmac_rx.h"
@@ -72,7 +73,7 @@ out:
 }
 #endif /* CONFIG_NRF700X_DATA_TX */
 
-#ifdef CONFIG_WPA_SUPP
+#ifdef CONFIG_NRF700X_STA_MODE
 static void umac_event_connect(struct wifi_nrf_fmac_dev_ctx *fmac_dev_ctx,
 			       void *event_data)
 {
@@ -129,7 +130,7 @@ static void umac_event_connect(struct wifi_nrf_fmac_dev_ctx *fmac_dev_ctx,
 	return;
 
 }
-#endif /* CONFIG_WPA_SUPP */
+#endif /* CONFIG_NRF700X_STA_MODE */
 
 #ifndef CONFIG_NRF700X_RADIO_TEST
 static enum wifi_nrf_status umac_event_ctrl_process(struct wifi_nrf_fmac_dev_ctx *fmac_dev_ctx,
@@ -144,6 +145,13 @@ static enum wifi_nrf_status umac_event_ctrl_process(struct wifi_nrf_fmac_dev_ctx
 	unsigned char if_id = 0;
 	unsigned int event_num = 0;
 	bool more_res = false;
+
+	if (!fmac_dev_ctx || !event_data) {
+		wifi_nrf_osal_log_err(fmac_dev_ctx->fpriv->opriv,
+				      "%s: Invalid parameters\n",
+				      __func__);
+		goto out;
+	}
 
 	umac_hdr = event_data;
 	if_id = umac_hdr->ids.wdev_id;
@@ -160,6 +168,11 @@ static enum wifi_nrf_status umac_event_ctrl_process(struct wifi_nrf_fmac_dev_ctx
 
 	vif_ctx = fmac_dev_ctx->vif_ctx[if_id];
 	callbk_fns = &fmac_dev_ctx->fpriv->callbk_fns;
+
+	wifi_nrf_osal_log_dbg(fmac_dev_ctx->fpriv->opriv,
+			      "%s: Event %d received from UMAC\n",
+			      __func__,
+			      event_num);
 
 	switch (umac_hdr->cmd_evnt) {
 	case NRF_WIFI_UMAC_EVENT_TRIGGER_SCAN_START:
@@ -218,6 +231,7 @@ static enum wifi_nrf_status umac_event_ctrl_process(struct wifi_nrf_fmac_dev_ctx
 
 		vif_ctx->ifflags = true;
 		break;
+#ifdef CONFIG_NRF700X_STA_MODE
 	case NRF_WIFI_UMAC_EVENT_TWT_SLEEP:
 		if (callbk_fns->twt_sleep_callbk_fn)
 			callbk_fns->twt_sleep_callbk_fn(vif_ctx->os_vif_ctx,
@@ -229,7 +243,6 @@ static enum wifi_nrf_status umac_event_ctrl_process(struct wifi_nrf_fmac_dev_ctx
 					      __func__,
 					      umac_hdr->cmd_evnt);
 		break;
-#ifdef CONFIG_WPA_SUPP
 	case NRF_WIFI_UMAC_EVENT_SCAN_RESULT:
 		if (umac_hdr->seq != 0)
 			more_res = true;
@@ -450,13 +463,13 @@ static enum wifi_nrf_status umac_event_ctrl_process(struct wifi_nrf_fmac_dev_ctx
 					      __func__,
 					      umac_hdr->cmd_evnt);
 		break;
-#ifdef CONFIG_WPA_SUPP
+#ifdef CONFIG_NRF700X_STA_MODE
 	case NRF_WIFI_UMAC_EVENT_NEW_STATION:
 	case NRF_WIFI_UMAC_EVENT_DEL_STATION:
 		umac_event_connect(fmac_dev_ctx,
 				   event_data);
 		break;
-#endif /* CONFIG_WPA_SUPP */
+#endif /* CONFIG_NRF700X_STA_MODE */
 #ifdef CONFIG_NRF700X_P2P_MODE
 	case NRF_WIFI_UMAC_EVENT_REMAIN_ON_CHANNEL:
 		if (callbk_fns->roc_callbk_fn)
@@ -481,7 +494,21 @@ static enum wifi_nrf_status umac_event_ctrl_process(struct wifi_nrf_fmac_dev_ctx
 					      umac_hdr->cmd_evnt);
 		break;
 #endif /* CONFIG_NRF700X_P2P_MODE */
-#endif /* CONFIG_WPA_SUPP */
+	case NRF_WIFI_UMAC_EVENT_GET_CONNECTION_INFO:
+		if (callbk_fns->get_conn_info_callbk_fn)
+			callbk_fns->get_conn_info_callbk_fn(vif_ctx->os_vif_ctx,
+							    event_data,
+							    event_len);
+		else
+			wifi_nrf_osal_log_err(fmac_dev_ctx->fpriv->opriv,
+					      "%s: No callback registered for event %d\n",
+					      __func__,
+					      umac_hdr->cmd_evnt);
+		break;
+	case NRF_WIFI_UMAC_EVENT_REG_CHANGE:
+		/* TODO: Inform the user space about the regulatory change */
+		break;
+#endif /* CONFIG_NRF700X_STA_MODE */
 	default:
 		wifi_nrf_osal_log_dbg(fmac_dev_ctx->fpriv->opriv,
 				      "%s: No callback registered for event %d\n",
@@ -489,6 +516,11 @@ static enum wifi_nrf_status umac_event_ctrl_process(struct wifi_nrf_fmac_dev_ctx
 				      umac_hdr->cmd_evnt);
 		break;
 	}
+
+	wifi_nrf_osal_log_dbg(fmac_dev_ctx->fpriv->opriv,
+			      "%s: Event %d processed\n",
+			      __func__,
+			      event_num);
 
 out:
 	return status;
@@ -514,15 +546,80 @@ wifi_nrf_fmac_data_event_process(struct wifi_nrf_fmac_dev_ctx *fmac_dev_ctx,
 
 	event = ((struct nrf_wifi_umac_head *)umac_head)->cmd;
 
+	wifi_nrf_osal_log_dbg(fmac_dev_ctx->fpriv->opriv,
+			      "%s: Event %d received from UMAC\n",
+			      __func__,
+			      event);
+
 	switch (event) {
 	case NRF_WIFI_CMD_RX_BUFF:
+#ifdef CONFIG_NRF700X_RX_DONE_WQ_ENABLED
+		struct nrf_wifi_rx_buff *config = wifi_nrf_osal_mem_zalloc(
+			fmac_dev_ctx->fpriv->opriv,
+			sizeof(struct nrf_wifi_rx_buff));
+		if (!config) {
+			wifi_nrf_osal_log_err(fmac_dev_ctx->fpriv->opriv,
+					      "%s: Failed to allocate memory (RX)\n",
+					      __func__);
+			status = WIFI_NRF_STATUS_FAIL;
+			break;
+		}
+		wifi_nrf_osal_mem_cpy(fmac_dev_ctx->fpriv->opriv,
+					config,
+					umac_head,
+					sizeof(struct nrf_wifi_rx_buff));
+		status = wifi_nrf_utils_q_enqueue(fmac_dev_ctx->fpriv->opriv,
+					 fmac_dev_ctx->rx_config.rx_tasklet_event_q,
+					 config);
+		if (status != WIFI_NRF_STATUS_SUCCESS) {
+			wifi_nrf_osal_log_err(fmac_dev_ctx->fpriv->opriv,
+					      "%s: Failed to enqueue RX buffer\n",
+					      __func__);
+			wifi_nrf_osal_mem_free(fmac_dev_ctx->fpriv->opriv,
+					       config);
+			break;
+		}
+		wifi_nrf_osal_tasklet_schedule(fmac_dev_ctx->fpriv->opriv,
+					       fmac_dev_ctx->rx_tasklet);
+#else
 		status = wifi_nrf_fmac_rx_event_process(fmac_dev_ctx,
 							umac_head);
+#endif /* CONFIG_NRF700X_RX_DONE_WQ_ENABLED */
 		break;
 #ifdef CONFIG_NRF700X_DATA_TX
 	case NRF_WIFI_CMD_TX_BUFF_DONE:
+#ifdef CONFIG_NRF700X_TX_DONE_WQ_ENABLED
+		struct nrf_wifi_tx_buff_done *config = wifi_nrf_osal_mem_zalloc(
+					fmac_dev_ctx->fpriv->opriv,
+					sizeof(struct nrf_wifi_tx_buff_done));
+		if (!config) {
+			wifi_nrf_osal_log_err(fmac_dev_ctx->fpriv->opriv,
+					      "%s: Failed to allocate memory (TX)\n",
+					      __func__);
+			status = WIFI_NRF_STATUS_FAIL;
+			break;
+		}
+		wifi_nrf_osal_mem_cpy(fmac_dev_ctx->fpriv->opriv,
+					config,
+					umac_head,
+					sizeof(struct nrf_wifi_tx_buff_done));
+		status = wifi_nrf_utils_q_enqueue(fmac_dev_ctx->fpriv->opriv,
+			fmac_dev_ctx->tx_config.tx_done_tasklet_event_q,
+			config);
+		if (status != WIFI_NRF_STATUS_SUCCESS) {
+			wifi_nrf_osal_log_err(fmac_dev_ctx->fpriv->opriv,
+					      "%s: Failed to enqueue TX buffer\n",
+					      __func__);
+			wifi_nrf_osal_mem_free(fmac_dev_ctx->fpriv->opriv,
+					       config);
+			break;
+		}
+		wifi_nrf_osal_tasklet_schedule(fmac_dev_ctx->fpriv->opriv,
+				fmac_dev_ctx->tx_done_tasklet);
+#else
 		status = wifi_nrf_fmac_tx_done_event_process(fmac_dev_ctx,
-							     umac_head);
+								umac_head);
+#endif /* CONFIG_NRF700X_TX_DONE_WQ_ENABLED */
 		break;
 	case NRF_WIFI_CMD_CARRIER_ON:
 		status = wifi_nrf_fmac_if_carr_state_event_proc(fmac_dev_ctx,
@@ -738,6 +835,10 @@ static enum wifi_nrf_status umac_process_sys_events(struct wifi_nrf_fmac_dev_ctx
 	enum wifi_nrf_status status = WIFI_NRF_STATUS_FAIL;
 	unsigned char *sys_head = NULL;
 
+	if (!fmac_dev_ctx || !rpu_msg) {
+		return status;
+	}
+
 	sys_head = (unsigned char *)rpu_msg->msg;
 
 	switch (((struct nrf_wifi_sys_head *)sys_head)->cmd_event) {
@@ -795,6 +896,11 @@ enum wifi_nrf_status wifi_nrf_fmac_event_callback(void *mac_dev_ctx,
 	umac_hdr = (struct nrf_wifi_umac_hdr *)rpu_msg->msg;
 	umac_msg_len = rpu_msg->hdr.len;
 	umac_msg_type = umac_hdr->cmd_evnt;
+
+	wifi_nrf_osal_log_dbg(fmac_dev_ctx->fpriv->opriv,
+			      "%s: Event type %d recd\n",
+			      __func__,
+			      rpu_msg->type);
 
 	switch (rpu_msg->type) {
 #ifndef CONFIG_NRF700X_RADIO_TEST

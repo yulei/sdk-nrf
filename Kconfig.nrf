@@ -10,7 +10,21 @@
 orsource "./$(BOARD_DIR)/Kconfig.board"
 orsource "./$(BOARD_DIR)/Kconfig"
 
+rsource "boards/shields/*/Kconfig.shield"
 rsource "subsys/net/openthread/Kconfig.defconfig"
+
+if !TFM_PROFILE_TYPE_MINIMAL
+rsource "modules/trusted-firmware-m/Kconfig.mbedtls.defconfig"
+endif # ! TFM_PROFILE_TYPE_MINIMAL
+
+if TFM_PROFILE_TYPE_MINIMAL
+rsource "modules/trusted-firmware-m/Kconfig.mbedtls_minimal.defconfig"
+rsource "modules/trusted-firmware-m/Kconfig.tfm_minimal.defconfig"
+endif # TFM_PROFILE_TYPE_MINIMAL
+
+if BUILD_WITH_TFM
+rsource "modules/trusted-firmware-m/Kconfig.psa.defconfig"
+endif # BUILD_WITH_TFM
 
 menu "Nordic nRF Connect"
 
@@ -29,10 +43,10 @@ choice MBEDTLS_IMPLEMENTATION
 	default MBEDTLS_LIBRARY_NRF_SECURITY
 
 config MBEDTLS_LIBRARY_NRF_SECURITY
-	bool "Use mbed TLS library from Nordic provided security backend"
+	bool "Use Mbed TLS library from Nordic provided security backend"
 	depends on NORDIC_SECURITY_BACKEND || NRF_SECURITY
 	help
-	  Use external, out-of-tree prebuilt mbedTLS library. For advanced
+	  Use external, out-of-tree prebuilt Mbed TLS library. For advanced
 	  users only.
 
 endchoice
@@ -73,8 +87,8 @@ config PRIVILEGED_STACK_SIZE
 
 # nRF Connect SDK needs larger mcumgr buffers when supporting multi-image DFU
 # or when the Bluetooth Reassembly feature is enabled.
-config MCUMGR_BUF_SIZE
-	default 2475 if MCUMGR_SMP_REASSEMBLY_BT
+config MCUMGR_TRANSPORT_NETBUF_SIZE
+	default 2475 if MCUMGR_TRANSPORT_BT_REASSEMBLY
 	default 1024 if UPDATEABLE_IMAGE_NUMBER > 1
 
 # When using HCI on the nRF5340 we need a larger command buffer.
@@ -105,6 +119,9 @@ config NORDIC_QSPI_NOR_FLASH_LAYOUT_PAGE_SIZE
 	  Set the flash layout page size equal to the erase block size of the
 	  chosen Zephyr flash devicetree node to ensure that swapping can be
 	  performed.
+
+config GETOPT
+	default n
 
 rsource "samples/Kconfig"
 rsource "subsys/Kconfig"

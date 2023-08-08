@@ -19,8 +19,6 @@ LOG_MODULE_REGISTER(LOG_MODULE_NAME);
 #include <zephyr/net/net_event.h>
 #include <zephyr/net/wifi_mgmt.h>
 
-#include "ground_fix_obj.h"
-
 #define VISIBLE_WIFI_AP_MAC_ADDRESS_ID		0
 #define VISIBLE_WIFI_AP_CHANNEL_ID		1
 #define VISIBLE_WIFI_AP_FREQUENCY_ID		2
@@ -111,7 +109,7 @@ int lwm2m_wifi_request_scan(void)
 	return ret;
 }
 
-static int lwm2m_wifi_scan_init(const struct device *dev)
+static int lwm2m_wifi_scan_init(void)
 {
 	const struct device *wifi_dev;
 

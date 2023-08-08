@@ -22,7 +22,7 @@ Moreover, take into account the following considerations:
 
 * The sample was compiled using:
 
-  * The default :file:`prj.conf` and the corresponding :kconfig:option:`OPENTHREAD_NORDIC_LIBRARY`, :kconfig:option:`OPENTHREAD_THREAD_VERSION` choices.
+  * The default :file:`prj.conf` and the corresponding :kconfig:option:`CONFIG_OPENTHREAD_NORDIC_LIBRARY`, :kconfig:option:`CONFIG_OPENTHREAD_THREAD_VERSION` choices.
   * The :kconfig:option:`CONFIG_ASSERT` Kconfig option set to ``n``.
 
 * Values for the :ref:`Thread CLI sample <ot_cli_sample>`, which works with all OpenThread calls, are the highest possible for the OpenThread stack using the master image library configuration.
@@ -40,7 +40,7 @@ See :ref:`thread_ug_feature_sets` for more information.
 nRF5340 DK RAM and flash memory requirements
 *********************************************
 
-The following tables present memory requirements for samples running on the :ref:`nRF5340 DK <gs_programming_board_names>` (:ref:`nrf5340dk_nrf5340 <zephyr:nrf5340dk_nrf5340>`) with the software cryptography support provided by the :ref:`nrfxlib:nrf_oberon_readme` module.
+The following tables present memory requirements for samples running on the :ref:`nRF5340 DK <programming_board_names>` (:ref:`nrf5340dk_nrf5340 <zephyr:nrf5340dk_nrf5340>`) with the software cryptography support provided by the :ref:`nrfxlib:nrf_oberon_readme` module.
 
 .. table:: nRF5340 single protocol Thread 1.3 memory requirements
 
@@ -87,7 +87,7 @@ The following tables present memory requirements for samples running on the :ref
 nRF52840 DK RAM and flash memory requirements
 *********************************************
 
-The following tables present memory requirements for samples running on the :ref:`nRF52840 DK <gs_programming_board_names>` (:ref:`nrf52840dk_nrf52840 <zephyr:nrf52840dk_nrf52840>`) with the software cryptography support provided by the :ref:`nrfxlib:nrf_oberon_readme` module.
+The following tables present memory requirements for samples running on the :ref:`nRF52840 DK <programming_board_names>` (:ref:`nrf52840dk_nrf52840 <zephyr:nrf52840dk_nrf52840>`) with the software cryptography support provided by the :ref:`nrfxlib:nrf_oberon_readme` module.
 
 .. table:: nRF52840 single protocol Thread 1.3 memory requirements
 

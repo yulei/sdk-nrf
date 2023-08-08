@@ -75,6 +75,11 @@ enum wifi_nrf_status umac_cmd_cfg(struct wifi_nrf_fmac_dev_ctx *fmac_dev_ctx,
 					    umac_cmd,
 					    (sizeof(*umac_cmd) + len));
 
+	wifi_nrf_osal_log_dbg(fmac_dev_ctx->fpriv->opriv,
+			      "%s: Command %d sent to RPU\n",
+			      __func__,
+			      ((struct nrf_wifi_umac_hdr *)params)->cmd_evnt);
+
 out:
 	return status;
 }
@@ -89,7 +94,9 @@ enum wifi_nrf_status umac_cmd_init(struct wifi_nrf_fmac_dev_ctx *fmac_dev_ctx,
 #ifdef CONFIG_NRF_WIFI_LOW_POWER
 				   int sleep_type,
 #endif /* CONFIG_NRF_WIFI_LOW_POWER */
-				   unsigned int phy_calib)
+				   unsigned int phy_calib,
+				   enum op_band op_band,
+				   struct nrf_wifi_tx_pwr_ctrl_params *tx_pwr_ctrl_params)
 {
 	enum wifi_nrf_status status = WIFI_NRF_STATUS_FAIL;
 	struct host_rpu_msg *umac_cmd = NULL;
@@ -134,9 +141,10 @@ enum wifi_nrf_status umac_cmd_init(struct wifi_nrf_fmac_dev_ctx *fmac_dev_ctx,
 	umac_cmd_data->sys_params.sleep_enable = sleep_type;
 #endif /* CONFIG_NRF_WIFI_LOW_POWER */
 #ifdef CONFIG_NRF700X_TCP_IP_CHECKSUM_OFFLOAD
-	umac_cmd_data->sys_params.tcp_ip_checksum_offload = 1;
+	umac_cmd_data->tcp_ip_checksum_offload = 1;
 #endif /* CONFIG_NRF700X_TCP_IP_CHECKSUM_OFFLOAD */
-	wifi_nrf_osal_log_info(fmac_dev_ctx->fpriv->opriv, "RPU LPM type: %s\n",
+
+	wifi_nrf_osal_log_dbg(fmac_dev_ctx->fpriv->opriv, "RPU LPM type: %s\n",
 		umac_cmd_data->sys_params.sleep_enable == 2 ? "HW" :
 		umac_cmd_data->sys_params.sleep_enable == 1 ? "SW" : "DISABLED");
 #ifndef CONFIG_NRF700X_RADIO_TEST
@@ -159,6 +167,18 @@ enum wifi_nrf_status umac_cmd_init(struct wifi_nrf_fmac_dev_ctx *fmac_dev_ctx,
 	umac_cmd_data->temp_vbat_config_params.temp_threshold = NRF_WIFI_TEMP_CALIB_THRESHOLD;
 	umac_cmd_data->temp_vbat_config_params.vth_very_low = NRF_WIFI_VBAT_VERYLOW;
 #endif /* !CONFIG_NRF700X_RADIO_TEST */
+
+	umac_cmd_data->op_band = op_band;
+
+	wifi_nrf_osal_mem_cpy(fmac_dev_ctx->fpriv->opriv,
+			      &umac_cmd_data->tx_pwr_ctrl_params,
+			      tx_pwr_ctrl_params,
+			      sizeof(umac_cmd_data->tx_pwr_ctrl_params));
+
+	wifi_nrf_osal_mem_cpy(fmac_dev_ctx->fpriv->opriv,
+					umac_cmd_data->country_code,
+					CONFIG_NRF700X_REG_DOMAIN,
+					NRF_WIFI_COUNTRY_CODE_LEN);
 
 	status = wifi_nrf_hal_ctrl_cmd_send(fmac_dev_ctx->hal_dev_ctx,
 					    umac_cmd,

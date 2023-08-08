@@ -12,7 +12,7 @@ The Scan sample demonstrates how to use the Nordic Semiconductor's Wi-Fi® chips
 Requirements
 ************
 
-The sample supports the following development kit:
+The sample supports the following development kits:
 
 .. table-from-sample-yaml::
 
@@ -20,8 +20,26 @@ Overview
 ********
 
 This sample can perform Wi-Fi scan operations in the 2.4GHz and 5GHz bands.
+The default scan type is active scan.
+However, you can configure the scan type to be either active or passive.
 
 Using this sample, the development kit can scan for available access points in :abbr:`STA (Station)` mode.
+
+Configuration
+*************
+
+|config|
+
+Select the scan type to be used by the sample.
+
+.. note::
+        You can also use ``menuconfig`` to enable the ``Scan type`` option.
+
+See :ref:`zephyr:menuconfig` in the Zephyr documentation for instructions on how to run ``menuconfig``.
+
+The following application-specific Kconfig option is used in this sample (located in :file:`samples/wifi/scan/Kconfig`):
+
+* Use the :kconfig:option:`CONFIG_WIFI_SCAN_TYPE_SELECT` Kconfig option to set the scan type to be used by the sample.
 
 Building and running
 ********************
@@ -31,11 +49,25 @@ Building and running
 .. include:: /includes/build_and_run_ns.txt
 
 To build for the nRF7002 DK, use the ``nrf7002dk_nrf5340_cpuapp`` build target.
-The following is an example of the CLI command:
+The following are examples of the CLI commands:
 
-.. code-block:: console
+* Build to fetch only Device scan results
+
+  .. code-block:: console
 
    west build -b nrf7002dk_nrf5340_cpuapp
+
+* Build to fetch only Raw scan results
+
+  .. code-block:: console
+
+   west build -b nrf7002dk_nrf5340_cpuapp -- -DCONFIG_WIFI_MGMT_RAW_SCAN_RESULTS=y -DCONFIG_WIFI_MGMT_RAW_SCAN_RESULTS_ONLY=y
+
+* Build to fetch both Raw and Device scan results
+
+  .. code-block:: console
+
+   west build -b nrf7002dk_nrf5340_cpuapp -- -DCONFIG_WIFI_MGMT_RAW_SCAN_RESULTS=y
 
 Testing
 =======
@@ -47,11 +79,40 @@ Testing
 
    The sample shows the following output:
 
-   .. code-block:: console
+* Device scan only results:
 
-      <inf> scan: Scan requested
+  .. code-block:: console
+
+      Scan requested
       Num  | SSID                             (len) | Chan | RSSI | Security | BSSID
       1    | abcdef                           6     | 1    | -37  | WPA/WPA2 | aa:aa:aa:aa:aa:aa
       2    | pqrst                            5     | 1    | -65  | WPA/WPA2 | xx:xx:xx:xx:xx:xx
       3    | AZBYCXD                          7     | 1    | -41  | WPA/WPA2 | yy:yy:yy:yy:yy:yy
-      <inf> scan: Scan request done
+      Scan request done
+
+* Raw scan only results:
+
+  .. code-block:: console
+
+      Scan requested
+      Num  | len   | Frequency | RSSI | RAW_DATA(32 bytes)
+      1    | 299   | 2412 | -44  | 50 00 3A 01 F4 CE 36 00 10 CE D4 BD 4F E1 F5 33 D4 BD 4F E1 F5 33 A0 7F 0B 05 75 7F D8 00 00 00
+      2    | 430   | 2412 | -37  | 50 00 3A 01 F4 CE 36 00 10 CE 3C 7C 3F DA DF 38 3C 7C 3F DA DF 38 90 11 69 36 EC 8A 02 00 00 00
+      3    | 284   | 2412 | -45  | 50 00 3A 01 F4 CE 36 00 10 CE D4 BD 4F 21 F5 38 D4 BD 4F 21 F5 38 20 CF 7B 20 75 7F D8 00 00 00
+      4    | 299   | 2412 | -43  | 50 00 3A 01 F4 CE 36 00 10 CE D4 BD 4F E1 F5 33 D4 BD 4F E1 F5 33 B0 7F EC 2B 75 7F D8 00 00 00
+      5    | 409   | 2412 | -38  | 50 00 3A 01 F4 CE 36 00 10 CE A0 36 BC 56 41 E0 A0 36 BC 56 41 E0 60 E2 C7 A5 0F 90 0D 00 00 00
+      Scan request done
+
+* Raw scan and Device scan results:
+
+  .. code-block:: console
+
+      Scan requested
+      Num  | len   | Frequency | RSSI | RAW_DATA(32 bytes)
+      1    | 299   | 2412 | -44  | 50 00 3A 01 F4 CE 36 00 10 CE D4 BD 4F E1 F5 33 D4 BD 4F E1 F5 33 A0 7F 0B 05 75 7F D8 00 00 00
+      2    | 430   | 2412 | -37  | 50 00 3A 01 F4 CE 36 00 10 CE 3C 7C 3F DA DF 38 3C 7C 3F DA DF 38 90 11 69 36 EC 8A 02 00 00 00
+      3    | 284   | 2412 | -45  | 50 00 3A 01 F4 CE 36 00 10 CE D4 BD 4F 21 F5 38 D4 BD 4F 21 F5 38 20 CF 7B 20 75 7F D8 00 00 00
+      4    | abcdef                           6     | 1    | -37  | WPA/WPA2 | aa:aa:aa:aa:aa:aa
+      5    | pqrst                            5     | 1    | -65  | WPA/WPA2 | xx:xx:xx:xx:xx:xx
+      6    | AZBYCXD                          7     | 1    | -41  | WPA/WPA2 | yy:yy:yy:yy:yy:yy
+      Scan request done

@@ -12,7 +12,11 @@
  */
 
 #include <zephyr/kernel.h>
+#if defined(CONFIG_NRF_MODEM)
 #include <nrf_modem_gnss.h>
+#else
+struct nrf_modem_gnss_agps_data_frame;
+#endif
 #include "nrf_cloud_agps_schema_v1.h"
 
 #ifdef __cplusplus
@@ -65,6 +69,15 @@ struct nrf_cloud_pgps_prediction {
 	/** Not from cloud; appended during storage to verify integrity on retrieval. */
 	uint32_t sentinel;
 } __packed;
+
+/** Omit the prediction count from P-GPS request */
+#define NRF_CLOUD_PGPS_REQ_NO_COUNT	0
+/** Omit the prediction validity period from P-GPS request */
+#define NRF_CLOUD_PGPS_REQ_NO_INTERVAL	0
+/** Omit the GPS day from P-GPS request */
+#define NRF_CLOUD_PGPS_REQ_NO_GPS_DAY	0
+/** Omit the GPS time of day from P-GPS request */
+#define NRF_CLOUD_PGPS_REQ_NO_GPS_TOD	(-1)
 
 /** @brief P-GPS request type */
 struct gps_pgps_request {
@@ -302,11 +315,21 @@ void nrf_cloud_pgps_request_reset(void);
  * @param buf Pointer to data received from nRF Cloud.
  * @param buf_len Buffer size of data to be processed.
  *
- * @retval 0 A-GPS data successfully processed.
+ * @retval 0 P-GPS data successfully processed.
  * @retval -EFAULT An nRF Cloud P-GPS error code was processed.
  * @return A negative value indicates an error.
  */
 int nrf_cloud_pgps_process(const char *buf, size_t buf_len);
+
+/** @brief Processes binary P-GPS data using URL received from nRF Cloud.
+ *
+ * @param file_location Pointer to structure holding the hostname and filename.
+ *
+ * @retval 0 P-GPS data successfully processed.
+ * @retval -EFAULT An nRF Cloud P-GPS error code was processed.
+ * @return A negative value indicates an error.
+ */
+int nrf_cloud_pgps_update(struct nrf_cloud_pgps_result *file_location);
 
 /** @brief Injects binary P-GPS data to the modem. If request is NULL,
  * it is assumed that only ephemerides assistance should be injected.

@@ -190,9 +190,9 @@ arduino_i2c: &i2c1 {
 	pinctrl-0 = <&qspi_default>;
 	pinctrl-1 = <&qspi_sleep>;
 	pinctrl-names = "default", "sleep";
-	nrf7002: nrf7002@1 {
+	nrf700x: nrf7002@1 {
 		status = "okay";
-		compatible = "nordic,nrf7002-qspi";
+		compatible = "nordic,nrf700x-qspi";
 		reg = <1>;
 		sck-frequency = <24000000>;
 		quad-mode;
@@ -201,18 +201,6 @@ arduino_i2c: &i2c1 {
 		bucken-gpios = <&gpio0 12 GPIO_ACTIVE_HIGH>;
 		host-irq-gpios = <&gpio0 23 GPIO_ACTIVE_HIGH>;
 	};
-};
-
-&timer0 {
-	status = "okay";
-};
-
-&timer1 {
-	status = "okay";
-};
-
-&timer2 {
-	status = "okay";
 };
 
 arduino_serial: &uart1 {

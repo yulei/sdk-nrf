@@ -158,6 +158,9 @@ static void rd_client_event(struct lwm2m_ctx *client, enum lwm2m_rd_client_event
 			state = CONNECTED;
 		}
 		break;
+	case LWM2M_RD_CLIENT_EVENT_REG_UPDATE:
+		LOG_DBG("LWM2M_RD_CLIENT_EVENT_REG_UPDATE");
+		break;
 	case LWM2M_RD_CLIENT_EVENT_DEREGISTER_FAILURE:
 		LOG_WRN("LWM2M_RD_CLIENT_EVENT_DEREGISTER_FAILURE");
 		cloud_wrap_evt.type = CLOUD_WRAP_EVT_ERROR;
@@ -464,13 +467,14 @@ int cloud_wrap_data_send(char *buf, size_t len, bool ack, uint32_t id,
 {
 	ARG_UNUSED(buf);
 	ARG_UNUSED(len);
+	ARG_UNUSED(ack);
 	ARG_UNUSED(id);
 
 	int err;
 
-	err = lwm2m_send(&client, path_list, len, ack);
+	err = lwm2m_send_cb(&client, path_list, len, NULL);
 	if (err) {
-		LOG_ERR("lwm2m_send, error: %d", err);
+		LOG_ERR("lwm2m_send_cb, error: %d", err);
 		return err;
 	}
 
@@ -487,13 +491,14 @@ int cloud_wrap_ui_send(char *buf, size_t len, bool ack, uint32_t id,
 {
 	ARG_UNUSED(buf);
 	ARG_UNUSED(len);
+	ARG_UNUSED(ack);
 	ARG_UNUSED(id);
 
 	int err;
 
-	err = lwm2m_send(&client, path_list, len, ack);
+	err = lwm2m_send_cb(&client, path_list, len, NULL);
 	if (err) {
-		LOG_ERR("lwm2m_send, error: %d", err);
+		LOG_ERR("lwm2m_send_cb, error: %d", err);
 		return err;
 	}
 
@@ -505,8 +510,9 @@ int cloud_wrap_cloud_location_send(char *buf, size_t len, bool ack, uint32_t id)
 	ARG_UNUSED(buf);
 	ARG_UNUSED(len);
 	ARG_UNUSED(id);
+	ARG_UNUSED(ack);
 
-	return location_assistance_ground_fix_request_send(&client, ack);
+	return location_assistance_ground_fix_request_send(&client);
 }
 
 int cloud_wrap_agps_request_send(char *buf, size_t len, bool ack, uint32_t id)
@@ -514,8 +520,9 @@ int cloud_wrap_agps_request_send(char *buf, size_t len, bool ack, uint32_t id)
 	ARG_UNUSED(buf);
 	ARG_UNUSED(len);
 	ARG_UNUSED(id);
+	ARG_UNUSED(ack);
 
-	return location_assistance_agps_request_send(&client, ack);
+	return location_assistance_agps_request_send(&client);
 }
 
 int cloud_wrap_pgps_request_send(char *buf, size_t len, bool ack, uint32_t id)
@@ -523,8 +530,9 @@ int cloud_wrap_pgps_request_send(char *buf, size_t len, bool ack, uint32_t id)
 	ARG_UNUSED(buf);
 	ARG_UNUSED(len);
 	ARG_UNUSED(id);
+	ARG_UNUSED(ack);
 
-	return location_assistance_pgps_request_send(&client, ack);
+	return location_assistance_pgps_request_send(&client);
 }
 
 int cloud_wrap_memfault_data_send(char *buf, size_t len, bool ack, uint32_t id)

@@ -7,12 +7,12 @@
 
 set(PRIV_CMD
   ${PYTHON_EXECUTABLE}
-  ${NRF_DIR}/scripts/bootloader/keygen.py --private
+  ${ZEPHYR_NRF_MODULE_DIR}/scripts/bootloader/keygen.py --private
   )
 
 set(PUB_CMD
   ${PYTHON_EXECUTABLE}
-  ${NRF_DIR}/scripts/bootloader/keygen.py --public
+  ${ZEPHYR_NRF_MODULE_DIR}/scripts/bootloader/keygen.py --public
   )
 
 # Check if PEM file is specified by user, if not, create one.
@@ -67,7 +67,7 @@ else()
     set(SIGNATURE_PRIVATE_KEY_FILE ${CONFIG_SB_SIGNING_KEY_FILE})
   else()
     set(SIGNATURE_PRIVATE_KEY_FILE
-      ${CMAKE_SOURCE_DIR}/${CONFIG_SB_SIGNING_KEY_FILE})
+      ${APPLICATION_CONFIG_DIR}/${CONFIG_SB_SIGNING_KEY_FILE})
   endif()
 
   if (NOT EXISTS ${SIGNATURE_PRIVATE_KEY_FILE})

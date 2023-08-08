@@ -14,27 +14,22 @@ A "99" at the end of the version number of this documentation indicates continuo
 .. toctree::
    :maxdepth: 2
    :caption: Contents
+   :hidden:
 
    introduction
-   getting_started
-   dev_model
-   app_dev
+   installation
+   config_and_build
+   test_and_optimize
+   device_guides
    security
-   ecosystem_integration
-   nrf91
-   nrf70
-   nrf53
-   nrf52
    protocols
    applications
    samples
    drivers
    libraries/index
    scripts
-   release_notes
-   known_issues
-   software_maturity
+   integrations
+   releases_and_maturity
    documentation
-   glossary
 
 ..   templates/cheat_sheet

@@ -38,8 +38,8 @@
 
 #define OUTPUT_REPORT_MAX_LEN            1
 #define OUTPUT_REPORT_BIT_MASK_CAPS_LOCK 0x02
-#define INPUT_REP_KEYS_REF_ID            1
-#define OUTPUT_REP_KEYS_REF_ID           1
+#define INPUT_REP_KEYS_REF_ID            0
+#define OUTPUT_REP_KEYS_REF_ID           0
 #define MODIFIER_KEY_POS                 0
 #define SHIFT_KEY_CODE                   0x02
 #define SCAN_CODE_POS                    2
@@ -931,7 +931,7 @@ static void bas_notify(void)
 }
 
 
-void main(void)
+int main(void)
 {
 	int err;
 	int blink_status = 0;
@@ -943,24 +943,24 @@ void main(void)
 	err = bt_conn_auth_cb_register(&conn_auth_callbacks);
 	if (err) {
 		printk("Failed to register authorization callbacks.\n");
-		return;
+		return 0;
 	}
 
 	err = bt_conn_auth_info_cb_register(&conn_auth_info_callbacks);
 	if (err) {
 		printk("Failed to register authorization info callbacks.\n");
-		return;
+		return 0;
 	}
+
+	hid_init();
 
 	err = bt_enable(NULL);
 	if (err) {
 		printk("Bluetooth init failed (err %d)\n", err);
-		return;
+		return 0;
 	}
 
 	printk("Bluetooth initialized\n");
-
-	hid_init();
 
 	if (IS_ENABLED(CONFIG_SETTINGS)) {
 		settings_load();

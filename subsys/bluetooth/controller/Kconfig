@@ -23,29 +23,34 @@ config BT_LL_SOFTDEVICE
 	select BT_CTLR_DATA_LEN_UPDATE_SUPPORT
 	select BT_CTLR_ADV_EXT_SUPPORT
 	select BT_CTLR_ADV_PERIODIC_SUPPORT
+	select BT_CTLR_ADV_PERIODIC_RSP_SUPPORT
 	select BT_CTLR_SYNC_PERIODIC_SUPPORT
+	select BT_CTLR_SYNC_PERIODIC_RSP_SUPPORT
 	select BT_CTLR_SYNC_TRANSFER_SENDER_SUPPORT
 	select BT_CTLR_SYNC_TRANSFER_RECEIVER_SUPPORT
 	select BT_CTLR_SCA_UPDATE_SUPPORT
 	select BT_CTLR_PHY_2M_SUPPORT if HAS_HW_NRF_RADIO_BLE_2M
 	select BT_CTLR_PHY_CODED_SUPPORT if HAS_HW_NRF_RADIO_BLE_CODED
 	select BT_HAS_HCI_VS
-	select BT_CTLR_DF_CTE_TX_SUPPORT if HAS_HW_NRF_RADIO_DFE
+	select BT_CTLR_DF_SUPPORT if HAS_HW_NRF_RADIO_DFE
 	depends on (SOC_SERIES_BSIM_NRFXX || SOC_SERIES_NRF52X || SOC_NRF5340_CPUNET)
 	help
 	  Use SoftDevice Link Layer implementation.
 
 endchoice
 
+config BT_CTLR_DF_SUPPORT
+	select BT_CTLR_DF_CTE_TX_SUPPORT
+
 if BT_LL_SOFTDEVICE
 menu "SoftDevice Controller"
 
 choice BT_LL_SOFTDEVICE_BUILD_TYPE
 	prompt "SoftDevice Controller build type"
-	default BT_LL_SOFTDEVICE_BUILD_TYPE_LIB
 
 config BT_LL_SOFTDEVICE_BUILD_TYPE_LIB
 	bool "Use library"
+	select BT_LL_SOFTDEVICE_HEADERS_INCLUDE
 
 endchoice
 
@@ -73,7 +78,7 @@ config BT_RX_STACK_SIZE
 	int
 	depends on BT_HCI_HOST || BT_RECV_BLOCKING
 	default 512 if BT_HCI_RAW
-	default 2400 if BT_MESH
+	default 2600 if BT_MESH
 	default 2200 if BT_SETTINGS
 	default 1536 if BT_SMP
 	default 1024
@@ -102,6 +107,12 @@ config BT_CTLR_SDC_LLPM
 	  Low Latency Packet Mode (LLPM) is a Nordic proprietary addition
 	  which lets the application use connection intervals down to 1 ms.
 
+config BT_CTLR_SDC_QOS_CHANNEL_SURVEY
+	bool "Enable channel survey"
+	select EXPERIMENTAL
+	help
+	  Channel survey feature support
+
 config BT_CTLR_SDC_PERIPHERAL_COUNT
 	int "Number of concurrent peripheral roles"
 	default BT_MAX_CONN if (BT_PERIPHERAL && !BT_CENTRAL)
@@ -114,10 +125,13 @@ config BT_CTLR_SDC_PERIPHERAL_COUNT
 	  NOTE: the number of central roles is defined as
 	  BT_MAX_CONN - BT_CTLR_SDC_PERIPHERAL_COUNT
 
+config BT_CTLR_SDC_MAX_CONN_EVENT_LEN_DEFAULT_OVERRIDE
+	bool "Override event length default"
+
 config BT_CTLR_SDC_MAX_CONN_EVENT_LEN_DEFAULT
 	int "Default max connection event length [us]"
-	default 7500
-	range 2500 4000000
+	default 7500 if !BT_CTLR_SDC_MAX_CONN_EVENT_LEN_DEFAULT_OVERRIDE
+	range 1250 4000000
 	help
 	  The time set aside for connections on every connection interval in
 	  microseconds. The event length and the connection interval are the
@@ -155,11 +169,12 @@ config BT_CTLR_SDC_SCAN_BUFFER_COUNT
 
 config BT_CTLR_SDC_PERIODIC_SYNC_BUFFER_COUNT
 	int "Number of periodic synchronization receive buffers"
-	default 2
+	default 3
 	range 2 20
 	help
 	  The buffers are used for processing incoming packets
 	  and storing periodic advertising reports.
+	  The minimum amount of buffers to allow receiving chains is 3.
 
 # CONFIG_BT_CTLR_SYNC_PERIODIC_ADV_LIST_SIZE is declared in Zephyr and also
 # here for a second time, to set different range for the SoftDevice Controller.
@@ -241,11 +256,12 @@ config BT_LL_SOFTDEVICE_MULTIROLE
 
 endchoice
 
-config BT_SDC_ADDITIONAL_MEMORY
-	int "Allocates additional memory to the SDC memory pool"
-	default 0
+config BT_CTLR_FAL_SIZE
+	int "Configures the maximum number of addresses in the Filter Accept List"
+	range 0 255
+	default 8
 	help
-	  This is for testing and internal use only.
+	  Size of the Filter Accept List.
 
 if BT_CTLR_ECDH
 choice BT_CTLR_ECDH_LIB
@@ -299,17 +315,17 @@ config BT_UNINIT_MPSL_ON_DISABLE
 	  override any interrupt handlers used by MPSL.
 
 config BT_CTLR_SDC_PAWR_ADV
-	bool "LE Periodic Advertising with Responses Advertising State [EXPERIMENTAL]"
-	select EXPERIMENTAL
+	bool "LE Periodic Advertising with Responses Advertising State"
 	depends on BT_PER_ADV
 	depends on BT_CTLR_SYNC_TRANSFER_SENDER
+	default y if BT_PER_ADV_RSP
 	help
 	  Enable support for Periodic Advertising with Responses - Advertiser.
 
 if BT_CTLR_SDC_PAWR_ADV
 config BT_CTLR_SDC_PAWR_ADV_COUNT
 	int "Periodic Advertising with Responses - Advertiser sets"
-	range 0 10
+	range 0 BT_EXT_ADV_MAX_ADV_SET
 	default 1
 	help
 	  Maximum number of concurrent Periodic Advertising with Responses
@@ -344,27 +360,38 @@ config BT_CTLR_SDC_PERIODIC_ADV_RSP_RX_BUFFER_COUNT
 	  until the host is able to pull the periodic advertising response reports.
 
 	  A value of 0 will disable reception of subevent responses.
+
+config BT_CTLR_SDC_PERIODIC_ADV_RSP_RX_FAILURE_REPORTING
+	bool "Response reports for when the PAwR advertiser fails to receive responses"
+	help
+	  Enables generating reports for failing to receive responses.
 endif
 
 
 config BT_CTLR_SDC_PAWR_SYNC
-	bool "LE Periodic Advertising with Responses Synchronization State [EXPERIMENTAL]"
-	select EXPERIMENTAL
+	bool "LE Periodic Advertising with Responses Synchronization State"
 	depends on BT_CTLR_SYNC_PERIODIC
 	depends on BT_CTLR_SYNC_TRANSFER_SENDER
 	depends on BT_CTLR_SYNC_TRANSFER_RECEIVER
+	default y if BT_PER_ADV_SYNC_RSP
 	help
 	  Enable support for Periodic Advertising with Responses - Scanner.
 
 if BT_CTLR_SDC_PAWR_SYNC
 config BT_CTLR_SDC_PERIODIC_SYNC_RSP_TX_BUFFER_COUNT
 	int "BT_CTLR_SDC_PERIODIC_SYNC_RSP_TX_BUFFER_COUNT"
-	range 0 255
-	default 0
+	range 1 255
+	default 1
 	help
 	  Maximum number of response data packets that can be buffered at a time.
 	  Increasing this will make it possible to prepare multiple responses ahead of time.
 
 endif
+
+config BT_CTLR_SDC_SILENCE_UNEXPECTED_MSG_TYPE
+	bool
+	help
+	  Convenience config to silence unexpected incoming msg type
+
 endmenu
 endif  # BT_LL_SOFTDEVICE

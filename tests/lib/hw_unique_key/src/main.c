@@ -102,7 +102,8 @@ static void do_key_test(void)
 			uint32_t keyslot = huk_slots[i];
 
 			zassert_false(hw_unique_key_is_written(keyslot), NULL);
-			hw_unique_key_write(keyslot, test_key);
+			err = hw_unique_key_write(keyslot, test_key);
+			zassert_equal(HW_UNIQUE_KEY_SUCCESS, err, "unexpected error: %d\n", err);
 			zassert_true(hw_unique_key_is_written(keyslot), NULL);
 		}
 
@@ -117,7 +118,9 @@ static void do_key_test(void)
 
 #ifndef HUK_HAS_KMU
 			if (huk_slots[i] == HUK_KEYSLOT_KDR) {
-				hw_unique_key_load_kdr();
+				err = hw_unique_key_load_kdr();
+				zassert_equal(HW_UNIQUE_KEY_SUCCESS, err, "unexpected error: %d\n",
+					      err);
 			}
 #endif
 
@@ -167,23 +170,16 @@ static void do_key_test(void)
 	}
 }
 
-static void test_hw_unique_key1(void)
+ZTEST(test_hw_unique_key, test_hw_unique_key1)
 {
 	do_key_test();
 }
 
-static void test_fatal(void)
+void check_fatal(void *f)
 {
 	zassert_equal(expected_fatal, actual_fatal,
 			"An unexpected fatal error has occurred (%d != %d).\n",
 			expected_fatal, actual_fatal);
 }
 
-void test_main(void)
-{
-	ztest_test_suite(test_hw_unique_key,
-			ztest_unit_test(test_hw_unique_key1),
-			ztest_unit_test(test_fatal)
-			);
-	ztest_run_test_suite(test_hw_unique_key);
-}
+ZTEST_SUITE(test_hw_unique_key, NULL, NULL, NULL, check_fatal, NULL);

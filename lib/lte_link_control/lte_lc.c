@@ -18,6 +18,7 @@
 #include <modem/at_cmd_parser.h>
 #include <modem/at_params.h>
 #include <modem/at_monitor.h>
+#include <modem/nrf_modem_lib.h>
 #include <zephyr/logging/log.h>
 
 #include "lte_lc_helpers.h"
@@ -66,7 +67,8 @@ static char rai_param[2] = CONFIG_LTE_RAI_REQ_VALUE;
 
 /* Requested NCELLMEAS params */
 static struct lte_lc_ncellmeas_params ncellmeas_params;
-static bool ncellmeas_ongoing;
+/* Sempahore value 1 means ncellmeas is not ongoing, and 0 means it's ongoing. */
+K_SEM_DEFINE(ncellmeas_idle_sem, 1, 1);
 
 static const enum lte_lc_system_mode sys_mode_preferred = SYS_MODE_PREFERRED;
 
@@ -393,7 +395,7 @@ static void at_handler_ncellmeas(const char *response)
 
 	__ASSERT_NO_MSG(response != NULL);
 
-	if (event_handler_list_is_empty() || !ncellmeas_ongoing) {
+	if (event_handler_list_is_empty() || k_sem_count_get(&ncellmeas_idle_sem) > 0) {
 		/* No need to parse the response if there is no handler
 		 * to receive the parsed data or
 		 * if a measurement is not going/started by using
@@ -444,7 +446,7 @@ static void at_handler_ncellmeas(const char *response)
 		k_free(neighbor_cells);
 	}
 exit:
-	ncellmeas_ongoing = false;
+	k_sem_give(&ncellmeas_idle_sem);
 }
 
 static void at_handler_xmodemsleep(const char *response)
@@ -462,13 +464,14 @@ static void at_handler_xmodemsleep(const char *response)
 		return;
 	}
 
-	/* Link controller only supports PSM, RF inactivity, limited service and flight mode
-	 * modem sleep types.
+	/* Link controller only supports PSM, RF inactivity, limited service, flight mode
+	 * and proprietary PSM modem sleep types.
 	 */
 	if ((evt.modem_sleep.type != LTE_LC_MODEM_SLEEP_PSM) &&
 		(evt.modem_sleep.type != LTE_LC_MODEM_SLEEP_RF_INACTIVITY) &&
 		(evt.modem_sleep.type != LTE_LC_MODEM_SLEEP_LIMITED_SERVICE) &&
-		(evt.modem_sleep.type != LTE_LC_MODEM_SLEEP_FLIGHT_MODE)) {
+		(evt.modem_sleep.type != LTE_LC_MODEM_SLEEP_FLIGHT_MODE) &&
+		(evt.modem_sleep.type != LTE_LC_MODEM_SLEEP_PROPRIETARY_PSM)) {
 		return;
 	}
 
@@ -717,7 +720,7 @@ exit:
 	return err;
 }
 
-static int init_and_connect(const struct device *unused)
+static int init_and_connect(void)
 {
 	int err;
 
@@ -770,9 +773,7 @@ int lte_lc_connect(void)
 
 int lte_lc_init_and_connect(void)
 {
-	const struct device *x = 0;
-
-	return init_and_connect(x);
+	return init_and_connect();
 }
 
 int lte_lc_connect_async(lte_lc_evt_handler_t handler)
@@ -1461,7 +1462,8 @@ int lte_lc_neighbor_cell_measurement(struct lte_lc_ncellmeas_params *params)
 			LTE_LC_NEIGHBOR_SEARCH_TYPE_GCI_EXTENDED_COMPLETE),
 		 "Invalid argument, API does not accept enum values directly anymore");
 
-	if (ncellmeas_ongoing) {
+	if (k_sem_take(&ncellmeas_idle_sem, K_SECONDS(1)) != 0) {
+		LOG_WRN("Neighbor cell measurement already in progress");
 		return -EINPROGRESS;
 	}
 
@@ -1493,9 +1495,9 @@ int lte_lc_neighbor_cell_measurement(struct lte_lc_ncellmeas_params *params)
 
 	if (err) {
 		err = -EFAULT;
+		k_sem_give(&ncellmeas_idle_sem);
 	} else {
 		ncellmeas_params = used_params;
-		ncellmeas_ongoing = true;
 	}
 
 	return err;
@@ -1508,7 +1510,8 @@ int lte_lc_neighbor_cell_measurement_cancel(void)
 	if (err) {
 		err = -EFAULT;
 	}
-	ncellmeas_ongoing = false;
+
+	k_sem_give(&ncellmeas_idle_sem);
 
 	return err;
 }
@@ -1612,7 +1615,17 @@ int lte_lc_conn_eval_params_get(struct lte_lc_conn_eval_params *params)
 
 int lte_lc_modem_events_enable(void)
 {
-	return nrf_modem_at_printf(AT_MDMEV_ENABLE) ? -EFAULT : 0;
+	/* First try to enable both warning and informational type events, which is only supported
+	 * by modem firmware versions >= 2.0.0.
+	 * If that fails, try to enable the legacy set of events.
+	 */
+	if (nrf_modem_at_printf(AT_MDMEV_ENABLE_2)) {
+		if (nrf_modem_at_printf(AT_MDMEV_ENABLE_1)) {
+			return -EFAULT;
+		}
+	}
+
+	return 0;
 }
 
 int lte_lc_modem_events_disable(void)
@@ -1816,8 +1829,3 @@ int lte_lc_factory_reset(enum lte_lc_factory_reset_type type)
 {
 	return nrf_modem_at_printf("AT%%XFACTORYRESET=%d", type) ? -EFAULT : 0;
 }
-
-#if defined(CONFIG_LTE_AUTO_INIT_AND_CONNECT)
-SYS_INIT(init_and_connect,
-		  APPLICATION, CONFIG_APPLICATION_INIT_PRIORITY);
-#endif /* CONFIG_LTE_AUTO_INIT_AND_CONNECT */

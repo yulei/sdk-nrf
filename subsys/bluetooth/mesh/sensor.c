@@ -190,6 +190,9 @@ int sensor_value_encode(struct net_buf_simple *buf,
 			const struct bt_mesh_sensor_type *type,
 			const struct sensor_value *values)
 {
+	/* The API assumes that `values` array size is always CONFIG_BT_MESH_SENSOR_CHANNELS_MAX. */
+	__ASSERT_NO_MSG(type->channel_count <= CONFIG_BT_MESH_SENSOR_CHANNELS_MAX);
+
 	for (uint32_t i = 0; i < type->channel_count; ++i) {
 		int err;
 
@@ -208,6 +211,9 @@ int sensor_value_decode(struct net_buf_simple *buf,
 			struct sensor_value *values)
 {
 	int err;
+
+	/* The API assumes that `values` array size is always CONFIG_BT_MESH_SENSOR_CHANNELS_MAX. */
+	__ASSERT_NO_MSG(type->channel_count <= CONFIG_BT_MESH_SENSOR_CHANNELS_MAX);
 
 	for (uint32_t i = 0; i < type->channel_count; ++i) {
 		err = sensor_ch_decode(buf, type->channels[i].format,
@@ -328,15 +334,33 @@ int sensor_column_decode(
 	int err;
 
 	col_format = bt_mesh_sensor_column_format_get(type);
+	if (!col_format) {
+		return -ENOTSUP;
+	}
+
 	err = sensor_ch_decode(buf, col_format, &col->start);
 	if (err) {
 		return err;
 	}
 
-	err = sensor_ch_decode(buf, col_format, &col->end);
+	if (buf->len == 0) {
+		LOG_WRN("The requested column didn't exist: %s",
+			bt_mesh_sensor_ch_str(&col->start));
+		return -ENOENT;
+	}
+
+	struct sensor_value width;
+
+	err = sensor_ch_decode(buf, col_format, &width);
 	if (err) {
 		return err;
 	}
+
+	uint64_t end_mill = (col->start.val1 + width.val1) * 1000000ULL +
+			 (col->start.val2 + width.val2);
+
+	col->end.val1 = end_mill / 1000000ULL;
+	col->end.val2 = end_mill % 1000000ULL;
 
 	return sensor_value_decode(buf, type, value);
 }

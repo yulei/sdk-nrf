@@ -17,17 +17,26 @@ NRF_MODEM_LIB_ON_SHUTDOWN(lte_lc_shutdown_hook, on_modem_shutdown, NULL);
 static void on_modem_init(int err, void *ctx)
 {
 	if (err) {
+		if (err == NRF_MODEM_DFU_RESULT_OK) {
+			LOG_DBG("Modem DFU, lte_lc not initialized");
+			return;
+		}
+		LOG_ERR("Modem library init error: %d, lte_lc not initialized", err);
 		return;
 	}
 
-#if defined(CONFIG_LTE_EDRX_REQ)
-	/* Request configured eDRX settings to save power */
-	err = lte_lc_edrx_req(true);
+	/* Request configured PSM and eDRX settings to save power. */
+	err = lte_lc_psm_req(IS_ENABLED(CONFIG_LTE_PSM_REQ));
 	if (err) {
-		LOG_ERR("Failed to configure EDRX, err %d", err);
+		LOG_ERR("Failed to configure PSM, err %d", err);
 		return;
 	}
-#endif
+
+	err = lte_lc_edrx_req(IS_ENABLED(CONFIG_LTE_EDRX_REQ));
+	if (err) {
+		LOG_ERR("Failed to configure eDRX, err %d", err);
+		return;
+	}
 
 #if defined(CONFIG_LTE_LOCK_BANDS)
 	/* Set LTE band lock (volatile setting).
@@ -55,6 +64,14 @@ static void on_modem_init(int err, void *ctx)
 	err = nrf_modem_at_printf("AT+COPS=0");
 	if (err) {
 		LOG_ERR("Failed to unlock PLMN, err %d", err);
+		return;
+	}
+#endif
+
+#if IS_ENABLED(CONFIG_LTE_AUTO_INIT_AND_CONNECT)
+	err = lte_lc_init_and_connect();
+	if (err) {
+		LOG_ERR("Lte_lc failed to initialize and connect, err %d", err);
 		return;
 	}
 #endif

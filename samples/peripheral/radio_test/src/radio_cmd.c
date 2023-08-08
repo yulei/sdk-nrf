@@ -13,7 +13,7 @@
 #include <hal/nrf_power.h>
 
 #if CONFIG_FEM
-#include "fem.h"
+#include "fem_al/fem_al.h"
 #endif /* CONFIG_FEM */
 
 #include "radio_test.h"
@@ -1364,9 +1364,8 @@ SHELL_CMD_REGISTER(fem,
 		   cmd_fem);
 #endif /* CONFIG_FEM */
 
-static int radio_cmd_init(const struct device *dev)
+static int radio_cmd_init(void)
 {
-	ARG_UNUSED(dev);
 
 #if CONFIG_RADIO_TEST_POWER_CONTROL_AUTOMATIC
 	/* When front-end module is used, set output power to the front-end module

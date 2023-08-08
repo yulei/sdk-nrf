@@ -18,5 +18,6 @@ They introduce you to concepts that are important to work with the protocol and 
    protocols/multiprotocol/index
    protocols/nfc/index
    protocols/thread/index
-   protocols/wifi/index
    protocols/zigbee/index
+   protocols/wifi/index
+   protocols/coexistence/index

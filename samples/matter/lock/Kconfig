@@ -30,6 +30,7 @@ config THREAD_WIFI_SWITCHING
 	bool "Switching between Thread and Wi-Fi network support"
 	depends on SOC_SERIES_NRF53X
 	depends on NET_L2_OPENTHREAD || CHIP_WIFI
+	depends on CHIP_OTA_REQUESTOR
 	select EXPERIMENTAL
 	help
 	  Enable the functionality that allows a user to switch between Matter over Thread and Matter
@@ -93,6 +94,9 @@ config NRF_WIFI_LOW_POWER
 
 endif # CHIP_WIFI
 
-source "${ZEPHYR_BASE}/../modules/lib/matter/config/nrfconnect/chip-module/Kconfig.features"
-source "${ZEPHYR_BASE}/../modules/lib/matter/config/nrfconnect/chip-module/Kconfig.defaults"
+config CHIP_ICD_SUBSCRIPTION_HANDLING
+	default y
+
+source "${ZEPHYR_CONNECTEDHOMEIP_MODULE_DIR}/config/nrfconnect/chip-module/Kconfig.features"
+source "${ZEPHYR_CONNECTEDHOMEIP_MODULE_DIR}/config/nrfconnect/chip-module/Kconfig.defaults"
 source "Kconfig.zephyr"

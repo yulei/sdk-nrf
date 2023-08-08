@@ -13,6 +13,9 @@
 #define INVALID_SOCKET       -1
 #define INVALID_SEC_TAG      -1
 #define INVALID_ROLE         -1
+#define INVALID_DTLS_CID     -1
+
+#define UNKNOWN_AT_COMMAND_RET __ELASTERROR
 
 /** The maximum allowed length of an AT command/response passed through the SLM */
 #define SLM_AT_MAX_CMD_LEN   4096
@@ -25,6 +28,7 @@
 #define SLM_MAX_SOCKET_COUNT 8    /** re-define NRF_MODEM_MAX_SOCKET_COUNT */
 
 #define SLM_MAX_URL          128  /** max size of URL string */
+#define SLM_MAX_FILEPATH     128  /** max size of filepath string */
 #define SLM_MAX_USERNAME     32   /** max size of username in login */
 #define SLM_MAX_PASSWORD     32   /** max size of password in login */
 

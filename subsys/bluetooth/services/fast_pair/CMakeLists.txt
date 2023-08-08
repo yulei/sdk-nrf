@@ -18,6 +18,7 @@ zephyr_library_sources_ifdef(CONFIG_BT_FAST_PAIR_GATT_SERVICE	   fp_gatt_service
 zephyr_library_sources_ifdef(CONFIG_BT_FAST_PAIR_KEYS		   fp_keys.c)
 zephyr_library_sources_ifdef(CONFIG_BT_FAST_PAIR_REGISTRATION_DATA fp_registration_data.c)
 zephyr_library_sources_ifdef(CONFIG_BT_FAST_PAIR_BATTERY	   fp_battery.c)
+zephyr_library_sources_ifdef(CONFIG_BT_FAST_PAIR_FACTORY_RESET	   fp_factory_reset.c)
 
 if(CONFIG_BT_FAST_PAIR_CRYPTO)
   add_subdirectory(fp_crypto)
@@ -48,7 +49,7 @@ add_custom_command(
   DEPENDS
   "${CMAKE_BINARY_DIR}/pm.config"
   COMMAND
-  ${PYTHON_EXECUTABLE} ${NRF_DIR}/scripts/nrf_provision/fast_pair/fp_provision_cli.py
+  ${PYTHON_EXECUTABLE} ${ZEPHYR_NRF_MODULE_DIR}/scripts/nrf_provision/fast_pair/fp_provision_cli.py
                        -o ${FP_PROVISIONING_DATA_HEX} -a ${FP_PROVISIONING_DATA_ADDRESS}
                        -m ${FP_MODEL_ID} -k ${FP_ANTI_SPOOFING_KEY}
   COMMENT

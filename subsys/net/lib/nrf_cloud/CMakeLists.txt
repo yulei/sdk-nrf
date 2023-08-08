@@ -6,12 +6,17 @@
 zephyr_library()
 zephyr_library_sources(
 	src/nrf_cloud_codec_internal.c
+	src/nrf_cloud_log.c
+	src/nrf_cloud_codec.c
 	src/nrf_cloud_mem.c
 	src/nrf_cloud_client_id.c
 	src/nrf_cloud_fota_common.c)
 zephyr_library_sources_ifdef(
-	CONFIG_NRF_CLOUD_ALERTS
-	src/nrf_cloud_alerts.c)
+	CONFIG_NRF_CLOUD_ALERT
+	src/nrf_cloud_alert.c)
+zephyr_library_sources_ifdef(
+	CONFIG_NRF_CLOUD_LOG_BACKEND
+	src/nrf_cloud_log_backend.c)
 zephyr_library_sources_ifdef(
 	CONFIG_MODEM_JWT
 	src/nrf_cloud_jwt.c)
@@ -29,14 +34,34 @@ zephyr_library_sources_ifdef(
 	src/nrf_cloud_agps.c
 	src/nrf_cloud_agps_utils.c
 	src/nrf_cloud_pgps.c
-	src/nrf_cloud_pgps_utils.c)
+	src/nrf_cloud_pgps_utils.c
+	src/nrf_cloud_download.c)
 zephyr_library_sources_ifdef(
 	CONFIG_NRF_CLOUD_LOCATION
 	src/nrf_cloud_location.c)
 zephyr_library_sources_ifdef(
 	CONFIG_NRF_CLOUD_FOTA
-	src/nrf_cloud_fota.c)
+	src/nrf_cloud_fota.c
+	src/nrf_cloud_download.c)
 zephyr_library_sources_ifdef(
 	CONFIG_NRF_CLOUD_REST
 	src/nrf_cloud_rest.c)
+zephyr_compile_definitions_ifdef(
+	CONFIG_NRF_CLOUD_COAP
+	nrf_cloud_coap CDDL_CBOR_CANONICAL)
+zephyr_library_sources_ifdef(
+	CONFIG_NRF_CLOUD_COAP
+	coap/src/agps_encode.c
+	coap/src/nrf_cloud_coap_transport.c
+	coap/src/coap_codec.c
+	coap/src/nrfc_dtls.c
+	coap/src/ground_fix_encode.c
+	coap/src/ground_fix_decode.c
+	coap/src/msg_encode.c
+	coap/src/nrf_cloud_coap.c
+	coap/src/pgps_decode.c
+	coap/src/pgps_encode.c)
+zephyr_include_directories_ifdef(
+	CONFIG_NRF_CLOUD_COAP
+	coap/include)
 zephyr_include_directories(./include)

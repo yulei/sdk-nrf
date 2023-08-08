@@ -51,11 +51,12 @@ struct bt_mesh_sensor_srv;
 			 BT_MESH_MODEL_USER_DATA(struct bt_mesh_sensor_srv,    \
 						 _srv),                        \
 			 &_bt_mesh_sensor_srv_cb),                             \
-	BT_MESH_MODEL(BT_MESH_MODEL_ID_SENSOR_SETUP_SRV,                       \
-		      _bt_mesh_sensor_setup_srv_op,                            \
-		      &(_srv)->setup_pub,                                      \
-		      BT_MESH_MODEL_USER_DATA(struct bt_mesh_sensor_srv,       \
-					      _srv))
+	BT_MESH_MODEL_CB(BT_MESH_MODEL_ID_SENSOR_SETUP_SRV,                    \
+			 _bt_mesh_sensor_setup_srv_op,                         \
+			 &(_srv)->setup_pub,                                   \
+			 BT_MESH_MODEL_USER_DATA(struct bt_mesh_sensor_srv,    \
+					      _srv),                           \
+			 &_bt_mesh_sensor_setup_srv_cb)
 
 /** Sensor server instance. */
 struct bt_mesh_sensor_srv {
@@ -68,10 +69,6 @@ struct bt_mesh_sensor_srv {
 	/** Number of sensors. */
 	uint8_t sensor_count;
 
-#if CONFIG_BT_SETTINGS
-	/** Storage timer */
-	struct k_work_delayable store_timer;
-#endif
 	/** Publish parameters. */
 	struct bt_mesh_model_pub pub;
 	/* Publication buffer */
@@ -146,6 +143,7 @@ int bt_mesh_sensor_srv_sample(struct bt_mesh_sensor_srv *srv,
 /** @cond INTERNAL_HIDDEN */
 extern const struct bt_mesh_model_cb _bt_mesh_sensor_srv_cb;
 extern const struct bt_mesh_model_op _bt_mesh_sensor_srv_op[];
+extern const struct bt_mesh_model_cb _bt_mesh_sensor_setup_srv_cb;
 extern const struct bt_mesh_model_op _bt_mesh_sensor_setup_srv_op[];
 /** @endcond */
 

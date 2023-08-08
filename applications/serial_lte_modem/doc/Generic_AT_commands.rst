@@ -91,7 +91,7 @@ Example
 
 ::
 
-   at#xclac
+   AT#XCLAC
    AT#XSLMVER
    AT#XSLEEP
    AT#XCLAC
@@ -238,7 +238,7 @@ Syntax
 
    In this case the nRF9160 SiP cannot be woken up using the :ref:`CONFIG_SLM_WAKEUP_PIN <CONFIG_SLM_WAKEUP_PIN>`..
 
-Examples
+Example
 ~~~~~~~~
 
 ::
@@ -260,7 +260,7 @@ The test command is not supported.
 Reset #XRESET
 =============
 
-The ``#XRESET`` command performs a soft reset to the nRF9160 SiP.
+The ``#XRESET`` command performs a soft reset of the nRF9160 SiP.
 
 Set command
 -----------
@@ -274,7 +274,7 @@ Syntax
 
    #XRESET
 
-Examples
+Example
 ~~~~~~~~
 
 ::
@@ -293,6 +293,63 @@ Test command
 
 The test command is not supported.
 
+Modem reset #XMODEMRESET
+========================
+
+The ``#XMODEMRESET`` command performs a reset of the modem.
+
+The modem is set to minimal function mode (via ``+CFUN=0``) before being reset.
+The SLM application is not restarted.
+After the command returns, the modem will be in minimal function mode.
+
+Set command
+-----------
+
+The set command resets the modem.
+
+Syntax
+~~~~~~
+
+::
+
+   #XMODEMRESET
+
+Response syntax
+~~~~~~~~~~~~~~~
+
+::
+
+   #XMODEMRESET: <result>[,<error_code>]
+
+* The ``<result>`` parameter is an integer indicating the result of the command.
+  It can have the following values:
+
+  * ``0`` - Success.
+  * *Positive value* - On failure, indicates the step that failed.
+
+* The ``<error_code>`` parameter is an integer.
+  It is only printed when the modem reset was not successful and is the error code indicating the reason for the failure.
+
+Example
+~~~~~~~~
+
+::
+
+   AT#XMODEMRESET
+
+   #XMODEMRESET: 0
+
+   OK
+
+Read command
+------------
+
+The read command is not supported.
+
+Test command
+------------
+
+The test command is not supported.
 
 SLM UART #XSLMUART
 ==================
@@ -302,19 +359,11 @@ The ``#XSLMUART`` command manages the UART settings.
 Set command
 -----------
 
-The set command changes the UART baud rate and hardware flow control settings.
-Hardware flow control settings can be changed only if ``hw-flow-control`` is enabled in device tree.
-These settings are stored in the flash memory and applied during the application startup.
+The set command changes the UART baud rate setting.
+This setting is stored in the flash memory and applied during the application startup.
 
 Syntax
 ~~~~~~
-
-The following is the syntax when ``hw-flow-control`` is enabled in device tree.:
-::
-
-   #XSLMUART[=<baud_rate>,<hwfc>]
-
-The following is the syntax when ``hw-flow-control`` is disabled in device tree.:
 ::
 
    #XSLMUART[=<baud_rate>]
@@ -341,17 +390,6 @@ When not specified, it is set to the last value set for the variable and stored 
 If there is no value stored for the variable, it is set to its default value.
 If not specified, the previous value is used.
 
-The ``<hwfc>`` parameter accepts the following integer values:
-
-* ``0`` - Disable UART hardware flow control.
-
-* ``1`` - Enable UART hardware flow control.
-  In this mode, SLM configures both the RTS and the CTS pins according to the device-tree file.
-
-Its default value is ``1``.
-When not specified, it is set to the last value set for the variable and stored in the flash memory.
-If there is no value stored for the variable, it is set to its default value.
-
 Response syntax
 ~~~~~~~~~~~~~~~
 
@@ -362,7 +400,7 @@ Example
 
 ::
 
-   AT#XSLMUART=1000000,1
+   AT#XSLMUART=1000000
    OK
 
 Read command
@@ -375,14 +413,14 @@ Syntax
 
 ::
 
-   AT#XSLMUART?
+   #XSLMUART?
 
 Response syntax
 ~~~~~~~~~~~~~~~
 
 ::
 
-   #XSLMUART: <baud_rate>,<hwfc>
+   #XSLMUART: <baud_rate>
 
 Example
 ~~~~~~~
@@ -390,7 +428,7 @@ Example
 ::
 
    AT#XSLMUART?
-   #XSLMUART: 115200,1
+   #XSLMUART: 115200
    OK
 
 Test command
@@ -408,29 +446,12 @@ Syntax
 Response syntax
 ~~~~~~~~~~~~~~~
 
-The following is the syntax when ``hw-flow-control`` is enabled in device tree:
-
-::
-
-   #XSLMUART: (list of the available baud rate options),(disable or enable hwfc)
-
-The following is the syntax when ``hw-flow-control`` is disabled in device tree:
-
 ::
 
    #XSLMUART: (list of the available baud rate options)
 
 Example
 ~~~~~~~
-
-The following is an example when ``hw-flow-control`` is enabled in device tree:
-
-::
-
-   AT#XSLMUART=?
-   #XSLMUART: (1200,2400,4800,9600,14400,19200,38400,57600,115200,230400,460800,921600,1000000),(0,1)
-
-The following is an example when ``hw-flow-control`` is disabled in device tree.:
 
 ::
 

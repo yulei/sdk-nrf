@@ -8,7 +8,8 @@
 #include "nrf_cloud_codec_internal.h"
 #include "nrf_cloud_mem.h"
 #include <zephyr/kernel.h>
-#include <net/nrf_cloud_alerts.h>
+#include <net/nrf_cloud_alert.h>
+#include <net/nrf_cloud_log.h>
 #include <zephyr/logging/log.h>
 #if defined(CONFIG_NRF_CLOUD_AGPS)
 #include <net/nrf_cloud_agps.h>
@@ -116,6 +117,12 @@ static bool persistent_session;
  */
 static bool c2d_topic_modified;
 
+/* Flag to indicate if the device status has been added to the shadow.
+ * This only needs to be done once per boot.
+ * The user application is responsible for keeping dynamic data up to date.
+ */
+static bool add_dev_status = IS_ENABLED(CONFIG_NRF_CLOUD_SEND_DEVICE_STATUS);
+
 #if defined(CONFIG_NRF_CLOUD_LOCATION) && defined(CONFIG_NRF_CLOUD_MQTT)
 static nrf_cloud_location_response_t location_cb;
 void nfsm_set_location_response_cb(nrf_cloud_location_response_t cb)
@@ -164,20 +171,22 @@ static int state_ua_pin_wait(void)
 	};
 
 	/* Publish report to the cloud on current status. */
-	err = nrf_cloud_state_encode(STATE_UA_PIN_WAIT, false, &msg.data);
+	err = nrf_cloud_state_encode(STATE_UA_PIN_WAIT, false, add_dev_status, &msg.data);
 	if (err) {
 		LOG_ERR("nrf_cloud_state_encode failed %d", err);
 		return err;
 	}
 
+	add_dev_status = false;
+
 	err = nct_cc_send(&msg);
-	if (err) {
-		LOG_ERR("nct_cc_send failed %d", err);
-		nrf_cloud_free((void *)msg.data.ptr);
-		return err;
-	}
 
 	nrf_cloud_free((void *)msg.data.ptr);
+
+	if (err) {
+		LOG_ERR("nct_cc_send failed %d", err);
+		return err;
+	}
 
 	struct nrf_cloud_evt evt = {
 		.type = NRF_CLOUD_EVT_USER_ASSOCIATION_REQUEST,
@@ -228,21 +237,6 @@ static int handle_device_config_update(const struct nct_evt *const evt,
 	return err;
 }
 
-static int _log_level;
-
-/* Placeholder until cloud logging added in another PR */
-void nrf_cloud_log_control_set(int log_level)
-{
-	LOG_DBG("Setting nRF Cloud log level = %d", log_level);
-	_log_level = log_level;
-}
-
-/* Placeholder until cloud logging added in another PR */
-int nrf_cloud_log_control_get(void)
-{
-	return _log_level;
-}
-
 static int handle_device_control_update(const struct nct_evt *const evt,
 					bool *const control_found)
 {
@@ -258,11 +252,12 @@ static int handle_device_control_update(const struct nct_evt *const evt,
 		return -ENOENT;
 	}
 
-#if IS_ENABLED(CONFIG_NRF_CLOUD_ALERTS)
+#if IS_ENABLED(CONFIG_NRF_CLOUD_ALERT)
 	ctrl_data.alerts_enabled = nrf_cloud_alert_control_get();
 #else
 	ctrl_data.alerts_enabled = false;
-#endif /* CONFIG_NRF_CLOUD_ALERTS */
+#endif /* CONFIG_NRF_CLOUD_ALERT */
+
 	ctrl_data.log_level = nrf_cloud_log_control_get();
 
 	err = nrf_cloud_shadow_control_decode(&evt->param.cc->data, &status, &ctrl_data);
@@ -272,10 +267,22 @@ static int handle_device_control_update(const struct nct_evt *const evt,
 
 	*control_found = (status != NRF_CLOUD_CTRL_NOT_PRESENT);
 	if (*control_found) {
-#if IS_ENABLED(CONFIG_NRF_CLOUD_ALERTS)
+#if IS_ENABLED(CONFIG_NRF_CLOUD_ALERT)
 		nrf_cloud_alert_control_set(ctrl_data.alerts_enabled);
-#endif /* CONFIG_NRF_CLOUD_ALERTS */
+#endif /* CONFIG_NRF_CLOUD_ALERT */
 		nrf_cloud_log_control_set(ctrl_data.log_level);
+	} else {
+#if IS_ENABLED(CONFIG_NRF_CLOUD_ALERT)
+		ctrl_data.alerts_enabled = nrf_cloud_alert_control_get();
+#else
+		ctrl_data.alerts_enabled = false;
+#endif
+		ctrl_data.log_level = nrf_cloud_log_control_get();
+		nrf_cloud_log_enable(ctrl_data.log_level != LOG_LEVEL_NONE);
+		/* First boot, so update shadow with our current settings. */
+		status = NRF_CLOUD_CTRL_REPLY;
+		LOG_INF("Updating shadow with alertEn:%u and logLvl:%u",
+			ctrl_data.alerts_enabled, ctrl_data.log_level);
 	}
 
 	/* Acknowledge that shadow delta changes have been made. */
@@ -284,7 +291,7 @@ static int handle_device_control_update(const struct nct_evt *const evt,
 			.opcode = NCT_CC_OPCODE_UPDATE_REQ,
 			.message_id = NCT_MSG_ID_STATE_REPORT,
 		};
-
+		LOG_DBG("Confirming shadow delta");
 		err = nrf_cloud_shadow_control_response_encode(&ctrl_data, &msg.data);
 		if (err) {
 			LOG_ERR("nrf_cloud_shadow_control_response_encode failed %d", err);
@@ -312,22 +319,25 @@ static int state_ua_pin_complete(void)
 		.message_id = NCT_MSG_ID_PAIR_STATUS_REPORT,
 	};
 
-	err = nrf_cloud_state_encode(STATE_UA_PIN_COMPLETE, c2d_topic_modified, &msg.data);
+	err = nrf_cloud_state_encode(STATE_UA_PIN_COMPLETE, c2d_topic_modified,
+				     add_dev_status, &msg.data);
 	if (err) {
 		LOG_ERR("nrf_cloud_state_encode failed %d", err);
 		return err;
 	}
 
+	add_dev_status = false;
+
 	c2d_topic_modified = false;
 
 	err = nct_cc_send(&msg);
-	if (err) {
-		LOG_ERR("nct_cc_send failed %d", err);
-		nrf_cloud_free((void *)msg.data.ptr);
-		return err;
-	}
 
 	nrf_cloud_free((void *)msg.data.ptr);
+
+	if (err) {
+		LOG_ERR("nct_cc_send failed %d", err);
+		return err;
+	}
 
 	struct nrf_cloud_evt evt = {
 		.type = NRF_CLOUD_EVT_USER_ASSOCIATED,
@@ -450,9 +460,10 @@ static int handle_pin_complete(const struct nct_evt *nct_evt)
 	struct nrf_cloud_data rx;
 	struct nrf_cloud_data tx;
 	struct nrf_cloud_data bulk;
+	struct nrf_cloud_data bin;
 	struct nrf_cloud_data endpoint;
 
-	err = nrf_cloud_data_endpoint_decode(payload, &tx, &rx, &bulk, &endpoint);
+	err = nrf_cloud_data_endpoint_decode(payload, &tx, &rx, &bulk, &bin, &endpoint);
 	if (err) {
 		LOG_ERR("nrf_cloud_data_endpoint_decode failed %d", err);
 		return err;
@@ -462,7 +473,7 @@ static int handle_pin_complete(const struct nct_evt *nct_evt)
 	c2d_topic_modified = nrf_cloud_set_wildcard_c2d_topic((char *)rx.ptr, rx.len);
 
 	/* Set the endpoint information. */
-	nct_dc_endpoint_set(&tx, &rx, &bulk, &endpoint);
+	nct_dc_endpoint_set(&tx, &rx, &bulk, &bin, &endpoint);
 
 	return state_ua_pin_complete();
 }

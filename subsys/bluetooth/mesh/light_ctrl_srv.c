@@ -91,9 +91,7 @@ static void store(struct bt_mesh_light_ctrl_srv *srv, enum flags kind)
 #if CONFIG_BT_SETTINGS
 	atomic_set_bit(&srv->flags, kind);
 
-	k_work_schedule(
-		&srv->store_timer,
-		K_SECONDS(CONFIG_BT_MESH_MODEL_SRV_STORE_TIMEOUT));
+	bt_mesh_model_data_store_schedule(srv->model);
 #endif
 }
 
@@ -369,6 +367,16 @@ static void reg_updated(struct bt_mesh_light_ctrl_reg *reg, float value)
 	 * server.
 	 */
 	uint16_t lvl = to_linear(light_get(srv));
+
+#if CONFIG_BT_MESH_LIGHT_CTRL_AMB_LIGHT_LEVEL_TIMEOUT
+	int64_t timestamp_temp;
+
+	timestamp_temp = srv->amb_light_level_timestamp;
+	if (k_uptime_delta(&timestamp_temp) >=
+	    CONFIG_BT_MESH_LIGHT_CTRL_AMB_LIGHT_LEVEL_TIMEOUT * MSEC_PER_SEC) {
+		srv->reg->measured = 0;
+	}
+#endif
 
 	/* Output value is max out of regulator and configured level. */
 	if (output <= lvl) {
@@ -696,17 +704,14 @@ static void store_state_data(struct bt_mesh_light_ctrl_srv *srv)
 
 }
 
-static void store_timeout(struct k_work *work)
+static void ligth_ctrl_srv_pending_store(struct bt_mesh_model *model)
 {
-	struct k_work_delayable *dwork = k_work_delayable_from_work(work);
-	struct bt_mesh_light_ctrl_srv *srv = CONTAINER_OF(
-		dwork, struct bt_mesh_light_ctrl_srv, store_timer);
-
-	store_cfg_data(srv);
-
-	store_state_data(srv);
+	struct bt_mesh_light_ctrl_srv *srv = model->user_data;
 
 	LOG_DBG("Store Timeout");
+
+	store_cfg_data(srv);
+	store_state_data(srv);
 }
 #endif
 /*******************************************************************************
@@ -855,6 +860,21 @@ static int handle_light_onoff_get(struct bt_mesh_model *model, struct bt_mesh_ms
 	return 0;
 }
 
+static bool transition_get(struct bt_mesh_model *model,
+			   struct bt_mesh_model_transition *transition,
+			   struct net_buf_simple *buf)
+{
+	/* Light LC Server uses state machine values instead of DTT if Transition Time field is not
+	 * present in the message.
+	 */
+	if (buf->len == 2) {
+		model_transition_buf_pull(buf, transition);
+		return true;
+	}
+
+	return false;
+}
+
 static int light_onoff_set(struct bt_mesh_light_ctrl_srv *srv, struct bt_mesh_msg_ctx *ctx,
 			   struct net_buf_simple *buf, bool ack)
 {
@@ -867,7 +887,7 @@ static int light_onoff_set(struct bt_mesh_light_ctrl_srv *srv, struct bt_mesh_ms
 	uint8_t tid = net_buf_simple_pull_u8(buf);
 
 	struct bt_mesh_model_transition transition;
-	bool has_trans = !!model_transition_get(srv->model, &transition, buf);
+	bool has_trans = transition_get(srv->model, &transition, buf);
 
 	enum bt_mesh_light_ctrl_srv_state prev_state = srv->state;
 
@@ -967,6 +987,9 @@ static int handle_sensor_status(struct bt_mesh_model *model, struct bt_mesh_msg_
 #if CONFIG_BT_MESH_LIGHT_CTRL_SRV_REG
 		if (id == BT_MESH_PROP_ID_PRESENT_AMB_LIGHT_LEVEL && srv->reg) {
 			srv->reg->measured = sensor_to_float(&value);
+#if CONFIG_BT_MESH_LIGHT_CTRL_AMB_LIGHT_LEVEL_TIMEOUT
+			srv->amb_light_level_timestamp = k_uptime_get();
+#endif
 			if (!atomic_test_and_set_bit(&srv->flags, FLAG_AMBIENT_LUXLEVEL_SET)) {
 				reg_start(srv);
 			}
@@ -1518,10 +1541,6 @@ static int light_ctrl_srv_init(struct bt_mesh_model *model)
 	k_work_init_delayable(&srv->timer, timeout);
 	k_work_init_delayable(&srv->action_delay, delayed_action_timeout);
 
-#if CONFIG_BT_SETTINGS
-	k_work_init_delayable(&srv->store_timer, store_timeout);
-#endif
-
 #if CONFIG_BT_MESH_LIGHT_CTRL_SRV_REG
 	if (srv->reg) {
 		struct bt_mesh_light_ctrl_reg_cfg reg_cfg = BT_MESH_LIGHT_CTRL_SRV_REG_CFG_INIT;
@@ -1685,6 +1704,9 @@ const struct bt_mesh_model_cb _bt_mesh_light_ctrl_srv_cb = {
 	.start = light_ctrl_srv_start,
 	.reset = light_ctrl_srv_reset,
 	.settings_set = light_ctrl_srv_settings_set,
+#if CONFIG_BT_SETTINGS
+	.pending_store = ligth_ctrl_srv_pending_store,
+#endif
 };
 
 static int lc_setup_srv_init(struct bt_mesh_model *model)

@@ -244,7 +244,7 @@ void verify_ssid_cache_cb(void *cb_arg, const char *ssid, size_t ssid_len)
 	static const char *const ssids[] = {SSID3, SSID2};
 
 	TEST_ASSERT_EQUAL(0, strncmp(ssids[call_count++], ssid, ssid_len));
-	TEST_ASSERT_EQUAL(NULL, cb_arg);
+	TEST_ASSERT_EQUAL_PTR(NULL, cb_arg);
 }
 
 /* Verify that wifi_credentials behaves correctly when the storage limit is reached. */
@@ -308,10 +308,16 @@ void test_storage_limit(void)
 	wifi_credentials_for_each_ssid(verify_ssid_cache_cb, NULL);
 }
 
+/* It is required to be added to each test. That is because unity's
+ * main may return nonzero, while zephyr's main currently must
+ * return 0 in all cases (other values are reserved).
+ */
 extern int unity_main(void);
 
-void main(void)
+int main(void)
 {
 	/* use the runner from test_runner_generate() */
 	(void)unity_main();
+
+	return 0;
 }

@@ -202,14 +202,26 @@ static int trace_fragment_write(struct nrf_modem_trace_data *frag)
 
 		PERF_END(ret);
 
-		if (ret < 0) {
-			LOG_ERR("trace_backend.write failed with err: %d", ret);
+		__ASSERT(ret != 0, "Trace backend wrote 0 bytes");
 
-			return ret;
+		/* We handle this here and not in the trace_thread_handler as we might not write the
+		 * entire trace fragment in the same write operation. If we get EAGAIN on the
+		 * second, third, ..., we would repeat sending the first section of the trace
+		 * fragment.
+		 */
+		if (ret == -EAGAIN) {
+			/* We don't allow retrying if the modem is shut down as that can block
+			 * a new modem init.
+			 */
+			if (!nrf_modem_is_initialized()) {
+				return -ESHUTDOWN;
+			}
+			continue;
 		}
 
-		if (ret == 0) {
-			LOG_WRN("trace_backend wrote 0 bytes.");
+		if (ret < 0) {
+			LOG_ERR("trace_backend.write failed with err: %d", ret);
+			return ret;
 		}
 
 		remaining -= ret;
@@ -349,6 +361,19 @@ static int trace_deinit(void)
 		LOG_ERR("trace_backend: deinit failed with err: %d", err);
 		return err;
 	}
+
+
+#if CONFIG_NRF_MODEM_LIB_TRACE_BACKEND_BITRATE
+	k_work_cancel(&backend_bps_avg_update_work);
+#endif
+
+#if CONFIG_NRF_MODEM_LIB_TRACE_BACKEND_BITRATE_LOG
+	k_work_cancel(&backend_bps_log_work);
+#endif
+
+#if CONFIG_NRF_MODEM_LIB_TRACE_BITRATE_LOG
+	k_work_cancel(&bps_log_work);
+#endif
 
 	k_sem_give(&trace_done_sem);
 

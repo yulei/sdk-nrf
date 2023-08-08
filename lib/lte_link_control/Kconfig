@@ -12,12 +12,15 @@ menuconfig LTE_LINK_CONTROL
 if LTE_LINK_CONTROL
 
 config LTE_AUTO_INIT_AND_CONNECT
-	bool "Auto Initialize and Connect for the LTE link"
+	select DEPRECATED
+	bool "Auto Initialize and Connect for the LTE link [DEPRECATED]"
 	default y if NRF_MODEM_LIB_SYS_INIT
 	help
 		Turn on to make the LTE Link Controller to
 		automatically initialize and connect the modem
-		before the application starts
+		before the application starts.
+		This Kconfig option is deprecated. Instead, the application should call
+		lte_lc_init() and lte_lc_connect().
 
 config LTE_SHELL
 	bool "Enable LTE shell commands"
@@ -58,6 +61,14 @@ config LTE_UNLOCK_PLMN
 	depends on !LTE_LOCK_PLMN
 	help
 		Disable PLMN locks for network selection.
+
+config LTE_PSM_REQ
+	bool "Enable requesting use of PSM"
+	help
+		Enable request for use of PSM using AT+CPSMS.
+		If this option is set the link controller will automatically request PSM when
+		the modem is initialized. This will cause the modem to include a PSM request in
+		every subsequent LTE attach packet.
 
 config LTE_PSM_REQ_RPTAU
 	string "PSM setting requested periodic TAU"
@@ -129,7 +140,7 @@ config LTE_PTW_VALUE_NBIOT
 		value that is configured, and it's usually best to let the modem
 		use default PTW values.
 
-choice
+choice LTE_NETWORK_MODE
 	prompt "Select network mode"
 	default LTE_NETWORK_MODE_LTE_M
 	help

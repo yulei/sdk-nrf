@@ -1,4 +1,7 @@
 """
+SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
+Copyright (c) 2023 Nordic Semiconductor ASA
+
 NCS Software Maturity Level Scanner
 ===================================
 
@@ -28,6 +31,15 @@ The script requires three inputs to be functional:
   with a value allows all occurrences of the symbol where the value differs
   from the given value.
 
+  In cases where a feature is dependent on a companion chip to work, the feature
+  entry can be expanded to a dictionary containing the fields "rule" and
+  "boards_and_shields" where "rule" is the original KConfig rule and
+  "boards_and_shields" is a list of KConfig options indicating that the
+  required companion chip is present. If at least one sample is found
+  where none of the listed companion chip options are present, the feature
+  is marked as independent of the companion chips for the given SoC. Otherwise
+  all found companion chip options are added as a footnote.
+
   One such file might look like this:
 
     top_table:
@@ -42,6 +54,12 @@ The script requires three inputs to be functional:
         matter:
             Matter commissioning over IP: CHIP
             Matter over Thread: CHIP && NET_L2_OPENTHREAD
+        wifi:
+            STA Mode:
+                rule: WPA_SUPP && WIFI_NRF700X
+                boards_and_shields:
+                  - SHIELD_NRF7002EK
+                  - BOARD_NRF7002DK_NRF5340_CPUAPP
 
 If no input file is specified, the script will look in the local directory for
 a 'software_maturity_features.yaml' file.
@@ -98,13 +116,11 @@ is experimental and the others are not, the feature will still be marked as
 experimental. If this is an undesired outcome, the feature should be split
 into two separate features, one with the experimental symbols and the other
 with the supported ones.
-
-Copyright (c) 2022 Nordic Semiconductor ASA
 """
 
 from enum import IntEnum
 from pathlib import Path
-from typing import Dict, List, Set
+from typing import Dict, List, Set, Tuple, Union
 from azure.storage.blob import ContainerClient
 import kconfiglib
 import os
@@ -156,7 +172,7 @@ class MaturityLevels(IntEnum):
         }[self]
 
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 logger = logging.getLogger(__name__)
 
@@ -191,6 +207,8 @@ def soc_from_kconfig(kconfig: kconfiglib.Kconfig) -> str:
         SoC base name on the form "nrf1234".
     """
 
+    if not "CONFIG_SOC" in kconfig.variables:
+        return None
     soc = kconfig.variables["CONFIG_SOC"].value
     return soc.strip('"').split("_")[0].lower()
 
@@ -222,6 +240,8 @@ def find_experimental_symbols(logs: List[str]) -> Dict[str, Set[str]]:
                 continue
             kconf = kconfiglib.Kconfig(filename=config_path)
             soc = soc_from_kconfig(kconf)
+            if not soc:
+                continue
             for symbol in matches:
                 symbol = "CONFIG_" + symbol
                 if soc not in socs:
@@ -269,7 +289,7 @@ def find_all_socs(all_samples: List[str]) -> List[str]:
 
     # Only use nRF boards, but not nRF51 series
     all_boards = set(filter(BOARD_FILTER, all_boards))
-    all_socs = {re.search(r"_(nrf[0-9]+)", b).group(1) for b in all_boards}
+    all_socs = {re.findall(r"_(nrf[0-9]+)", b)[-1] for b in all_boards}
     return list(sorted(all_socs))
 
 
@@ -375,6 +395,38 @@ def parse_rule(rule: str) -> list:
     return parsed_rule
 
 
+def parse_rule_set(rule_set: Union[str, Dict[str, str]]) -> dict:
+    """Parse a rule set consisting of the Kconfig rule and the companion chip
+    dependency KConfig options.
+
+    Args:
+        rule_set: A Kconfig rule string or a dictionary containing the string and
+            companion chip dependency options.
+
+    Returns:
+        A parsed rule set with the fields "rule" and "companion_chips".
+    """
+
+    companion_chips = {}
+    if isinstance(rule_set, str):
+        rule = parse_rule(rule_set)
+    else:
+        rule = parse_rule(rule_set["rule"])
+        if "boards_and_shields" in rule_set:
+            if isinstance(rule_set["boards_and_shields"], list):
+                companion_chips = {
+                    chip: parse_rule(chip) for chip in rule_set["boards_and_shields"]
+                }
+            else:
+                companion_chips = {
+                    rule_set["boards_and_shields"]: parse_rule(
+                        rule_set["boards_and_shields"]
+                    )
+                }
+
+    return {"rule": rule, "companion_chips": companion_chips}
+
+
 def evaluate_rule(vars: Dict[str, kconfiglib.Variable], rule: list) -> bool:
     """Evaluate a parsed Kconfig rule against a dictionary of Kconfig variables.
 
@@ -419,25 +471,54 @@ def evaluate_rule(vars: Dict[str, kconfiglib.Variable], rule: list) -> bool:
     return False
 
 
-def flatten(items: list) -> Set[str]:
-    """Flatten a Kconfig rule to a set of unique symbols.
+def evaluate_rule_set(
+    vars: Dict[str, kconfiglib.Variable], rule_set: dict
+) -> Tuple[bool, Set[str]]:
+    """Evaluate a parsed Kconfig rule set against a dictionary of Kconfig variables.
 
     Args:
-        items: Nested list of symbols.
+        vars: Dictionary of present Kconfig variables and their values.
+        rule_set: The rule set consisting of a parsed Kconfig rule and a list
+            of individual rules for all associated companion chips.
 
     Returns:
-        Set of unique symbols.
+        (Match, Dependencies)
+            Match: False if any of the required variables are missing, True otherwise.
+            Dependencies: All companion chips found with the given variables.
     """
+    rule = rule_set["rule"]
+    companion_chips = rule_set["companion_chips"]
+    if not evaluate_rule(vars, rule):
+        return False, set()
 
-    out = set()
-    for item in items:
-        if item in ["OR", "AND"]:
-            continue
-        elif isinstance(item, list):
-            out.update(flatten(item))
-        else:
-            out.add(item)
-    return out
+    dependent_on = {
+        extract_dependency_name(chip)
+        for chip, rule in companion_chips.items()
+        if evaluate_rule(vars, rule)
+    }
+    return True, dependent_on
+
+
+def extract_dependency_name(option: str) -> str:
+    """Extract the dependency names from the found KConfig symbols.
+
+    For shields, the SHIELD prefix is stripped.
+    For boards, the BOARD prefix is stripped, as well as the last occurrence of NRFxxx.
+
+    Args:
+        option: The KConfig option.
+
+    Returns:
+        The dependency name.
+    """
+    if option.startswith("BOARD_"):
+        pattern = r"BOARD_(NRF.*)_NRF.*"
+    elif option.startswith("SHIELD_"):
+        pattern = r"SHIELD_(NRF.*)"
+    else:
+        return ""
+
+    return re.match(pattern, option).group(1).replace("NRF", "nRF")
 
 
 def find_maturity_level(
@@ -513,9 +594,9 @@ def generate_tables(
     all_features = {}
     feature_categories = input_doc["features"]
     for cat, features in feature_categories.items():
-        for feature, rule in features.items():
+        for feature, rule_set in features.items():
             key = f"{cat}_{feature}"
-            all_features[key] = parse_rule(rule)
+            all_features[key] = parse_rule_set(rule_set)
 
     # Find all sample.yaml files
     all_samples = list(sample_dir.glob("samples/**/sample.yaml"))
@@ -533,7 +614,7 @@ def generate_tables(
     soc_sets = {}
     top_table_info = input_doc["top_table"]
     for tech in top_table_info:
-        soc_sets[tech] = set()
+        soc_sets[tech] = {}
 
     for feature in all_features:
         soc_sets[feature] = {}
@@ -543,26 +624,43 @@ def generate_tables(
     for conf_file in all_conf_files:
         kconf = kconfiglib.Kconfig(filename=conf_file)
         soc = soc_from_kconfig(kconf)
+        if not soc:
+            continue
 
         # Look for technology symbols
-        for tech, rule in top_table_info.items():
-            rule = parse_rule(rule)
+        for tech, rule_set in top_table_info.items():
+            parsed_rule_set = parse_rule_set(rule_set)
             # Top level technologies are currently only Supported/Not supported
-            if evaluate_rule(kconf.variables, rule):
-                soc_sets[tech].add(soc)
+            match, dependent_on = evaluate_rule_set(kconf.variables, parsed_rule_set)
+            if match:
+                # Dependencies are added together, or cleared if at least one instance has no dependencies
+                if soc in soc_sets[tech]:
+                    previous_dependencies = soc_sets[tech][soc]
+                    if len(previous_dependencies) != 0:
+                        dependent_on.update(previous_dependencies)
+                    else:
+                        dependent_on = set()
+                soc_sets[tech][soc] = dependent_on
 
         # Look for feature symbols
-        for feature, rule in all_features.items():
-            if evaluate_rule(kconf.variables, rule):
+        for feature, rule_set in all_features.items():
+            match, dependent_on = evaluate_rule_set(kconf.variables, rule_set)
+            if match:
                 experimental_symbols = (
                     exp_soc_sets[soc] if soc in exp_soc_sets else set()
                 )
                 status = find_maturity_level(kconf.variables, experimental_symbols)
-                soc_sets[feature][soc] = (
-                    max(status, soc_sets[feature][soc])
-                    if soc in soc_sets[feature]
-                    else status
-                )
+                if soc in soc_sets[feature]:
+                    status = max(status, soc_sets[feature][soc]["status"])
+                    previous_dependencies = soc_sets[feature][soc]["dependent_on"]
+                    if previous_dependencies:
+                        dependent_on.update(previous_dependencies)
+                    else:
+                        dependent_on = set()
+                soc_sets[feature][soc] = {
+                    "status": status,
+                    "dependent_on": dependent_on,
+                }
 
     # Create the output data structure
     top_table = {}
@@ -573,7 +671,10 @@ def generate_tables(
         }
         for soc in all_socs:
             if soc in soc_sets[tech]:
-                top_table[tech][MaturityLevels.SUPPORTED.get_str()].append(soc)
+                entry = soc
+                if soc_sets[tech][soc]:
+                    entry = {soc: sorted(soc_sets[tech][soc])}
+                top_table[tech][MaturityLevels.SUPPORTED.get_str()].append(entry)
 
     # Feature tables
     category_results = {}
@@ -590,12 +691,16 @@ def generate_tables(
 
             for soc in all_socs:
                 if soc in soc_sets[feature]:
-                    status = soc_sets[feature][soc].get_str()
-                    table[feature][status].append(soc)
+                    status = soc_sets[feature][soc]["status"].get_str()
+                    entry = soc
+                    if soc_sets[feature][soc]["dependent_on"]:
+                        entry = {soc: sorted(soc_sets[feature][soc]["dependent_on"])}
+                    table[feature][status].append(entry)
 
         category_results[cat] = table
 
     output = {
+        "version": __version__,
         "all_socs": all_socs,
         "top_level": top_table,
         "features": category_results,

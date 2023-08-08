@@ -25,6 +25,12 @@ howtoemphasize\ **inside**\ aword
 
 :command:`make`
 
+:guilabel:`Install`
+
+:makevar:`ZEPHYR_MBEDTLS_NRF_MODULE_DIR` (this is a name of the make variable)
+
+:envvar:`$HOME` (this is an environment variable)
+
 Lists
 =====
 
@@ -92,6 +98,11 @@ term (up to a line of text)
 
 next term
    Description.
+
+Glossary
+--------
+
+See :ref:`glossary` for usage.
 
 Indentation
 ===========
@@ -190,6 +201,50 @@ To force line-breaks in a table, use a line block:
 | First line
 | Second line
 
+Tabs
+====
+
+Example usage of tabs is to show how the same procedure works on different operating systems:
+
+.. tabs::
+
+   .. group-tab:: Windows
+
+      Windows tab
+
+   .. group-tab:: Linux
+
+      Linux tab
+
+   .. group-tab:: macOS
+
+      macOS tab
+
+Toggle
+======
+
+The ``.. toggle::`` directive lets you create expandable sections.
+Useful to hide content that is potentially irrelevant to many customers.
+
+.. toggle::
+
+   Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.
+   Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.
+   Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.
+   Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
+
+Embedding media
+===============
+
+This is how you can embed a video:
+
+.. raw:: html
+
+   <h1 align="center">
+   <iframe width="560" height="315" src="https://www.youtube.com/embed/9Ar13rMxGIk" title="Getting started with Matter" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>
+   </h1>
+
+In general, the ``.. raw:: html`` directive will process any HTML code provided in it.
 
 Links
 =====
@@ -211,6 +266,27 @@ Use :ref: to link to IDs and :doc: to link to files.
 If you have a link ID in :file:`links.txt` that consists of only one word, you cannot have a heading anywhere that is the same.
 If you do, you'll get an error about a duplicate ID in :file:`links.txt`.
 
+Notes and similar elements
+==========================
+
+.. note::
+   This is a note.
+
+.. tip::
+   This is a tip.
+
+.. important::
+   This is important stuff.
+
+.. caution::
+   This is a caution note.
+   Use for things like security issues or to prevent major flaws in the application.
+
+.. warning::
+   This is a warning.
+   Do not overuse this.
+   Use only to warn against device bricking, unrecoverable issues, or potential injury (when describing hardware).
+
 Images
 ======
 
@@ -219,7 +295,16 @@ Images
 
    Figure caption
 
-Always link to the image with ``/images/...``.
+Make sure to correctly specify the path to the image file.
+A slash at the beginning of the path indicates an absolute path and will link to the common image folder in :file:`doc/nrf`.
+Starting the path without the forward slash indicates a relative path.
+
+Math equations
+==============
+
+.. math::
+
+   (a + b)^2 = a^2 + 2ab + b^2
 
 Footnotes
 =========
@@ -247,7 +332,7 @@ Include 1:
      :end-line: 27
 
 Include 2:
-  .. include:: ../getting_started/installing.rst
+  .. include:: ../installation/installing.rst
      :start-after: west-error-start
      :end-before: west-error-end
 
@@ -270,7 +355,7 @@ Include 4:
 You can also use ncs-include if you want to use the indentation options inside the nrf doc set:
 
 Include 5 (similar to include 2, but improved indentation):
-  .. ncs-include:: ../getting_started/installing.rst
+  .. ncs-include:: ../installation/installing.rst
      :start-after: west-error-start
      :end-before: west-error-end
      :auto-dedent:
@@ -280,6 +365,14 @@ See https://github.com/nrfconnect/sdk-nrf/commit/fa5bd7330538f6a12e059c9d60fa269
 .. tip::
    If you need a "start-after" text that occurs more than once inside a document, you can combine ``:start-after:`` with ``:start-line:``.
    Sphinx will then use the first occurrence of the "start-after" text after the specified start line.
+
+Shortcuts
+=========
+
+Defined in the :file:`shortcuts.txt` file.
+Usage: |NCS|
+
+They can be used for replacing single words but also for multiple paragraphs.
 
 Including text inside a nested list
 ===================================
@@ -379,6 +472,141 @@ For example:
        :start-after: include_startingpoint_scan_rst_1
        :end-before: include_endpoint_scan_rst_1
 
+Code blocks
+===========
+
+To manually type a block of code, you can use ``code-block``:
+
+  .. code-block:: console
+
+     python buildprog.py -c app -b debug -d both
+
+You can also apply code highlighting as in the following examples:
+
+Devicetree:
+
+.. code-block:: devicetree
+
+    &pinctrl {
+        spi0_default_alt: spi0_default_alt {
+            group1 {
+                psels = <NRF_PSEL(SPI_SCK, 0, 10)>,
+                        <NRF_PSEL(SPI_MISO, 0, 12)>,
+                        <NRF_PSEL(SPI_MOSI, 0, 13)>;
+            };
+        };
+
+        spi0_sleep_alt: spi0_sleep_alt {
+            group1 {
+                psels = <NRF_PSEL(SPI_SCK, 0, 16)>,
+                        <NRF_PSEL(SPI_MISO, 0, 15)>,
+                        <NRF_PSEL(SPI_MOSI, 0, 17)>;
+                low-power-enable;
+          };
+        };
+    };
+  };
+
+Devicetree (alternative):
+
+.. code-block:: DTS
+
+   / {
+           chosen {
+                   ncs,dm-timer = &timer2;
+           };
+   };
+
+C:
+
+.. code-block:: c
+
+    static struct bt_mesh_model_pub pub_ctx;
+    static struct net_buf_simple pub_msg;
+    static uint8_t buf[BT_MESH_MODEL_BUF_LEN(MESSAGE_SET_OPCODE,
+                                             MESSAGE_SET_MAXLEN)];
+
+    static int model_init(struct bt_mesh_model *model)
+    {
+        model->pub = &pub_ctx;
+        net_buf_simple_init_with_data(&pub_msg, buf, sizeof(buf));
+        pub_ctx.msg = &pub_msg;
+
+        return 0;
+    }
+
+C++:
+
+.. code-block:: C++
+
+    #include <zephyr/pm/device.h>
+
+    const auto * qspi_dev = DEVICE_DT_GET(DT_INST(0, nordic_qspi_nor));
+    if (device_is_ready(qspi_dev))
+    {
+        // Put the peripheral into suspended state.
+        pm_device_action_run(qspi_dev, PM_DEVICE_ACTION_SUSPEND);
+
+        // Resume the peripheral from the suspended state.
+        pm_device_action_run(qspi_dev, PM_DEVICE_ACTION_RESUME);
+    }
+
+C++ (alternative):
+
+   .. code-block:: cpp
+
+      struct Request : public sys_snode_t
+      {
+         uint8_t priority;                     ///< Advertising request priority. Lower value means higher priority
+         uint32_t options;                     ///< Advertising options: bitmask of BT_LE_ADV_OPT_XXX constants from Zephyr
+         uint16_t minInterval;                 ///< Minimum advertising interval in 0.625 ms units
+         uint16_t maxInterval;                 ///< Maximum advertising interval in 0.625 ms units
+         Span<const bt_data> advertisingData;  ///< Advertising data fields
+         Span<const bt_data> scanResponseData; ///< Scan response data fields
+         OnAdvertisingStarted onStarted;       ///< (Optional) Callback invoked when the request becomes top-priority.
+         OnAdvertisingStopped onStopped;       ///< (Optional) Callback invoked when the request stops being top-priority.
+      };
+
+Kconfig:
+
+.. code-block:: Kconfig
+
+   EXT_API = MY
+   id = 0xBEEF
+   flags = 0
+   ver = 1
+   source "${ZEPHYR_BASE}/../nrf/subsys/fw_info/Kconfig.template.fw_info_ext_api"
+
+cmake:
+
+.. code-block:: cmake
+
+   if(CONFIG_NRF_MODEM_LIB_TRACE)
+
+   zephyr_library()
+   # Only add 'custom' backend to compilation when selected.
+   zephyr_library_sources_ifdef(
+     CONFIG_NRF_MODEM_LIB_TRACE_BACKEND_MY_TRACE_BACKEND
+     path/to/my_trace_backend.c
+   )
+
+   endif()
+
+yaml:
+
+.. code-block:: YAML
+
+   ncs:
+     upstream-url: https://...
+     upstream-sha: GIT_SHA
+     compare-by-default: <true|false>
+
+Python:
+
+.. code-block:: python
+
+   class OpenThread(OpenThreadTHCI, IThci)
+
 
 Linking between doc sets
 ************************
@@ -402,6 +630,26 @@ To link to doxygen macros, enums or functions use:
 
 * :c:macro:`BT_HIDS_INFORMATION_LEN`
 * :c:func:`bt_hids_init`
+* :c:struct:`bt_gatt_dm`
+* :c:type:`slm_data_handler_t`
+* :c:enum:`at_param_type` (for the whole list)
+* :c:enumerator:`PEER_STATE_CONN_FAILED` (for a list item)
+* :c:member:`ble_peer_event.state`
+
+For C++ elements:
+
+* :cpp:func:`mbedtls_entropy_init`
+* :cpp:type:`bt_mesh_time_tai`
+* :cpp:enum:`bt_mesh_time_role`
+* :cpp:member:`request_msg_recv`
+
+Kconfig
+=======
+
+Link to library Kconfig options using :kconfig:option:`CONFIG_NORDIC_SECURITY_BACKEND`.
+
+For more information on how to link to application-specific configuration options, see :ref:`Configuration options <sample_config_options>`.
+Example: :ref:`CONFIG_UDP_DATA_UPLOAD_FREQUENCY_SECONDS <CONFIG_UDP_DATA_UPLOAD_FREQUENCY_SECONDS>`.
 
 Linked RST project
 ==================
@@ -409,3 +657,40 @@ Linked RST project
 :doc:`zephyr:index` - link to a page
 
 :ref:`zephyr:getting_started` - link to an ID
+
+Heading lvl 4
+-------------
+
+Lower hierarchy section.
+
+Heading lvl 5
+~~~~~~~~~~~~~
+
+Even lower hierarchy section.
+
+Numbered sections
+*****************
+
+This is a special type of headings that will be automatically turned into steps of a large procedure.
+For usage example, see :ref:`manual_installation`.
+
+.. rst-class:: numbered-step
+
+First step
+==========
+
+Content of first numbered heading.
+
+.. rst-class:: numbered-step
+
+Second step
+===========
+
+Content of second numbered heading.
+
+.. rst-class:: numbered-step
+
+Third step
+==========
+
+Content of third numbered heading.

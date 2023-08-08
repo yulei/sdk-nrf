@@ -21,9 +21,8 @@
 #define MAX_HAL_RPU_READY_WAIT (1 * 1000 * 1000) /* 1 sec */
 
 #ifdef CONFIG_NRF_WIFI_LOW_POWER
-#define RPU_PS_IDLE_TIMEOUT 10  /* msecs */
-#define RPU_PS_POLL_IDLE_TIMEOUT 10  /* msecs */
-#define RPU_PS_WAKE_TIMEOUT 1  /* secs */
+#define RPU_PS_WAKE_INTERVAL_MS 1
+#define RPU_PS_WAKE_TIMEOUT_S 1
 #endif /* CONFIG_NRF_WIFI_LOW_POWER */
 
 
@@ -79,9 +78,12 @@ struct wifi_nrf_hal_cfg_params {
 #ifndef CONFIG_NRF700X_RADIO_TEST
 	unsigned char rx_buf_headroom_sz;
 	unsigned char tx_buf_headroom_sz;
+#ifdef CONFIG_NRF700X_DATA_TX
 	unsigned int max_tx_frms;
+#endif /* CONFIG_NRF700X_DATA_TX */
 	struct rx_buf_pool_params rx_buf_pool[MAX_NUM_OF_RX_QUEUES];
 	unsigned int max_tx_frm_sz;
+	unsigned int max_ampdu_len_per_token;
 #endif /* !CONFIG_NRF700X_RADIO_TEST */
 };
 
@@ -169,7 +171,7 @@ struct wifi_nrf_hal_buf_map_info {
  *             the regular operation after the FW has been loaded.
  * @lock_hal: Lock to be used for atomic HAL operations.
  * @lock_rx: Lock to be used for atomic RX operations.
- * @rx_tasklet: Pointer to the bottom half handler for RX events.
+ * @event_tasklet: Pointer to the bottom half handler for RX events.
  * @rpu_ps_state: PS state of the RPU.
  * @rpu_ps_timer: Inactivity timer used to put RPU back to sleep after
  *                waking it up.
@@ -206,7 +208,7 @@ struct wifi_nrf_hal_dev_ctx {
 	enum RPU_PROC_TYPE curr_proc;
 
 	void *lock_hal;
-	void *rx_tasklet;
+	void *event_tasklet;
 	void *lock_rx;
 
 	struct wifi_nrf_hal_buf_map_info *rx_buf_info[MAX_NUM_OF_RX_QUEUES];
@@ -216,7 +218,7 @@ struct wifi_nrf_hal_dev_ctx {
 	unsigned long addr_rpu_pktram_base_tx;
 	unsigned long addr_rpu_pktram_base_rx;
 	unsigned long addr_rpu_pktram_base_rx_pool[MAX_NUM_OF_RX_QUEUES];
-
+	unsigned long tx_frame_offset;
 #ifdef CONFIG_NRF_WIFI_LOW_POWER
 	enum RPU_PS_STATE rpu_ps_state;
 	void *rpu_ps_timer;

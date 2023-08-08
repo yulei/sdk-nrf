@@ -370,7 +370,7 @@ Persistent Storage
 ******************
 
 If :kconfig:option:`CONFIG_BT_SETTINGS` is enabled, the Light LC Server stores all its states persistently using a configurable storage delay to stagger storing.
-See :kconfig:option:`CONFIG_BT_MESH_MODEL_SRV_STORE_TIMEOUT`.
+See :kconfig:option:`CONFIG_BT_MESH_STORE_TIMEOUT`.
 
 Changes to the configuration properties are stored and restored on power-up, so the compile time configuration is only valid the first time the device powers up, until the configuration is changed.
 
@@ -384,7 +384,7 @@ When powering up, the Light LC Server behavior depends on the controlled Light L
 * On Power Up is :c:enumerator:`BT_MESH_ON_POWER_UP_RESTORE` - The Light LC Server is enabled and takes control of the Lightness Server.
   If the last known value of the Light OnOff state was On, the Light LC Server triggers a transition to the On state.
 
-.. warning::
+.. caution::
     The Light LC Server is only re-enabled on startup if the Light Lightness Server's extended Generic Power OnOff Server is in the restore mode.
 
 API documentation

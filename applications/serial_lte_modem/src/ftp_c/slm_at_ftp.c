@@ -18,7 +18,6 @@
 LOG_MODULE_REGISTER(slm_ftp, CONFIG_SLM_LOG_LEVEL);
 
 #define FTP_MAX_OPTION		32
-#define FTP_MAX_FILEPATH	128
 
 #define FTP_USER_ANONYMOUS      "anonymous"
 #define FTP_PASSWORD_ANONYMOUS  "anonymous@example.com"
@@ -59,9 +58,9 @@ typedef struct ftp_op_list {
 } ftp_op_list_t;
 
 static bool ftp_verbose_on;
-static char filepath[FTP_MAX_FILEPATH];
+static char filepath[SLM_MAX_FILEPATH];
 static int sz_filepath;
-static int (*ftp_data_mode_handler)(const uint8_t *data, int len);
+static int (*ftp_data_mode_handler)(const uint8_t *data, int len, uint8_t flags);
 
 /** forward declaration of cmd handlers **/
 static int do_ftp_close(void);
@@ -151,7 +150,7 @@ void ftp_ctrl_callback(const uint8_t *msg, uint16_t len)
 			}
 			break;
 		}
-		if (ftp_data_mode_handler && exit_datamode(-EAGAIN)) {
+		if (ftp_data_mode_handler && exit_datamode_handler(-EAGAIN)) {
 			ftp_data_mode_handler = NULL;
 		}
 		return;
@@ -326,8 +325,8 @@ static int do_ftp_ls(void)
 			return ret;
 		}
 	}
-	memset(filepath, 0x00, FTP_MAX_FILEPATH);
-	sz_filepath = FTP_MAX_FILEPATH;
+	memset(filepath, 0x00, SLM_MAX_FILEPATH);
+	sz_filepath = SLM_MAX_FILEPATH;
 	if (param_count > 3) {
 		ret = util_string_get(&at_param_list, 3, filepath, &sz_filepath);
 		if (ret) {
@@ -350,7 +349,7 @@ static int do_ftp_cd(void)
 {
 	int ret;
 
-	sz_filepath = FTP_MAX_FILEPATH;
+	sz_filepath = SLM_MAX_FILEPATH;
 	ret = util_string_get(&at_param_list, 2, filepath, &sz_filepath);
 	if (ret) {
 		return ret;
@@ -365,7 +364,7 @@ static int do_ftp_mkdir(void)
 {
 	int ret;
 
-	sz_filepath = FTP_MAX_FILEPATH;
+	sz_filepath = SLM_MAX_FILEPATH;
 	ret = util_string_get(&at_param_list, 2, filepath, &sz_filepath);
 	if (ret) {
 		return ret;
@@ -380,7 +379,7 @@ static int do_ftp_rmdir(void)
 {
 	int ret;
 
-	sz_filepath = FTP_MAX_FILEPATH;
+	sz_filepath = SLM_MAX_FILEPATH;
 	ret = util_string_get(&at_param_list, 2, filepath, &sz_filepath);
 	if (ret) {
 		return ret;
@@ -394,10 +393,10 @@ static int do_ftp_rmdir(void)
 static int do_ftp_rename(void)
 {
 	int ret;
-	char file_new[FTP_MAX_FILEPATH];
-	int sz_file_new = FTP_MAX_FILEPATH;
+	char file_new[SLM_MAX_FILEPATH];
+	int sz_file_new = SLM_MAX_FILEPATH;
 
-	sz_filepath = FTP_MAX_FILEPATH;
+	sz_filepath = SLM_MAX_FILEPATH;
 	ret = util_string_get(&at_param_list, 2, filepath, &sz_filepath);
 	if (ret) {
 		return ret;
@@ -416,7 +415,7 @@ static int do_ftp_delete(void)
 {
 	int ret;
 
-	sz_filepath = FTP_MAX_FILEPATH;
+	sz_filepath = SLM_MAX_FILEPATH;
 	ret = util_string_get(&at_param_list, 2, filepath, &sz_filepath);
 	if (ret) {
 		return ret;
@@ -431,7 +430,7 @@ static int do_ftp_get(void)
 {
 	int ret;
 
-	sz_filepath = FTP_MAX_FILEPATH;
+	sz_filepath = SLM_MAX_FILEPATH;
 	ret = util_string_get(&at_param_list, 2, filepath, &sz_filepath);
 	if (ret) {
 		return ret;
@@ -447,13 +446,13 @@ static int do_ftp_get(void)
 	}
 }
 
-static int ftp_datamode_callback(uint8_t op, const uint8_t *data, int len)
+static int ftp_datamode_callback(uint8_t op, const uint8_t *data, int len, uint8_t flags)
 {
 	int ret = 0;
 
 	if (op == DATAMODE_SEND) {
 		if (ftp_data_mode_handler) {
-			ret = ftp_data_mode_handler(data, len);
+			ret = ftp_data_mode_handler(data, len, flags);
 			LOG_INF("datamode send: %d", ret);
 		} else {
 			LOG_ERR("no datamode send handler");
@@ -466,14 +465,17 @@ static int ftp_datamode_callback(uint8_t op, const uint8_t *data, int len)
 }
 
 /* FTP PUT data mode handler */
-static int ftp_put_handler(const uint8_t *data, int len)
+static int ftp_put_handler(const uint8_t *data, int len, uint8_t flags)
 {
 	int ret = -1;
 
 	if (strlen(filepath) > 0 && data != NULL) {
 		ret = ftp_put(filepath, data, len, FTP_PUT_NORMAL);
 		if (ret != FTP_CODE_226) {
-			(void) exit_datamode(-EAGAIN);
+			(void) exit_datamode_handler(-EAGAIN);
+		} else if ((flags & SLM_DATAMODE_FLAGS_MORE_DATA) != 0) {
+			LOG_ERR("Datamode buffer overflow");
+			(void)exit_datamode_handler(-EOVERFLOW);
 		}
 	}
 
@@ -485,7 +487,7 @@ static int do_ftp_put(void)
 {
 	int ret;
 
-	sz_filepath = FTP_MAX_FILEPATH;
+	sz_filepath = SLM_MAX_FILEPATH;
 	ret = util_string_get(&at_param_list, 2, filepath, &sz_filepath);
 	if (ret) {
 		return ret;
@@ -515,14 +517,17 @@ static int do_ftp_put(void)
 }
 
 /* FTP UPUT data mode handler */
-static int ftp_uput_handler(const uint8_t *data, int len)
+static int ftp_uput_handler(const uint8_t *data, int len, uint8_t flags)
 {
 	int ret = -1;
 
 	if (data != NULL) {
 		ret = ftp_put(NULL, data, len, FTP_PUT_UNIQUE);
 		if (ret != FTP_CODE_226) {
-			(void) exit_datamode(-EAGAIN);
+			(void)exit_datamode_handler(-EAGAIN);
+		} else if ((flags & SLM_DATAMODE_FLAGS_MORE_DATA) != 0) {
+			LOG_ERR("Datamode buffer overflow");
+			(void)exit_datamode_handler(-EOVERFLOW);
 		}
 	}
 
@@ -557,10 +562,12 @@ static int do_ftp_uput(void)
 	return ret;
 }
 
-/* FTP UPUT data mode handler */
-static int ftp_mput_handler(const uint8_t *data, int len)
+/* FTP MPUT data mode handler */
+static int ftp_mput_handler(const uint8_t *data, int len, uint8_t flags)
 {
 	int ret = -1;
+
+	ARG_UNUSED(flags);
 
 	if (strlen(filepath) > 0 && data != NULL) {
 		ret = ftp_put(filepath, data, len, FTP_PUT_APPEND);
@@ -574,7 +581,7 @@ static int do_ftp_mput(void)
 {
 	int ret;
 
-	sz_filepath = FTP_MAX_FILEPATH;
+	sz_filepath = SLM_MAX_FILEPATH;
 	ret = util_string_get(&at_param_list, 2, filepath, &sz_filepath);
 	if (ret) {
 		return ret;

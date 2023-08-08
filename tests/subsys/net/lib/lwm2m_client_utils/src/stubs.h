@@ -13,6 +13,7 @@
 #include <modem/modem_key_mgmt.h>
 #include <modem/modem_info.h>
 #include <modem/lte_lc.h>
+#include <nrf_modem_at.h>
 #include <zephyr/settings/settings.h>
 #include <zephyr/sys/reboot.h>
 
@@ -26,8 +27,8 @@ DECLARE_FAKE_VALUE_FUNC(int, lwm2m_get_bool, const struct lwm2m_obj_path *, bool
 DECLARE_FAKE_VALUE_FUNC(int, lwm2m_set_opaque, const struct lwm2m_obj_path *, const char *,
 			uint16_t);
 DECLARE_FAKE_VALUE_FUNC(int, lwm2m_set_string, const struct lwm2m_obj_path *, const char *)
-DECLARE_FAKE_VALUE_FUNC(int, lwm2m_send, struct lwm2m_ctx *,
-			const struct lwm2m_obj_path *, uint8_t, bool);
+DECLARE_FAKE_VALUE_FUNC(int, lwm2m_send_cb, struct lwm2m_ctx *,
+			const struct lwm2m_obj_path *, uint8_t, lwm2m_send_cb_t);
 DECLARE_FAKE_VALUE_FUNC(int, lwm2m_delete_object_inst, const struct lwm2m_obj_path *);
 DECLARE_FAKE_VALUE_FUNC(int, lwm2m_register_delete_callback, uint16_t,
 			lwm2m_engine_user_cb_t);
@@ -80,16 +81,28 @@ DECLARE_FAKE_VALUE_FUNC(int, lwm2m_create_res_inst, const struct lwm2m_obj_path 
 DECLARE_FAKE_VALUE_FUNC(int, lwm2m_set_res_buf, const struct lwm2m_obj_path *, void *, uint16_t,
 			uint16_t, uint8_t);
 DECLARE_FAKE_VALUE_FUNC(int, lwm2m_set_u32, const struct lwm2m_obj_path *, uint32_t);
-DECLARE_FAKE_VALUE_FUNC(int, lwm2m_set_s8, const struct lwm2m_obj_path *, int8_t);
+DECLARE_FAKE_VALUE_FUNC(int, lwm2m_set_s16, const struct lwm2m_obj_path *, int16_t);
 DECLARE_FAKE_VALUE_FUNC(int, lwm2m_set_s32, const struct lwm2m_obj_path *, int32_t);
 DECLARE_FAKE_VALUE_FUNC(int, modem_info_rsrp_register, rsrp_cb_t);
 DECLARE_FAKE_VALUE_FUNC(int, lwm2m_register_exec_callback, const struct lwm2m_obj_path *,
 			lwm2m_engine_execute_cb_t);
+DECLARE_FAKE_VALUE_FUNC(int, lwm2m_set_default_sockopt, struct lwm2m_ctx *);
 DECLARE_FAKE_VALUE_FUNC(int, lwm2m_rai_req, enum lwm2m_rai_mode);
 DECLARE_FAKE_VALUE_FUNC(struct net_if*, net_if_lookup_by_dev, const struct device *);
 DECLARE_FAKE_VOID_FUNC(net_mgmt_add_event_callback, struct net_mgmt_event_callback *);
 DECLARE_FAKE_VALUE_FUNC(int, net_mgmt_NET_REQUEST_WIFI_SCAN, uint32_t, struct net_if *,
 			void *, size_t);
+DECLARE_FAKE_VALUE_FUNC(int, lte_lc_conn_eval_params_get, struct lte_lc_conn_eval_params *);
+DECLARE_FAKE_VALUE_FUNC(int, lwm2m_engine_pause);
+DECLARE_FAKE_VALUE_FUNC(int, lwm2m_engine_resume);
+DECLARE_FAKE_VALUE_FUNC(int, at_parser_max_params_from_str, const char *, char **,
+			struct at_param_list *, size_t);
+DECLARE_FAKE_VALUE_FUNC(int, at_params_int_get, const struct at_param_list *, size_t, int32_t *);
+DECLARE_FAKE_VALUE_FUNC(int, at_params_unsigned_short_get, const struct at_param_list *, size_t,
+			uint16_t *);
+DECLARE_FAKE_VALUE_FUNC_VARARG(int, nrf_modem_at_cmd_async, nrf_modem_at_resp_handler_t,
+			       const char *, ...);
+DECLARE_FAKE_VALUE_FUNC(int, at_params_list_init, struct at_param_list *, size_t);
 
 /* List of fakes used by this unit tester */
 #define DO_FOREACH_FAKE(FUNC) do { \
@@ -100,11 +113,11 @@ DECLARE_FAKE_VALUE_FUNC(int, net_mgmt_NET_REQUEST_WIFI_SCAN, uint32_t, struct ne
 	FUNC(lwm2m_get_res_buf)                         \
 	FUNC(lwm2m_get_u8)                              \
 	FUNC(lwm2m_get_bool)                            \
-	FUNC(lwm2m_set_s8)                              \
+	FUNC(lwm2m_set_s16)                             \
 	FUNC(lwm2m_set_s32)                             \
 	FUNC(lwm2m_set_opaque)                          \
 	FUNC(lwm2m_set_string)                          \
-	FUNC(lwm2m_send)                                \
+	FUNC(lwm2m_send_cb)                             \
 	FUNC(lwm2m_delete_object_inst)                  \
 	FUNC(lwm2m_register_delete_callback)            \
 	FUNC(lwm2m_register_create_callback)            \
@@ -154,6 +167,14 @@ DECLARE_FAKE_VALUE_FUNC(int, net_mgmt_NET_REQUEST_WIFI_SCAN, uint32_t, struct ne
 	FUNC(net_if_lookup_by_dev)			\
 	FUNC(net_mgmt_add_event_callback)		\
 	FUNC(net_mgmt_NET_REQUEST_WIFI_SCAN)		\
+	FUNC(lte_lc_conn_eval_params_get)               \
+	FUNC(lwm2m_engine_pause)                        \
+	FUNC(lwm2m_engine_resume)                       \
+	FUNC(at_parser_max_params_from_str)             \
+	FUNC(at_params_int_get)                         \
+	FUNC(at_params_unsigned_short_get)              \
+	FUNC(nrf_modem_at_cmd_async)                    \
+	FUNC(at_params_list_init)                       \
 	} while (0)
 
 #endif

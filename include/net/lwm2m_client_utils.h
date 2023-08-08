@@ -265,7 +265,7 @@ int lwm2m_init_image(void);
  *
  * @return Zero if success, negative error code otherwise.
  */
-int lwm2m_init_connmon(const struct device *dev);
+int lwm2m_init_connmon(void);
 #endif
 
 #if defined(CONFIG_LWM2M_CLIENT_UTILS_CELL_CONN_OBJ_SUPPORT)
@@ -319,6 +319,40 @@ int lwm2m_rai_get(enum lwm2m_rai_mode *mode);
  * @return Zero if success, negative error code otherwise.
  */
 int lwm2m_rai_req(enum lwm2m_rai_mode mode);
+
+/**
+ * @brief Enable connection pre-evaluation module.
+ *
+ * @param min_energy_estimate Minimum estimated energy consumption
+ * when data transmission is started.
+ * @param maximum_delay_s Maximum time in seconds to delay
+ * data transmission.
+ * @param poll_period_ms Time period in milliseconds before new
+ * energy estimation.
+ *
+ * @return Zero if success, negative error code otherwise.
+ */
+int lwm2m_utils_enable_conneval(enum lte_lc_energy_estimate min_energy_estimate,
+				uint64_t maximum_delay_s, uint64_t poll_period_ms);
+
+/**
+ * @brief Disable connection pre-evaluation.
+ */
+void lwm2m_utils_disable_conneval(void);
+
+/**
+ * @brief Start connection pre-evaluation.
+ *
+ * This function should be called from an event handler registered to lwm2m_rd_client_start().
+ * This evaluation may block or alter the ongoing event to prevent LwM2M engine from initiating
+ * transfers when network conditions are poor.
+ *
+ * @param client Pointer to LwM2M context
+ * @param client_event pointer to LwM2M RD client events
+ *
+ * @return Zero if success, negative error code otherwise.
+ */
+int lwm2m_utils_conneval(struct lwm2m_ctx *client, enum lwm2m_rd_client_event *client_event);
 
 /* Advanced firmare object support */
 uint8_t lwm2m_adv_firmware_get_update_state(uint16_t obj_inst_id);

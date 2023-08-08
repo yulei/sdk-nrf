@@ -237,11 +237,11 @@ static int minute_handler(struct tm *sched_time, struct tm *current_local,
 	bool minute_ovflw = false;
 
 	if (entry->minute == BT_MESH_SCHEDULER_EVERY_15_MINUTES) {
-		info->start_minute = 15 * ceiling_fraction(current_local->tm_min + 1, 15);
+		info->start_minute = 15 * DIV_ROUND_UP(current_local->tm_min + 1, 15);
 		minute_ovflw = info->start_minute == 60;
 		sched_time->tm_min = minute_ovflw ? 0 : info->start_minute;
 	} else if (entry->minute == BT_MESH_SCHEDULER_EVERY_20_MINUTES) {
-		info->start_minute = 20 * ceiling_fraction(current_local->tm_min + 1, 20);
+		info->start_minute = 20 * DIV_ROUND_UP(current_local->tm_min + 1, 20);
 		minute_ovflw = info->start_minute == 60;
 		sched_time->tm_min = minute_ovflw ? 0 : info->start_minute;
 	} else if (entry->minute == BT_MESH_SCHEDULER_ONCE_AN_HOUR) {
@@ -273,11 +273,11 @@ static int second_handler(struct tm *sched_time, struct tm *current_local,
 	bool second_ovflw = false;
 
 	if (entry->second == BT_MESH_SCHEDULER_EVERY_15_SECONDS) {
-		info->start_second = 15 * ceiling_fraction(current_local->tm_sec + 1, 15);
+		info->start_second = 15 * DIV_ROUND_UP(current_local->tm_sec + 1, 15);
 		second_ovflw = info->start_second == 60;
 		sched_time->tm_sec = second_ovflw ? 0 : info->start_second;
 	} else if (entry->second == BT_MESH_SCHEDULER_EVERY_20_SECONDS) {
-		info->start_second = 20 * ceiling_fraction(current_local->tm_sec + 1, 20);
+		info->start_second = 20 * DIV_ROUND_UP(current_local->tm_sec + 1, 20);
 		second_ovflw = info->start_second == 60;
 		sched_time->tm_sec = second_ovflw ? 0 : info->start_second;
 	} else if (entry->second == BT_MESH_SCHEDULER_ONCE_A_MINUTE) {
@@ -536,10 +536,9 @@ static void scheduled_action_handle(struct k_work *work)
 
 	} while (elem != NULL && next_sched_mod == NULL);
 
-	uint8_t tmp_idx = srv->idx;
-
+	srv->last_idx = srv->idx;
 	srv->idx = BT_MESH_SCHEDULER_ACTION_ENTRY_COUNT;
-	schedule_action(srv, tmp_idx);
+	schedule_action(srv, srv->last_idx);
 	run_scheduler(srv);
 }
 
@@ -731,7 +730,11 @@ static int update_handler(struct bt_mesh_model *model)
 {
 	struct bt_mesh_scheduler_srv *srv = model->user_data;
 
-	encode_status(srv, srv->pub.msg);
+	if (srv->last_idx == BT_MESH_SCHEDULER_ACTION_ENTRY_COUNT) {
+		encode_status(srv, srv->pub.msg);
+	} else {
+		encode_action_status(srv, srv->pub.msg, srv->last_idx, false);
+	}
 	return 0;
 }
 
@@ -751,6 +754,7 @@ static int scheduler_srv_init(struct bt_mesh_model *model)
 	srv->active_bitmap = 0;
 
 	srv->idx = BT_MESH_SCHEDULER_ACTION_ENTRY_COUNT;
+	srv->last_idx = BT_MESH_SCHEDULER_ACTION_ENTRY_COUNT;
 	k_work_init_delayable(&srv->delayed_work, scheduled_action_handle);
 
 	for (int i = 0; i < BT_MESH_SCHEDULER_ACTION_ENTRY_COUNT; i++) {
@@ -765,6 +769,7 @@ static void scheduler_srv_reset(struct bt_mesh_model *model)
 	struct bt_mesh_scheduler_srv *srv = model->user_data;
 
 	srv->idx = BT_MESH_SCHEDULER_ACTION_ENTRY_COUNT;
+	srv->last_idx = BT_MESH_SCHEDULER_ACTION_ENTRY_COUNT;
 	srv->active_bitmap = 0;
 	/* If this cancellation fails, we'll exit early from the timer handler,
 	 * as srv->idx is out of bounds.

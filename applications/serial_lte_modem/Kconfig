@@ -17,6 +17,7 @@ config SLM_AT_MODE
 	bool "Serial LTE Modem by raw AT mode"
 	default y
 	select AT_CMD_PARSER
+	select AT_MONITOR
 
 config SLM_AT_MAX_PARAM
 	int "Maximum number of parameters in AT command"
@@ -51,6 +52,30 @@ choice
 	config SLM_CR_LF_TERMINATION
 		bool "CR+LF termination"
 endchoice
+
+#
+# UART buffers
+#
+config SLM_UART_RX_BUF_COUNT
+	int "Receive buffers for UART"
+	range 2 4
+	default 3
+	help
+	  Amount of buffers for receiving (RX) UART traffic. If the buffers are full, UART RX will be disabled until the buffers are processed.
+
+config SLM_UART_RX_BUF_SIZE
+	int "Receive buffer size for UART"
+	range 128 4096
+	default 256
+	help
+	  Amount of received (RX), unprocessed, UART traffic that can be held by single buffer.
+
+config SLM_UART_TX_BUF_SIZE
+	int "Send buffer size for UART"
+	range 128 4096
+	default 256
+	help
+	  Amount of UART traffic waiting to be sent (TX), that can be held. If the buffers are full, will send synchronously.
 
 #
 # GPIO wakeup
@@ -114,6 +139,13 @@ config SLM_DATAMODE_URC
 	help
 	  Report result of data mode sending
 
+config SLM_DATAMODE_BUF_SIZE
+	int "Buffer size for data mode"
+	range 1024 8192
+	default 4096
+	help
+	  Size of the buffer for data received in data mode.
+
 #
 # Configurable services
 #
@@ -124,13 +156,19 @@ config SLM_SMS
 	help
 	  Support SMS send/receive in plain text
 
-rsource "src/gnss/Kconfig"
+config SLM_GNSS
+	bool "GNSS support in SLM"
+	default y
+
+config SLM_NRF_CLOUD
+	bool "nRF Cloud support in SLM"
+	default y
+
 rsource "src/ftp_c/Kconfig"
 rsource "src/mqtt_c/Kconfig"
 rsource "src/http_c/Kconfig"
 rsource "src/twi/Kconfig"
 rsource "src/gpio/Kconfig"
-rsource "src/dfu/Kconfig"
 rsource "src/lwm2m_carrier/Kconfig"
 
 module = SLM

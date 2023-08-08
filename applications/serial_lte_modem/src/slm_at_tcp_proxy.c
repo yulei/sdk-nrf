@@ -254,6 +254,7 @@ static int do_tcp_server_stop(void)
 static int do_tcp_client_connect(const char *url, uint16_t port)
 {
 	int ret;
+	struct sockaddr sa;
 
 	/* Open socket */
 	if (proxy.sec_tag == INVALID_SEC_TAG) {
@@ -288,13 +289,8 @@ static int do_tcp_client_connect(const char *url, uint16_t port)
 	}
 
 	/* Connect to remote host */
-	struct sockaddr sa = {
-		.sa_family = AF_UNSPEC
-	};
-
-	ret = util_resolve_host(0, url, port, proxy.family, &sa);
+	ret = util_resolve_host(0, url, port, proxy.family, Z_LOG_OBJECT_PTR(slm_tcp), &sa);
 	if (ret) {
-		LOG_ERR("getaddrinfo() error: %s", gai_strerror(ret));
 		goto exit_cli;
 	}
 	if (sa.sa_family == AF_INET) {
@@ -401,9 +397,11 @@ static int do_tcp_send_datamode(const uint8_t *data, int datalen)
 	return (offset > 0) ? offset : -1;
 }
 
-static int tcp_datamode_callback(uint8_t op, const uint8_t *data, int len)
+static int tcp_datamode_callback(uint8_t op, const uint8_t *data, int len, uint8_t flags)
 {
 	int ret = 0;
+
+	ARG_UNUSED(flags);
 
 	if (op == DATAMODE_SEND) {
 		ret = do_tcp_send_datamode(data, len);
@@ -419,7 +417,7 @@ static int tcp_datamode_callback(uint8_t op, const uint8_t *data, int len)
 static void tcpsvr_terminate_connection(int cause)
 {
 	if (in_datamode()) {
-		(void)exit_datamode(cause);
+		(void)exit_datamode_handler(cause);
 	}
 	if (proxy.sock_peer != INVALID_SOCKET) {
 		close(proxy.sock_peer);
@@ -638,7 +636,7 @@ static void tcpcli_thread_func(void *p1, void *p2, void *p3)
 	}
 
 	if (in_datamode()) {
-		(void)exit_datamode(ret);
+		(void)exit_datamode_handler(ret);
 	}
 	if (proxy.sock != INVALID_SOCKET) {
 		(void)close(proxy.sock);

@@ -32,6 +32,11 @@ LOG_MODULE_REGISTER(MODULE, CONFIG_CAF_BUTTONS_LOG_LEVEL);
 /* For directly connected GPIO, scan rows once. */
 #define COLUMNS MAX(ARRAY_SIZE(col), 1)
 
+BUILD_ASSERT(ARRAY_SIZE(col) <= 32,
+	     "Implementation uses uint32_t for bitmasks and supports up to 32 columns");
+BUILD_ASSERT(ARRAY_SIZE(row) <= 32,
+	     "Implementation uses uint32_t for bitmasks and supports up to 32 rows");
+
 enum state {
 	STATE_IDLE,
 	STATE_ACTIVE,
@@ -51,6 +56,16 @@ static enum state state;
 
 static void scan_fn(struct k_work *work);
 
+static uint32_t get_wakeup_mask(const struct gpio_pin *pins, size_t cnt)
+{
+	uint32_t mask = BIT64_MASK(32);
+
+	for (size_t i = 0; i < cnt; i++) {
+		WRITE_BIT(mask, i, !pins[i].wakeup_blocked);
+	}
+
+	return mask;
+}
 
 static int set_cols(uint32_t mask)
 {
@@ -70,8 +85,16 @@ static int set_cols(uint32_t mask)
 						       col[i].pin, val);
 			}
 		} else {
-			err = gpio_pin_configure(gpio_devs[col[i].port],
-						 col[i].pin, GPIO_INPUT);
+			gpio_flags_t flags = GPIO_INPUT;
+			gpio_flags_t pull = (IS_ENABLED(CONFIG_CAF_BUTTONS_POLARITY_INVERSED) ?
+					    (GPIO_PULL_UP) : (GPIO_PULL_DOWN));
+
+			/* The pull is necessary to ensure pin state and prevent unexpected
+			 * behaviour that could be triggered by accumulating charge.
+			 */
+			flags |= pull;
+
+			err = gpio_pin_configure(gpio_devs[col[i].port], col[i].pin, flags);
 		}
 
 		if (err) {
@@ -122,7 +145,7 @@ static int set_trig_mode(void)
 	return err;
 }
 
-static int callback_ctrl(bool enable)
+static int callback_ctrl(uint32_t enable_mask)
 {
 	int err = 0;
 
@@ -138,7 +161,7 @@ static int callback_ctrl(bool enable)
 	 */
 
 	for (size_t i = 0; (i < ARRAY_SIZE(row)) && !err; i++) {
-		if (enable) {
+		if (enable_mask & BIT(i)) {
 			/* Level interrupt is needed to leave deep sleep mode.
 			 * Edge interrupt gives only 7 channels. It is not
 			 * suitable for larger matrix/number of GPIO buttons.
@@ -155,11 +178,32 @@ static int callback_ctrl(bool enable)
 							   GPIO_INT_DISABLE);
 		}
 	}
-	if (!enable) {
+	if (!enable_mask) {
 		/* Callbacks are disabled but they could fire in the meantime.
 		 * Make sure pending work is canceled.
 		 */
 		k_work_cancel_delayable(&button_pressed);
+	}
+
+	return err;
+}
+
+static int setup_pin_wakeup(void)
+{
+	uint32_t wakeup_cols = get_wakeup_mask(col, ARRAY_SIZE(col));
+	uint32_t wakeup_rows = get_wakeup_mask(row, ARRAY_SIZE(row));
+
+	/* Disable callbacks (and cancel the work) to ensure it will not be scheduled by an
+	 * invalid button in the idle state.
+	 */
+	int err = callback_ctrl(0);
+
+	if (!err) {
+		/* Setup callbacks and columns for the idle state. */
+		err = set_cols(wakeup_cols);
+		if (!err) {
+			err = callback_ctrl(wakeup_rows);
+		}
 	}
 
 	return err;
@@ -179,8 +223,11 @@ static int suspend(void)
 		break;
 
 	case STATE_ACTIVE:
-		state = STATE_IDLE;
-		err = callback_ctrl(true);
+		err = setup_pin_wakeup();
+		if (!err) {
+			state = STATE_IDLE;
+		}
+
 		break;
 
 	case STATE_IDLE:
@@ -197,21 +244,23 @@ static int suspend(void)
 
 static void resume(void)
 {
+	if (state == STATE_SUSPENDING) {
+		state = STATE_SCANNING;
+		return;
+	}
+
 	if (state != STATE_IDLE) {
 		/* Already activated. */
 		return;
 	}
 
-	int err = callback_ctrl(false);
-	if (err) {
-		LOG_ERR("Cannot disable callbacks");
-	} else {
-		state = STATE_SCANNING;
-	}
+	int err = callback_ctrl(0);
 
 	if (err) {
+		LOG_ERR("Cannot disable callbacks");
 		module_set_state(MODULE_STATE_ERROR);
 	} else {
+		state = STATE_SCANNING;
 		scan_fn(NULL);
 
 		module_set_state(MODULE_STATE_READY);
@@ -242,7 +291,7 @@ static void scan_fn(struct k_work *work)
 	}
 
 	/* Avoid draining current between scans */
-	if (set_cols(0x00000000)) {
+	if (set_cols(0)) {
 		LOG_ERR("Cannot set neutral state");
 		goto error;
 	}
@@ -319,7 +368,11 @@ static void scan_fn(struct k_work *work)
 		switch (state) {
 		case STATE_SCANNING:
 			state = STATE_ACTIVE;
-			err = callback_ctrl(true);
+			err = callback_ctrl(BIT64_MASK(32));
+
+			if (!err) {
+				err = set_cols(BIT64_MASK(32));
+			}
 			break;
 
 		case STATE_SUSPENDING:
@@ -337,15 +390,10 @@ static void scan_fn(struct k_work *work)
 		}
 
 		if (err) {
-			LOG_ERR("Cannot enable callbacks");
+			LOG_ERR("Cannot enable callbacks or set neutral state");
 			goto error;
 		}
 
-		/* Prepare to wait for a callback */
-		if (set_cols(0xFFFFFFFF)) {
-			LOG_ERR("Cannot set neutral state");
-			goto error;
-		}
 	}
 
 	return;
@@ -361,7 +409,7 @@ static void button_pressed_isr(const struct device *gpio_dev,
 	int err = 0;
 
 	/* Scanning will be scheduled, switch off pins */
-	if (set_cols(0x00000000)) {
+	if (set_cols(0)) {
 		LOG_ERR("Cannot control pins");
 		err = -EFAULT;
 	}
@@ -397,7 +445,7 @@ static void button_pressed_isr(const struct device *gpio_dev,
 
 static void button_pressed_fn(struct k_work *work)
 {
-	int err = callback_ctrl(false);
+	int err = callback_ctrl(0);
 
 	if (err) {
 		LOG_ERR("Cannot disable callbacks");

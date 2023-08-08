@@ -119,10 +119,11 @@ Subscribing to remote events
 ============================
 
 A core that wishes to listen to events from the remote core sends ``SUBSCRIBE`` command to that core during the initialization process.
-The ``SUBSCRIBE`` command uses :c:func:`event_manager_proxy_subscribe` function, which passes following arguments:
+The ``SUBSCRIBE`` command is sent using the :c:func:`event_manager_proxy_subscribe` function, which passes the following arguments:
 
-* ``local_event_id`` - This argument represents the local core ID that wishes to receive when the event is post-processed on the remote core.
-* ``remote_event_name`` - This argument represents the name of the event to be searched for.
+* ``ipc`` - This argument is an IPC instance that identifies the communication channel between the cores.
+* ``local_event_id`` - This argument represents the local core ID that is received when the event is post-processed on the remote core.
+  It is also used to get the event name to match the same event on the remote core.
 
 The remote core during the command processing searches for an event with the given name and registers the given event ID in an array of events.
 The created array of events directly reflects the array of event types.
@@ -151,12 +152,12 @@ From that moment, the event is treated similarly as any other locally generated 
 Limitations
 ***********
 
-The event passed through the Event Manager Proxy is treated and processed the same way as any locally generated event.
+The event passed through the Event Manager Proxy is treated and processed in the same way as any locally generated event.
 The core that sources the event must not subscribe to the same event in another core.
-If it does, once the core receives such an event generated remotely, it would resend the event automatically from that local core to the ones that subscribed to it.
-We would run into a dangerous situation where two cores subscribe to the same event.
-Once generated, such an event would be continuously resent between the cores.
-The currently proposed approach is to create special events for each core even if they look the same, they must have different codes.
+If it does, once the core receives such an event generated remotely, it automatically resends the event from that local core to the ones that subscribed to it.
+This results in a situation where two cores subscribe to the same event.
+Once generated, this event is continuously sent between the cores.
+The current approach is to create events for each core with different codes, even if they look similar.
 
 .. _event_manager_proxy_api:
 

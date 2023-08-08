@@ -9,6 +9,7 @@
 #include <zephyr/net/socket.h>
 #endif
 #include <net/nrf_cloud.h>
+#include <net/nrf_cloud_codec.h>
 #include <zephyr/net/mqtt.h>
 #include "nrf_cloud_codec_internal.h"
 #include "nrf_cloud_fsm.h"
@@ -279,7 +280,7 @@ int nrf_cloud_shadow_device_status_update(const struct nrf_cloud_device_status *
 		return -EACCES;
 	}
 
-	err = nrf_cloud_shadow_dev_status_encode(dev_status, &tx_data.data, true);
+	err = nrf_cloud_shadow_dev_status_encode(dev_status, &tx_data.data, true, true);
 	if (err) {
 		return err;
 	}
@@ -348,9 +349,39 @@ int nrf_cloud_sensor_data_stream(const struct nrf_cloud_sensor_data *param)
 int nrf_cloud_send(const struct nrf_cloud_tx_data *msg)
 {
 	int err;
+	bool local_encode = false;
 
 	if (!msg) {
 		return -EINVAL;
+	}
+
+	struct nrf_cloud_data send_data = { .ptr = msg->data.ptr,
+					    .len = msg->data.len };
+
+	/* Check the message object for data */
+	if (msg->obj) {
+		/* Encode the object if there is no encoded data and a valid type */
+		if ((msg->obj->enc_src == NRF_CLOUD_ENC_SRC_NONE) &&
+		    NRF_CLOUD_OBJ_TYPE_VALID(msg->obj)) {
+			/* If successful, enc_src will be set to NRF_CLOUD_ENC_SRC_CLOUD_ENCODED */
+			err = nrf_cloud_obj_cloud_encode(msg->obj);
+			if (err) {
+				LOG_ERR("Failed to encode data object for cloud");
+				return -EIO;
+			}
+
+			/* Set a flag so the encoded data can be freed */
+			local_encode = true;
+		}
+
+		/* Collect object's encoded data for sending */
+		if ((msg->obj->enc_src == NRF_CLOUD_ENC_SRC_CLOUD_ENCODED) ||
+		    (msg->obj->enc_src == NRF_CLOUD_ENC_SRC_PRE_ENCODED)) {
+			send_data.ptr = msg->obj->encoded_data.ptr;
+			send_data.len = msg->obj->encoded_data.len;
+		} else {
+			LOG_WRN("Included object contains no sendable data");
+		}
 	}
 
 	switch (msg->topic_type) {
@@ -361,8 +392,8 @@ int nrf_cloud_send(const struct nrf_cloud_tx_data *msg)
 		}
 		const struct nct_cc_data shadow_data = {
 			.opcode = NCT_CC_OPCODE_UPDATE_REQ,
-			.data.ptr = msg->data.ptr,
-			.data.len = msg->data.len,
+			.data.ptr = send_data.ptr,
+			.data.len = send_data.len,
 			.message_id = (msg->id > 0) ? msg->id : NCT_MSG_ID_USE_NEXT_INCREMENT
 		};
 
@@ -379,8 +410,8 @@ int nrf_cloud_send(const struct nrf_cloud_tx_data *msg)
 			break;
 		}
 		const struct nct_dc_data buf = {
-			.data.ptr = msg->data.ptr,
-			.data.len = msg->data.len,
+			.data.ptr = send_data.ptr,
+			.data.len = send_data.len,
 			.message_id = (msg->id > 0) ? msg->id : NCT_MSG_ID_USE_NEXT_INCREMENT
 		};
 
@@ -419,9 +450,31 @@ int nrf_cloud_send(const struct nrf_cloud_tx_data *msg)
 
 		break;
 	}
+	case NRF_CLOUD_TOPIC_BIN: {
+		if (current_state != STATE_DC_CONNECTED) {
+			err = -EACCES;
+			break;
+		}
+		const struct nct_dc_data buf = {
+			.data.ptr = msg->data.ptr,
+			.data.len = msg->data.len,
+			.message_id = (msg->id > 0) ? msg->id : NCT_MSG_ID_USE_NEXT_INCREMENT
+		};
+
+		err = nct_dc_bin_send(&buf, msg->qos);
+		if (err) {
+			LOG_ERR("nct_dc_bin_send failed, error: %d", err);
+		}
+
+		break;
+	}
 	default:
 		LOG_ERR("Unknown topic type");
 		err = -ENODATA;
+	}
+
+	if (local_encode) {
+		(void)nrf_cloud_obj_cloud_encoded_free(msg->obj);
 	}
 
 	return err;

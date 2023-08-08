@@ -4,6 +4,15 @@
 # SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
 #
 
+if(SYSBUILD)
+  # Sysbuild and child-image are mutual exclusive, so if sysbuild is used disable child-image
+  function(add_child_image)
+    set(CONFIG_USE_PARTITION_MANAGER n CACHE INTERNAL "")
+    # ignore, sysbuild is in use.
+  endfunction()
+  return()
+endif()
+
 if(IMAGE_NAME)
   set_shared(IMAGE ${IMAGE_NAME} PROPERTY KERNEL_HEX_NAME ${KERNEL_HEX_NAME})
   set_shared(IMAGE ${IMAGE_NAME} PROPERTY ZEPHYR_BINARY_DIR ${ZEPHYR_BINARY_DIR})
@@ -50,6 +59,12 @@ else()
     # replaced with 'CACHED_CONF_FILE' in the cache. Therefore we need this
     # special handling for passing the value to the variant image.
     if("${var_name}" MATCHES "CACHED_CONF_FILE")
+      list(APPEND application_vars ${var_name})
+    endif()
+
+    # If 'CACHED_CONF_FILE' is specified instead of 'CONF_FILE', the build system does not determine
+    # build type automatically. In that case, the 'CONF_FILE_BUILD_TYPE' shall be passed explicitly.
+    if("${var_name}" MATCHES "CONF_FILE_BUILD_TYPE")
       list(APPEND application_vars ${var_name})
     endif()
 
@@ -176,7 +191,7 @@ function(add_child_image_from_source)
   # Pass information that the partition manager is enabled to Kconfig.
   add_overlay_config(
     ${ACI_NAME}
-    ${NRF_DIR}/subsys/partition_manager/partition_manager_enabled.conf
+    ${ZEPHYR_NRF_MODULE_DIR}/subsys/partition_manager/partition_manager_enabled.conf
     )
 
   if (${ACI_NAME}_BOARD)

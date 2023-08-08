@@ -7,7 +7,7 @@ Sample description
    :local:
    :depth: 2
 
-The MQTT sample communicates with an MQTT broker either over LTE using the nRF9160 DK or Thingy:91, or over Wi-Fi using the nRF7002 DK.
+The MQTT sample communicates with an MQTT broker either over LTE using an nRF91 Series device, or over Wi-Fi using an nRF70 Series device.
 
 Requirements
 ************
@@ -22,14 +22,15 @@ Overview
 *********
 
 The sample connects to either LTE or Wi-Fi, depending on the board for which the sample is compiled.
-Subsequently, the sample connects to a configured MQTT server (default is `test.mosquitto.org`_), where it publishes messages to the topic ``my/publish/topic``.
+Subsequently, the sample connects to a configured MQTT server (default is `test.mosquitto.org`_), where it publishes messages to the topic ``<clientID>/my/publish/topic``.
 You can also trigger message publication by pressing any of the buttons on the board.
 
-The sample also subscribes to the topic ``my/subscribe/topic``, and receives any message published to that topic.
+The sample also subscribes to the topic ``<clientID>/my/subscribe/topic``, and receives any message published to that topic.
+
 The sample supports Transport Layer Security (TLS) and it can be enabled through overlay configuration files included in the sample.
 
 .. note::
-   When enabling TLS and building for nRF9160 based boards, the size of the incoming message cannot exceed 2 kB.
+   When enabling TLS and building for nRF91 Series devices, the size of the incoming message cannot exceed 2 kB.
    This is due to a limitation in the modem's internal TLS buffers.
 
 Configuration
@@ -66,30 +67,21 @@ CONFIG_MQTT_SAMPLE_TRANSPORT_BROKER_HOSTNAME - MQTT broker hostname
 
 CONFIG_MQTT_SAMPLE_TRANSPORT_CLIENT_ID - MQTT client ID
 	This configuration sets the MQTT client ID name.
-	If not set, the client ID will default to the modem's IMEI number for nRF9160 boards, MAC address for the nRF7002 DK, or a random number for Native Posix.
+	If not set, the client ID will default to the modem's IMEI number for nRF91 Series devices, MAC address for nRF70 Series devices, or a random number for Native Posix.
 
 .. _CONFIG_MQTT_SAMPLE_TRANSPORT_PUBLISH_TOPIC:
 
 CONFIG_MQTT_SAMPLE_TRANSPORT_PUBLISH_TOPIC - MQTT publish topic
 	This configuration option sets the topic to which the sample publishes messages.
-	Default is ``my/publish/topic``.
+	Default is ``<clientID>/my/publish/topic``.
 
 .. _CONFIG_MQTT_SAMPLE_TRANSPORT_SUBSCRIBE_TOPIC:
 
 CONFIG_MQTT_SAMPLE_TRANSPORT_SUBSCRIBE_TOPIC - MQTT subscribe topic
 	This configuration option sets the topic to which the sample subscribes.
-	Default is ``my/subscribe/topic``.
+	Default is ``<clientID>/my/subscribe/topic``.
 
-Wi-Fi options
--------------
-
-* :kconfig:option:`CONFIG_WIFI_CREDENTIALS_STATIC` - This option enables static Wi-Fi configuration.
-* :kconfig:option:`CONFIG_WIFI_CREDENTIALS_STATIC_SSID` - Wi-Fi SSID.
-* :kconfig:option:`CONFIG_WIFI_CREDENTIALS_STATIC_PASSWORD` - Wi-Fi password.
-* :kconfig:option:`CONFIG_WIFI_CREDENTIALS_STATIC_TYPE_OPEN` - Wi-Fi network uses no password.
-* :kconfig:option:`CONFIG_WIFI_CREDENTIALS_STATIC_TYPE_PSK` - Wi-Fi network uses a password and PSK security (default).
-* :kconfig:option:`CONFIG_WIFI_CREDENTIALS_STATIC_TYPE_PSK_SHA256` - Wi-Fi network uses a password and PSK-256 security.
-* :kconfig:option:`CONFIG_WIFI_CREDENTIALS_STATIC_TYPE_SAE` - Wi-Fi network uses a password and SAE security.
+.. include:: /includes/wifi_credentials_options.txt
 
 Additional configuration
 ========================
@@ -114,8 +106,8 @@ Files that are located under the :file:`/boards` folder is automatically merged 
 
 In addition, the sample provides the following overlay configuration files, which are used to enable additional features in the sample:
 
-* :file:`overlay-tls-nrf9160.conf` - TLS overlay configuration file for nRF9160 DK and Thingy:91.
-* :file:`overlay-tls-nrf7002.conf` - TLS overlay configuration file for nRF7002 DK.
+* :file:`overlay-tls-nrf91.conf` - TLS overlay configuration file for nRF91 Series devices.
+* :file:`overlay-tls-nrf70.conf` - TLS overlay configuration file for nRF70 Series devices.
 * :file:`overlay-tls-native_posix.conf` - TLS overlay configuration file for native posix.
 
 They are located in :file:`samples/net/mqtt` folder.
@@ -125,15 +117,19 @@ To add a specific overlay configuration file to the build, add the ``-- -DOVERLA
 See :ref:`cmake_options` for instructions on how to add this option to your build.
 For example, when building with the command line, the following commands can be used for the nRF9160 DK:
 
-  .. code-block:: console
+.. code-block:: console
 
-     west build -b nrf9160dk_nrf9160_ns -- -DOVERLAY_CONFIG=overlay-tls-nrf9160.conf
+   west build -b nrf9160dk_nrf9160_ns -- -DOVERLAY_CONFIG=overlay-tls-nrf91.conf
 
-Or for the Thingy:91 with TLS and ``mqtt_helper`` debug enabled (shown in the following :ref:`sample output <mqtt_sample_output_IPv6>`):
+For Thingy:91, with TLS and debug logging enabled for the :ref:`lib_mqtt_helper` library (for more information, see the related :ref:`sample output <mqtt_sample_output_IPv6>`):
 
-  .. code-block:: console
+.. code-block:: console
 
-     west build -b thingy91_nrf9160_ns -- -DOVERLAY_CONFIG=overlay-tls-nrf9160.conf -DCONFIG_MQTT_HELPER_LOG_LEVEL_DBG=y
+   west build -b thingy91_nrf9160_ns -- -DOVERLAY_CONFIG=overlay-tls-nrf91.conf -DCONFIG_MQTT_HELPER_LOG_LEVEL_DBG=y
+
+.. include:: /libraries/modem/nrf_modem_lib/nrf_modem_lib_trace.rst
+   :start-after: modem_lib_sending_traces_UART_start
+   :end-before: modem_lib_sending_traces_UART_end
 
 Building and running
 ********************
@@ -165,32 +161,32 @@ The following serial UART output is displayed in the terminal emulator using a W
 .. code-block:: console
 
       *** Booting Zephyr OS build v2.4.0-ncs1-rc1-6-g45f2d5cf8ea4  ***
-      [00:00:05.996,520] <inf> network: Connecting to SSID: NORDIC-TEST
-      [00:00:12.477,783] <inf> network: Wi-Fi Connected
+      [00:00:00.394,744] <inf> network: Bringing network interface up and connecting to the network
+      [00:00:12.736,297] <inf> network: Network connectivity established
       [00:00:17.997,253] <inf> transport: Connected to MQTT broker
       [00:00:18.007,049] <inf> transport: Hostname: test.mosquitto.org
       [00:00:18.009,981] <inf> transport: Client ID: F4CE37111350
       [00:00:18.013,519] <inf> transport: Port: 8883
       [00:00:18.018,341] <inf> transport: TLS: Yes
-      [00:00:18.078,521] <inf> transport: Subscribed to topic my/subscribe/topic
-      [00:01:01.475,982] <inf> transport: Publishing message: "Hello MQTT! Current uptime is: 61458" on topic: "my/publish/topic"
-      [00:02:01.475,982] <inf> transport: Publishing message: "Hello MQTT! Current uptime is: 121458" on topic: "my/publish/topic"
-      [00:03:01.475,982] <inf> transport: Publishing message: "Hello MQTT! Current uptime is: 181458" on topic: "my/publish/topic"
-      [00:04:01.475,982] <inf> transport: Publishing message: "Hello MQTT! Current uptime is: 241458" on topic: "my/publish/topic"
-      [00:05:01.475,982] <inf> transport: Publishing message: "Hello MQTT! Current uptime is: 301459" on topic: "my/publish/topic"
+      [00:00:18.078,521] <inf> transport: Subscribed to topic F4CE37111350/my/subscribe/topic
+      [00:01:01.475,982] <inf> transport: Publishing message: "Hello MQTT! Current uptime is: 61458" on topic: "F4CE37111350/my/publish/topic"
+      [00:02:01.475,982] <inf> transport: Publishing message: "Hello MQTT! Current uptime is: 121458" on topic: "F4CE37111350/my/publish/topic"
+      [00:03:01.475,982] <inf> transport: Publishing message: "Hello MQTT! Current uptime is: 181458" on topic: "F4CE37111350/my/publish/topic"
+      [00:04:01.475,982] <inf> transport: Publishing message: "Hello MQTT! Current uptime is: 241458" on topic: "F4CE37111350/my/publish/topic"
+      [00:05:01.475,982] <inf> transport: Publishing message: "Hello MQTT! Current uptime is: 301459" on topic: "F4CE37111350/my/publish/topic"
 
 .. _mqtt_sample_output_IPv6:
 
-The sample output showing IPv6, following the same instructions but for a different build configuration, using LTE on the Thingy:91, with the TLS overlay, and debug logging enabled for the :ref:`lib_mqtt_helper` library:
+The sample output showing IPv6, but for a different build configuration using LTE on the Thingy:91 with the TLS overlay, and debug logging enabled for the :ref:`lib_mqtt_helper` library:
 
 .. code-block:: console
 
       *** Booting Zephyr OS build v3.2.99-ncs2-34-gf8f113382356 ***
-      [00:00:00.492,218] <dbg> mqtt_helper: mqtt_helper_poll_loop: Waiting for connection_poll_sem
-      [00:00:00.500,518] <inf> network: Connecting to LTE...
-      [00:00:02.212,677] <dbg> mqtt_helper: mqtt_state_set: State transition: MQTT_STATE_UNINIT --> MQTT_STATE_DISCONNECTED
-      [00:00:04.702,178] <inf> network: PDN connection activated
-      [00:00:09.703,033] <dbg> mqtt_helper: broker_init: Resolving IP address for test.mosquitto.org
+      [00:00:00.286,254] <inf> network: Bringing network interface up and connecting to the network
+      [00:00:00.286,621] <dbg> mqtt_helper: mqtt_state_set: State transition: MQTT_STATE_UNINIT --> MQTT_STATE_DISCONNECTED
+      [00:00:00.310,028] <dbg> mqtt_helper: mqtt_helper_poll_loop: Waiting for connection_poll_sem
+      [00:00:04.224,426] <inf> network: Network connectivity established
+      [00:00:09.233,612] <dbg> mqtt_helper: broker_init: Resolving IP address for test.mosquitto.org
       [00:00:10.541,839] <dbg> mqtt_helper: broker_init: IPv6 Address found 2001:41d0:1:925e::1 (AF_INET6)
       [00:00:10.541,900] <dbg> mqtt_helper: mqtt_state_set: State transition: MQTT_STATE_DISCONNECTED --> MQTT_STATE_TRANSPORT_CONNECTING
       [00:00:13.747,406] <dbg> mqtt_helper: mqtt_state_set: State transition: MQTT_STATE_TRANSPORT_CONNECTING --> MQTT_STATE_TRANSPORT_CONNECTED
@@ -207,32 +203,38 @@ The sample output showing IPv6, following the same instructions but for a differ
       [00:00:14.370,849] <inf> transport: Client ID: 350457791735879
       [00:00:14.370,880] <inf> transport: Port: 8883
       [00:00:14.370,880] <inf> transport: TLS: Yes
-      [00:00:14.370,910] <dbg> mqtt_helper: mqtt_helper_subscribe: Subscribing to: my/subscribe/topic
+      [00:00:14.370,910] <dbg> mqtt_helper: mqtt_helper_subscribe: Subscribing to: F4CE37111350/my/subscribe/topic
       [00:00:14.494,354] <dbg> mqtt_helper: mqtt_helper_poll_loop: Polling on socket fd: 0
       [00:00:15.136,047] <dbg> mqtt_helper: mqtt_evt_handler: MQTT_EVT_SUBACK: id = 2469 result = 0
-      [00:00:15.136,077] <inf> transport: Subscribed to topic my/subscribe/topic
+      [00:00:15.136,077] <inf> transport: Subscribed to topic F4CE37111350/my/subscribe/topic
       [00:00:15.136,108] <dbg> mqtt_helper: mqtt_helper_poll_loop: Polling on socket fd: 0
       [00:00:15.136,260] <dbg> mqtt_helper: mqtt_evt_handler: MQTT_EVT_PUBLISH, message ID: 52428, len = 850
-      [00:00:15.136,444] <inf> transport: Received payload: $ on topic: my/subscribe/topic
+      [00:00:15.136,444] <inf> transport: Received payload: Test message from mosquitto_pub! on topic: F4CE37111350/my/subscribe/topic
       [00:00:15.136,444] <dbg> mqtt_helper: mqtt_helper_poll_loop: Polling on socket fd: 0
       [00:00:44.495,147] <dbg> mqtt_helper: mqtt_helper_poll_loop: Polling on socket fd: 0
       [00:00:45.478,210] <dbg> mqtt_helper: mqtt_evt_handler: MQTT_EVT_PINGRESP
       [00:00:45.478,210] <dbg> mqtt_helper: mqtt_helper_poll_loop: Polling on socket fd: 0
-      [00:01:00.492,370] <dbg> mqtt_helper: mqtt_helper_publish: Publishing to topic: my/publish/topic
-      [00:01:00.493,133] <inf> transport: Published message: "Hello MQTT! Current uptime is: 60492" on topic: "my/publish/topic"
+      [00:01:00.492,370] <dbg> mqtt_helper: mqtt_helper_publish: Publishing to topic: F4CE37111350/my/publish/topic
+      [00:01:00.493,133] <inf> transport: Published message: "Hello MQTT! Current uptime is: 60492" on topic: "F4CE37111350/my/publish/topic"
       [00:01:01.270,690] <dbg> mqtt_helper: mqtt_evt_handler: MQTT_EVT_PUBACK: id = 60492 result = 0
       [00:01:01.270,690] <dbg> mqtt_helper: mqtt_helper_poll_loop: Polling on socket fd: 0
       [00:01:05.093,719] <dbg> mqtt_helper: mqtt_evt_handler: MQTT_EVT_PUBLISH, message ID: 52428, len = 32
-      [00:01:05.093,872] <inf> transport: Received payload: Test message from mosquitto_pub! on topic: my/subscribe/topic
+      [00:01:05.093,872] <inf> transport: Received payload: Test message from mosquitto_pub! on topic: F4CE37111350/my/subscribe/topic
       [00:01:05.093,872] <dbg> mqtt_helper: mqtt_helper_poll_loop: Polling on socket fd: 0
       [00:01:30.503,021] <dbg> mqtt_helper: mqtt_helper_poll_loop: Polling on socket fd: 0
       [00:01:31.494,537] <dbg> mqtt_helper: mqtt_evt_handler: MQTT_EVT_PINGRESP
       [00:01:31.494,567] <dbg> mqtt_helper: mqtt_helper_poll_loop: Polling on socket fd: 0
-      [00:02:00.492,462] <dbg> mqtt_helper: mqtt_helper_publish: Publishing to topic: my/publish/topic
-      [00:02:00.501,678] <inf> transport: Published message: "Hello MQTT! Current uptime is: 120492" on topic: "my/publish/topic"
+      [00:02:00.492,462] <dbg> mqtt_helper: mqtt_helper_publish: Publishing to topic: F4CE37111350/my/publish/topic
+      [00:02:00.501,678] <inf> transport: Published message: "Hello MQTT! Current uptime is: 120492" on topic: "F4CE37111350/my/publish/topic"
       [00:02:00.503,692] <dbg> mqtt_helper: mqtt_helper_poll_loop: Polling on socket fd: 0
       [00:02:01.577,453] <dbg> mqtt_helper: mqtt_evt_handler: MQTT_EVT_PUBACK: id = 54956 result = 0
       [00:02:01.577,484] <dbg> mqtt_helper: mqtt_helper_poll_loop: Polling on socket fd: 0
+
+.. note::
+   For nRF91 Series devices, the output differs from the above example output.
+   This is because the sample enables the :ref:`lib_at_host` library using the :kconfig:option:`CONFIG_AT_HOST_LIBRARY` option.
+   This library makes it possible to send AT commands to the cellular modem and receive responses using the `LTE Link Monitor`_ or Cellular Monitor app from nRF Connect for Desktop.
+   The additional logs are AT command responses that the modem sends to the application core that are forwarded over UART to be displayed on any of these nRF Connect for Desktop apps.
 
 Reconnection logic
 ------------------
@@ -270,7 +272,10 @@ When the aforementioned steps are completed, you can build and run the sample by
 Troubleshooting
 ===============
 
-* If you are having issues with connectivity on nRF9160 based boards, see the `Trace Collector`_ documentation to learn how to capture modem traces in order to debug network traffic in Wireshark.
+To enable more verbose logging from the MQTT helper library, enable the :kconfig:option:`CONFIG_MQTT_HELPER_LOG_LEVEL_DBG` option.
+
+* If you are having issues with connectivity on nRF91 Series devices, see the `Trace Collector`_ documentation to learn how to capture modem traces in order to debug network traffic in Wireshark.
+  The sample enables modem traces by default, as set by the :kconfig:option:`CONFIG_NRF_MODEM_LIB_TRACE` option.
 * Public MQTT brokers might be unstable.
   If you have trouble connecting to the MQTT broker, try switching to another broker by changing the value of the :ref:`CONFIG_MQTT_SAMPLE_TRANSPORT_BROKER_HOSTNAME <CONFIG_MQTT_SAMPLE_TRANSPORT_BROKER_HOSTNAME>` configuration option.
   If you are switching to another broker, remember to update the CA certificate. To know more on certificates and provisioning, see :ref:`mqtt_sample_provisioning`.
@@ -278,19 +283,9 @@ Troubleshooting
 Dependencies
 ************
 
-This sample uses the following Zephyr libraries:
+This sample uses the following |NCS| and Zephyr libraries:
 
-* :ref:`mqtt_socket_interface`
-* :ref:`zbus`
-* :ref:`smf`
-
-It uses the following libraries and secure firmware component for nRF9160 DK and Thingy:91 builds:
-
-* :ref:`lte_lc_readme`
-* :ref:`nrfxlib:nrf_modem`
-* :ref:`Trusted Firmware-M <ug_tfm>`
-
-It uses the following libraries for nRF7002 DK builds:
-
-* :ref:`nrfxlib:nrf_security`
 * :ref:`net_if_interface`
+* :ref:`mqtt_socket_interface`
+* :ref:`net_mgmt_interface`
+* :ref:`lib_hw_id`

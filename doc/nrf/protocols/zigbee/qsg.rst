@@ -109,7 +109,7 @@ For this quick start guide, we will install the following software:
 Set up the software
 *******************
 
-The following steps are a simplified version of the |NCS|'s :ref:`gs_assistant` procedure.
+The following steps are a simplified version of the |NCS|'s :ref:`auto_installation` procedure.
 
 To set up the required software, complete the following steps:
 
@@ -148,7 +148,7 @@ To program the samples, complete the following steps:
 
 .. include:: ../../includes/vsc_build_and_run.txt
 
-#. Program the application to the board:
+3. Program the application to the board:
 
    a. Connect your development kit using the serial port.
    #. In the :guilabel:`Connected Devices View`, click :guilabel:`Refresh Connected Devices`.

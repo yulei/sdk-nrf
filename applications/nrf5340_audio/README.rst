@@ -1,287 +1,17 @@
-.. _nrf53_audio_app:
+.. _nrf53_audio_app_description:
 
-nRF5340 Audio
-#############
+nRF5340 Audio configuration and testing
+#######################################
 
 .. contents::
    :local:
    :depth: 2
 
-The nRF5340 Audio application demonstrates audio playback over isochronous channels (ISO) using LC3 codec compression and decompression, as per `Bluetooth® LE Audio specifications`_.
-It is developed for use with the :ref:`nRF5340 Audio development kit <nrf53_audio_app_requirements>`.
-
-In its default configuration, the application requires the :ref:`LC3 software codec <nrfxlib:lc3>`.
-The application also comes with various tools, including the :file:`buildprog.py` Python script that simplifies building and programming the firmware.
-
-.. note::
-   There is an ongoing process of restructuring the nRF5340 Audio application project.
-   Several drivers and modules within the application folder are being moved to more suitable locations in the |NCS| or Zephyr.
-   Before this process has finished, developing out-of-tree applications can be more complex.
-
-.. _nrf53_audio_app_overview_features:
-
-Feature support matrix
-   The following table lists features of the nRF5340 Audio application and their respective limitations and maturity level.
-   For an explanation of the maturity levels, see :ref:`Software maturity levels <software_maturity>`.
-
-   .. note::
-      Features not listed are not supported.
-
-   .. include:: /software_maturity.rst
-      :start-after: software_maturity_application_nrf5340audio_table:
-      :end-before: software_maturity_protocol
-
-.. _nrf53_audio_app_overview:
-
-Overview
-********
-
-The application can work as a gateway or a headset.
-The gateway receives the audio data from external sources (USB or I2S) and forwards it to one or more headsets.
-The headset is a receiver device that plays back the audio it gets from the gateway.
-It is also possible to enable a bidirectional mode where one gateway can send and receive audio to and from one or two headsets at the same time.
-
-Both device types use the same code base, but different firmware, and you need both types of devices for testing the application.
-Gateways and headsets can both run in one of the available application modes, either the *connected isochronous stream* (CIS) mode or in the *broadcast isochronous stream* (BIS) mode.
-The CIS mode is the default mode of the application.
-
-Changing configuration related to the device type and the application modes requires rebuilding the firmware and reprogramming the development kits.
-
-Regardless of the configuration, the application handles the audio data in the following manner:
-
-1. The gateway receives audio data from the audio source over USB or I2S.
-#. The gateway processes the audio data in its application core, which channels the data through the application layers:
-
-   a. Audio data is sent to the synchronization module (I2S-based firmware) or directly to the software codec (USB-based firmware).
-   #. Audio data is encoded by the software codec.
-   #. Encoded audio data is sent to the Bluetooth LE Host.
-
-#. The host sends the encoded audio data to the LE Audio Controller Subsystem for nRF53 on the network core.
-#. The subsystem forwards the audio data to the hardware radio and sends it to the headset devices, as per the LE Audio specifications.
-#. The headsets receive the encoded audio data on their hardware radio on the network core side.
-#. The LE Audio Controller Subsystem for nRF53 running on each of the headsets sends the encoded audio data to the Bluetooth LE Host on the headsets' application core.
-#. The headsets process the audio data in their application cores, which channel the data through the application layers:
-
-   a. Audio data is sent to the stream control module and placed in a FIFO buffer.
-   #. Audio data is sent from the FIFO buffer to the synchronization module (headsets only use I2S-based firmware).
-   #. Audio data is decoded by the software codec.
-
-#. Decoded audio data is sent to the hardware audio output over I2S.
-
-In the `I2S-based firmware for gateway and headsets`_, sending the audio data through the application layers includes a mandatory synchronization step using the synchronization module.
-This proprietary module ensures that the audio is played at the same time with the correct speed.
-For more information, see `Synchronization module overview`_.
-
-.. _nrf53_audio_app_overview_modes:
-
-Application modes
-=================
-
-The application can work either in the *connected isochronous stream* (CIS) mode or in the *broadcast isochronous stream* (BIS) mode, depending on the chosen firmware configuration.
-
-.. figure:: /images/octave_application_topologies.svg
-   :alt: CIS and BIS mode overview
-
-   CIS and BIS mode overview
-
-Connected Isochronous Stream (CIS)
-  CIS is a bidirectional communication protocol that allows for sending separate connected audio streams from a source device to one or more receivers.
-  The gateway can send the audio data using both the left and the right ISO channels at the same time, allowing for stereophonic sound reproduction with synchronized playback.
-
-  This is the default configuration of the nRF5340 Audio application.
-  In this configuration, you can use the nRF5340 Audio development kit in the role of the gateway, the left headset, or the right headset.
-
-  In the current version of the nRF5340 Audio application, the CIS mode offers both unidirectional and bidirectional communication.
-  In the bidirectional communication, the headset device will send audio from the on-board PDM microphone.
-  See `Selecting the CIS bidirectional communication`_ for more information.
-
-  You can also enable a walkie-talkie demonstration.
-  In this demonstration, the gateway device will send audio from the on-board PDM microphone instead of using USB or the line-in.
-  See `Enabling the walkie-talkie demo`_ for more information.
-
-Broadcast Isochronous Stream (BIS)
-  BIS is a unidirectional communication protocol that allows for broadcasting one or more audio streams from a source device to an unlimited number of receivers that are not connected to the source.
-
-  In this configuration, you can use the nRF5340 Audio development kit in the role of the gateway or as one of the headsets.
-  Use multiple nRF5340 Audio development kits to test BIS having multiple receiving headsets.
-
-  .. note::
-     In the BIS mode, you can use any number of nRF5340 Audio development kits as receivers.
-
-The audio quality for both modes does not change, although the processing time for stereo can be longer.
-
-.. _nrf53_audio_app_overview_architecture:
-
-Firmware architecture
-=====================
-
-The following figure illustrates the software layout for the nRF5340 Audio application:
-
-.. figure:: /images/octave_application_structure_generic.svg
-   :alt: nRF5340 Audio high-level design (overview)
-
-   nRF5340 Audio high-level design (overview)
-
-The network core of the nRF5340 SoC runs the *LE Audio Controller Subsystem for nRF53*, which is included in the :ref:`lib_bt_ll_acs_nrf53_readme` library's HEX file.
-This subsystem is custom-made for the application.
-It is responsible for receiving the audio stream data from hardware layers and forwarding the data to the Bluetooth LE host on the application core.
-The subsystem implements the lower layers of the Bluetooth Low Energy software stack and follows the LE Audio specification requirements.
-
-The application core runs both the Bluetooth LE Host from Zephyr and the application layer.
-The application layer is composed of a series of modules from different sources.
-These modules include the following major ones:
-
-* Peripheral modules from the |NCS|:
-
-  * I2S
-  * USB
-  * SPI
-  * TWI/I2C
-  * UART (debug)
-  * Timer
-  * LC3 encoder/decoder
-
-* Application-specific Bluetooth modules for handling the Bluetooth connection:
-
-  * :file:`le_audio_cis_gateway.c` or :file:`le_audio_cis_headset.c` - One of these ``cis`` modules is used by default.
-  * :file:`le_audio_bis_gateway.c` or :file:`le_audio_bis_headset.c` - One of these ``bis`` modules is selected automatically when you :ref:`switch to the BIS configuration <nrf53_audio_app_configuration_select_bis>`.
-
-  Only one of these files is used at compile time.
-  Each of these files handles the Bluetooth connection and Bluetooth events and funnels the data to the relevant audio modules.
-
-* Application-specific custom modules:
-
-  * Stream Control - This module implements a simple state machine for the application (``STREAMING`` or ``PAUSED``).
-    It also handles events from Bluetooth LE and buttons, receives audio from the host, and forwards the audio data to the next module.
-  * FIFO buffers
-  * Synchronization module (part of `I2S-based firmware for gateway and headsets`_) - See `Synchronization module overview`_ for more information.
-
-Since the application architecture is uniform and the firmware code is shared, the set of audio modules in use depends on the chosen stream mode (BIS or CIS), the chosen audio inputs and outputs (USB or analog jack), and if the gateway or the headset configuration is selected.
-
-.. note::
-   In the current version of the application, the bootloader is disabled by default.
-   Device Firmware Update (DFU) can only be enabled when :ref:`nrf53_audio_app_building_script`.
-   See :ref:`nrf53_audio_app_configuration_configure_fota` for details.
-
-.. _nrf53_audio_app_overview_architecture_usb:
-
-USB-based firmware for gateway
-------------------------------
-
-The following figure shows an overview of the modules currently included in the firmware that uses USB:
-
-.. figure:: /images/octave_application_structure_gateway.svg
-   :alt: nRF5340 Audio modules on the gateway using USB
-
-   nRF5340 Audio modules on the gateway using USB
-
-In this firmware design, no synchronization module is used after decoding the incoming frames or before encoding the outgoing ones.
-The Bluetooth LE RX FIFO is mainly used to make decoding run in a separate thread.
-
-.. _nrf53_audio_app_overview_architecture_i2s:
-
-I2S-based firmware for gateway and headsets
--------------------------------------------
-
-The following figure shows an overview of the modules currently included in the firmware that uses I2S:
-
-.. figure:: /images/octave_application_structure.svg
-   :alt: nRF5340 Audio modules on the gateway and the headsets using I2S
-
-   nRF5340 Audio modules on the gateway and the headsets using I2S
-
-The Bluetooth LE RX FIFO is mainly used to make :file:`audio_datapath.c` (synchronization module) run in a separate thread.
-After encoding the audio data received from I2S, the frames are sent by the encoder thread using a function located in :file:`streamctrl.c`.
-
-.. _nrf53_audio_app_overview_architecture_sync_module:
-
-Synchronization module overview
--------------------------------
-
-The synchronization module (:file:`audio_datapath.c`) handles audio synchronization.
-To synchronize the audio, it executes the following types of adjustments:
-
-* Presentation compensation
-* Drift compensation
-
-The presentation compensation makes all the headsets play audio at the same time, even if the packets containing the audio frames are not received at the same time on the different headsets.
-In practice, it moves the audio data blocks in the FIFO forward or backward a few blocks, adding blocks of *silence* when needed.
-
-The drift compensation adjusts the frequency of the audio clock to adjust the speed at which the audio is played.
-This is required in the CIS mode, where the gateway and headsets must keep the audio playback synchronized to provide True Wireless Stereo (TWS) audio playback.
-As such, it provides both larger adjustments at the start and then continuous small adjustments to the audio synchronization.
-This compensation method counters any drift caused by the differences in the frequencies of the quartz crystal oscillators used in the development kits.
-Development kits use quartz crystal oscillators to generate a stable clock frequency.
-However, the frequency of these crystals always slightly differs.
-The drift compensation makes the inter-IC sound (I2S) interface on the headsets run as fast as the Bluetooth packets reception.
-This prevents I2S overruns or underruns, both in the CIS mode and the BIS mode.
-
-See the following figure for an overview of the synchronization module.
-
-.. figure:: /images/octave_application_structure_sync_module.svg
-   :alt: nRF5340 Audio synchronization module overview
-
-   nRF5340 Audio synchronization module overview
-
-Both synchronization methods use the SDU reference timestamps (:c:type:`sdu_ref`) as the reference variable.
-If the device is a gateway that is :ref:`using I2S as audio source <nrf53_audio_app_overview_architecture_i2s>` and the stream is unidirectional (gateway to headsets), :c:type:`sdu_ref` is continuously being extracted from the LE Audio Controller Subsystem for nRF53 on the gateway.
-The extraction happens inside the :file:`le_audio_cis_gateway.c` and :file:`le_audio_bis_gateway.c` files' send function.
-The :c:type:`sdu_ref` values are then sent to the gateway's synchronization module, and used to do drift compensation.
-
-.. note::
-   Inside the synchronization module (:file:`audio_datapath.c`), all time-related variables end with ``_us`` (for microseconds).
-   This means that :c:type:`sdu_ref` becomes :c:type:`sdu_ref_us` inside the module.
-
-As the nRF5340 is a dual-core SoC, and both cores need the same concept of time, each core runs a free-running timer in an infinite loop.
-These two timers are reset at the same time, and they run from the same clock source.
-This means that they should always show the same values for the same points in time.
-The network core of the nRF5340 running the LE controller for nRF53 uses its timer to generate the :c:type:`sdu_ref` timestamp for every audio packet received.
-The application core running the nRF5340 Audio application uses its timer to generate :c:type:`cur_time` and :c:type:`frame_start_ts`.
-
-After the decoding takes place, the audio data is divided into smaller blocks and added to a FIFO.
-These blocks are then continuously being fed to I2S, block by block.
-
-See the following figure for the details of the compensation methods of the synchronization module.
-
-.. figure:: /images/octave_application_sync_module_states.svg
-   :alt: nRF5340 Audio's state machine for compensation mechanisms
-
-   nRF5340 Audio's state machine for compensation mechanisms
-
-The following external factors can affect the presentation compensation:
-
-* The drift compensation must be synchronized to the locked state (:c:enumerator:`DRIFT_STATE_LOCKED`) before the presentation compensation can start.
-  This drift compensation adjusts the frequency of the audio clock, indicating that the audio is being played at the right speed.
-  When the drift compensation is not in the locked state, the presentation compensation does not leave the init state (:c:enumerator:`PRES_STATE_INIT`).
-  Also, if the drift compensation loses synchronization, moving out of :c:enumerator:`DRIFT_STATE_LOCKED`, the presentation compensation moves back to :c:enumerator:`PRES_STATE_INIT`.
-* When audio is being played, it is expected that a new audio frame is received in each ISO connection interval.
-  If this does not occur, the headset might have lost its connection with the gateway.
-  When the connection is restored, the application receives a :c:type:`sdu_ref` not consecutive with the previously received :c:type:`sdu_ref`.
-  Then the presentation compensation is put into :c:enumerator:`PRES_STATE_WAIT` to ensure that the audio is still in sync.
-
-.. note::
-   When both the drift and presentation compensation are in state *locked* (:c:enumerator:`DRIFT_STATE_LOCKED` and :c:enumerator:`PRES_STATE_LOCKED`), **LED2** lights up.
-
-Synchronization module flow
-+++++++++++++++++++++++++++
-
-The received audio data in the I2S-based firmware devices follows the following path:
-
-1. The LE Audio Controller Subsystem for nRF53 running on the network core receives the compressed audio data.
-#. The controller subsystem sends the audio data to the Zephyr Bluetooth LE host similarly to the :ref:`zephyr:bluetooth-hci-rpmsg-sample` sample.
-#. The host sends the data to the stream control module (:file:`streamctrl.c`).
-#. The data is sent to a FIFO buffer.
-#. The data is sent from the FIFO buffer to the :file:`audio_datapath.c` synchronization module.
-   The :file:`audio_datapath.c` module performs the audio synchronization based on the SDU reference timestamps.
-   Each package sent from the gateway gets a unique SDU reference timestamp.
-   These timestamps are generated on the headset controllers (in the network core).
-   This enables the creation of True Wireless Stereo (TWS) earbuds where the audio is synchronized in the CIS mode.
-   It does also keep the speed of the inter-IC sound (I2S) interface synchronized with the sending and receiving speed of Bluetooth packets.
-#. The :file:`audio_datapath.c` module sends the compressed audio data to the LC3 audio decoder for decoding.
-
-#. The audio decoder decodes the data and sends the uncompressed audio data (PCM) back to the :file:`audio_datapath.c` module.
-#. The :file:`audio_datapath.c` module continuously feeds the uncompressed audio data to the hardware codec.
-#. The hardware codec receives the uncompressed audio data over the inter-IC sound (I2S) interface and performs the digital-to-analog (DAC) conversion to an analog audio signal.
+The nRF5340 Audio application has the following unique characteristics:
+
+* It is developed for use only with the :ref:`nRF5340 Audio development kit <nrf53_audio_app_requirements>`.
+* In its default configuration, the application requires the :ref:`LC3 software codec <nrfxlib:lc3>`.
+* The application also comes with various application-specific tools, including the :file:`buildprog.py` Python script that simplifies building and programming the firmware.
 
 .. _nrf53_audio_app_requirements:
 
@@ -290,11 +20,9 @@ Requirements
 
 The nRF5340 Audio application is designed to be used only with the following hardware:
 
-+-----------------------------------------------------+----------------------------------+--------------------------+-------------------------------------+
-| Hardware platforms                                  | PCA                              | Board name               | Build target                        |
-+=====================================================+==================================+==========================+=====================================+
-| `nRF5340 Audio DK <nRF5340 Audio DK Hardware_>`_    | PCA10121 revision 1.0.0 or above | nrf5340_audio_dk_nrf5340 | ``nrf5340_audio_dk_nrf5340_cpuapp`` |
-+-----------------------------------------------------+----------------------------------+--------------------------+-------------------------------------+
+.. table-from-rows:: /includes/sample_board_rows.txt
+   :header: heading
+   :rows: nrf5340_audio_dk_nrf5340
 
 .. note::
    The application supports PCA10121 revisions 1.0.0 or above.
@@ -507,14 +235,14 @@ Selecting the BIS mode
 ======================
 
 The CIS mode is the default operating mode for the application.
-You can switch to the BIS mode by adding the :kconfig:option:`CONFIG_TRANSPORT_BIS` Kconfig option set to ``y`` to the :file:`prj.conf` file for the debug version and the :file:`prj_release.conf` file for the release version.
+To switch to the BIS mode, set the :ref:`CONFIG_TRANSPORT_BIS <config_nrf53_audio_app_options>` Kconfig option to ``y`` in the :file:`prj.conf` file for the debug version and in the :file:`prj_release.conf` file for the release version.
 
 Enabling the BIS mode with two gateways
 ---------------------------------------
 
 In addition to the standard BIS mode with one gateway, you can also add a second gateway device that the BIS headsets can receive audio stream from.
-To configure the second gateway, add both the :kconfig:option:`CONFIG_TRANSPORT_BIS` and the :kconfig:option:`CONFIG_BT_AUDIO_USE_BROADCAST_NAME_ALT` Kconfig options set to ``y`` to the :file:`prj.conf` file for the debug version and to the :file:`prj_release.conf` file for the release version.
-You can provide an alternative name to the second gateway using the :kconfig:option:`CONFIG_BT_AUDIO_BROADCAST_NAME_ALT` or use the default alternative name.
+To configure the second gateway, add both the :ref:`CONFIG_TRANSPORT_BIS <config_nrf53_audio_app_options>` and the :ref:`CONFIG_BT_AUDIO_USE_BROADCAST_NAME_ALT <config_nrf53_audio_app_options>` Kconfig options set to ``y`` to the :file:`prj.conf` file for the debug version and to the :file:`prj_release.conf` file for the release version.
+You can provide an alternative name to the second gateway using the :ref:`CONFIG_BT_AUDIO_BROADCAST_NAME_ALT <config_nrf53_audio_app_options>` or use the default alternative name.
 
 You build each BIS gateway separately using the normal procedures from :ref:`nrf53_audio_app_building`.
 After building the first gateway, configure the required Kconfig options for the second gateway and build the second gateway firmware.
@@ -526,7 +254,7 @@ Selecting the CIS bidirectional communication
 =============================================
 
 The CIS unidirectional mode is the default operating mode for the application.
-You can switch to the bidirectional mode by adding the :kconfig:option:`CONFIG_STREAM_BIDIRECTIONAL` Kconfig option set to ``y``  to the :file:`prj.conf` file (for the debug version) or to the :file:`prj_release.conf` file (for the release version).
+To switch to the bidirectional mode, set the :ref:`CONFIG_STREAM_BIDIRECTIONAL <config_nrf53_audio_app_options>` Kconfig option to ``y``  in the :file:`prj.conf` file (for the debug version) or in the :file:`prj_release.conf` file (for the release version).
 
 .. _nrf53_audio_app_configuration_enable_walkie_talkie:
 
@@ -535,7 +263,7 @@ Enabling the walkie-talkie demo
 
 The walkie-talkie demo uses one or two bidirectional streams from the gateway to one or two headsets.
 The PDM microphone is used as input on both the gateway and headset device.
-You can switch to using the walkie-talkie by adding the :kconfig:option:`CONFIG_WALKIE_TALKIE_DEMO` Kconfig option set to ``y``  to the :file:`prj.conf` file (for the debug version) or to the :file:`prj_release.conf` file (for the release version).
+To switch to using the walkie-talkie, set the :ref:`CONFIG_WALKIE_TALKIE_DEMO <config_nrf53_audio_app_options>` Kconfig option to ``y``  in the :file:`prj.conf` file (for the debug version) or in the :file:`prj_release.conf` file (for the release version).
 
 .. _nrf53_audio_app_configuration_select_i2s:
 
@@ -545,7 +273,7 @@ Selecting the I2S serial
 In the default configuration, the gateway application uses the USB serial port as the audio source.
 The :ref:`nrf53_audio_app_building` and :ref:`nrf53_audio_app_testing` steps also refer to using the USB serial connection.
 
-You can switch to using the I2S serial connection by adding the ``CONFIG_AUDIO_SOURCE_I2S`` Kconfig option set to ``y``  to the :file:`prj.conf` file for the debug version and the :file:`prj_release.conf` file for the release version.
+To switch to using the I2S serial connection, set the :ref:`CONFIG_AUDIO_SOURCE_I2S <config_nrf53_audio_app_options>` Kconfig option to ``y`` in the :file:`prj.conf` file for the debug version and in the :file:`prj_release.conf` file for the release version.
 
 When testing the application, an additional audio jack cable is required to use I2S.
 Use this cable to connect the audio source (PC) to the analog **LINE IN** on the development kit.
@@ -584,7 +312,7 @@ The FOTA upgrades are only available when :ref:`nrf53_audio_app_building_script`
 With the appropriate parameters provided, the :file:`buildprog.py` Python script will add overlay files for the given DFU type.
 To enable the desired FOTA functions:
 
-* To define flash memory layout, include the ``-m internal`` parameter for the internal layout or the ``-m external`` parameter for the external layout.
+* To define flash memory layout, include the ``-m internal`` parameter for the internal layout (when using the ``release`` application version) or the ``-m external`` parameter for the external layout (when using either ``release`` or ``debug``).
 * To use the minimal size network core bootloader, add the ``-M`` parameter.
 
 For the full list of parameters and examples, see the :ref:`nrf53_audio_app_building_script_running` section.
@@ -642,6 +370,9 @@ You can build and program the application in one of the following ways:
 * :ref:`nrf53_audio_app_building_standard`.
   Using this method requires building and programming each development kit separately.
 
+.. important::
+   Building and programming using the |nRFVSC| is currently not supported.
+
 .. note::
    You might want to check the :ref:`nRF5340 Audio application known issues <known_issues_nrf5340audio>` before building and programming the application.
 
@@ -665,14 +396,14 @@ Adding FEM support
 You can add support for the nRF21540 front-end module (FEM) to this application by using one of the following options, depending on how you decide to build the application:
 
 * If you opt for :ref:`nrf53_audio_app_building_script`, add the ``--nrf21540`` to the script's building command.
-* If you opt for :ref:`nrf53_audio_app_building_standard`, add the ``-DSHIELD=nrf21540_ek_fwd`` to the ``west build`` command.
+* If you opt for :ref:`nrf53_audio_app_building_standard`, add the ``-DSHIELD=nrf21540ek_fwd`` to the ``west build`` command.
   For example:
 
   .. code-block:: console
 
-     west build -b nrf5340_audio_dk_nrf5340_cpuapp --pristine -- -DCONFIG_AUDIO_DEV=1 -DSHIELD=nrf21540_ek_fwd -DCONF_FILE=prj_release.conf
+     west build -b nrf5340_audio_dk_nrf5340_cpuapp --pristine -- -DCONFIG_AUDIO_DEV=1 -DSHIELD=nrf21540ek_fwd -DCONF_FILE=prj_release.conf
 
-You can use the :kconfig:option:`CONFIG_NRF_21540_MAIN_TX_POWER` and :kconfig:option:`CONFIG_NRF_21540_PRI_ADV_TX_POWER` to set the TX power output.
+To set the TX power output, use the :ref:`CONFIG_NRF_21540_MAIN_TX_POWER <config_nrf53_audio_app_options>` and :ref:`CONFIG_NRF_21540_PRI_ADV_TX_POWER <config_nrf53_audio_app_options>` Kconfig options.
 
 See :ref:`ug_radio_fem` for more information about FEM in the |NCS|.
 
@@ -722,11 +453,11 @@ See the following examples of the parameter usage with the command run from the 
      python buildprog.py -c app -b debug -d both
 
 * Example 2: The following command builds the application using the script for both the application and the network core (``both``).
-  As in *example 1*, it builds with the ``debug`` application version, but with the DFU internal flash memory layout enabled and using the minimal size of the network core bootloader:
+  It builds with the ``release`` application version, with the DFU internal flash memory layout enabled, and using the minimal size of the network core bootloader:
 
   .. code-block:: console
 
-     python buildprog.py -c both -b debug -d both -m internal -M
+     python buildprog.py -c both -b release -d both -m internal -M
 
   If you run this command with the ``external`` DFU type parameter instead of ``internal``, the external flash memory layout will be enabled.
 
@@ -752,22 +483,22 @@ Programming with the script
       python buildprog.py -c both -b debug -d both -p
 
    This command builds the application with the ``debug`` application version for both the headset and the gateway and programs the application core.
-   Given the ``-c both`` parameter, it also takes the precompiled Bluetooth Low Energy Controller binary from the :file:`applications/nrf5340_audio/bin` directory and programs it to the network core of both the gateway and the headset.
+   Given the ``-c both`` parameter, it also takes the precompiled Bluetooth Low Energy Controller binary from the :file:`nrf/lib/bin/bt_ll_acs_nrf53/bin` directory and programs it to the network core of both the gateway and the headset.
 
    .. note::
-      If the programming command fails because of :ref:`readback_protection_error`, run :file:`buildprog.py` with the ``--recover-on-fail`` or ``-f`` parameter to recover and re-program automatically when programming fails.
+      If the programming command fails because of :ref:`readback_protection_error`, run :file:`buildprog.py` with the ``--recover_on_fail`` or ``-f`` parameter to recover and re-program automatically when programming fails.
       For example, using the programming command example above:
 
       .. code-block:: console
 
-         python buildprog.py -c both -b debug -d both -p --recover-on-fail
+         python buildprog.py -c both -b debug -d both -p --recover_on_fail
 
    If you want to program firmware that has DFU enabled, you must include the DFU parameters in the command.
    The command for programming with DFU enabled can look as follows:
 
    .. code-block:: console
 
-     python buildprog.py -c both -b debug -d both -m internal -M -p
+     python buildprog.py -c both -b release -d both -m internal -M -p
 
 Getting help
    Run ``python buildprog.py -h`` for information about all available script parameters.
@@ -830,7 +561,7 @@ Configuration table overview
 Building and programming using command line
 ===========================================
 
-You can also build the nRF5340 Audio application using the standard |NCS| :ref:`build steps <gs_programming>` for the command line.
+You can also build the nRF5340 Audio application using the standard |NCS| :ref:`build steps <programming_cmd>` for the command line.
 
 .. note::
    Using this method requires you to build and program each development kit one at a time before moving to the next configuration, which can be time-consuming.
@@ -853,7 +584,7 @@ Complete the following steps to build the application:
       * For the debug version: No build flag needed.
       * For the release version: ``-DCONF_FILE=prj_release.conf``
 
-#. Build the application using the standard :ref:`build steps <gs_programming>`.
+#. Build the application using the standard :ref:`build steps <programming_cmd>` for the command line.
    For example, if you want to build the firmware for the application core as a headset using the ``release`` application version, you can run the following command:
 
    .. code-block:: console
@@ -928,7 +659,6 @@ After building the files for the development kit you want to program, complete t
         nrfjprog --memwr 0x00FF80F4 --val 1
 
    Select the correct board when prompted with the popup or add the ``--snr`` parameter followed by the SEGGER serial number of the correct board at the end of the ``nrfjprog`` command.
-
 
 
 .. _nrf53_audio_app_testing:
@@ -1063,83 +793,6 @@ You can test upgrading the firmware on both cores at the same time on a headset 
 #. Tap :guilabel:`START` again to start the DFU process.
 #. When the DFU has finished, verify that the new application core and network core firmware works properly.
 
-Adapting application for end products
-*************************************
-
-This section describes the relevant configuration sources and lists the steps required for adapting the nRF5340 Audio application to end products.
-
-Board configuration sources
-===========================
-
-The nRF5340 Audio application uses the following files as board configuration sources:
-
-* Devicetree Specification (DTS) files - These reflect the hardware configuration.
-  See :ref:`zephyr:dt-guide` for more information about the DTS data structure.
-* Kconfig files - These reflect the hardware-related software configuration.
-  See :ref:`kconfig_tips_and_tricks` for information about how to configure them.
-* Memory layout configuration files - These define the memory layout of the application.
-
-You can see the :file:`nrf/boards/arm/nrf5340_audio_dk_nrf5340` directory as an example of how these files are structured.
-
-For information about differences between DTS and Kconfig, see :ref:`zephyr:dt_vs_kconfig`.
-For detailed instructions for adding Zephyr support to a custom board, see Zephyr's :ref:`zephyr:board_porting_guide`.
-
-.. _nrf53_audio_app_porting_guide_app_configuration:
-
-Application configuration sources
-=================================
-
-The application configuration source file defines a set of options used by the nRF5340 Audio application.
-This is a :file:`.conf` file that modifies the default Kconfig values defined in the Kconfig files.
-
-Only one :file:`.conf` file is included at a time.
-The :file:`prj.conf` file is the default configuration file and it implements the debug application version.
-For the release application version, you need to include the :file:`prj_release.conf` configuration file.
-In the release application version no debug features should be enabled.
-
-The nRF5340 Audio application also use several :file:`Kconfig.defaults` files to change configuration defaults automatically, based on the different application versions and device types.
-
-You need to edit :file:`prj.conf` and :file:`prj_release.conf` if you want to add new functionalities to your application, but editing these files when adding a new board is not required.
-
-.. _nrf53_audio_app_porting_guide_adding_board:
-
-Adding a new board
-==================
-
-.. note::
-    The first three steps of the configuration procedure are identical to the steps described in Zephyr's :ref:`zephyr:board_porting_guide`.
-
-To use the nRF5340 Audio application with your custom board:
-
-1. Define the board files for your custom board:
-
-   a. Create a new directory in the :file:`nrf/boards/arm/` directory with the name of the new board.
-   #. Copy the nRF5340 Audio board files from the :file:`nrf5340_audio_dk_nrf5340` directory located in the :file:`nrf/boards/arm/` folder to the newly created directory.
-
-#. Edit the DTS files to make sure they match the hardware configuration.
-   Pay attention to the following elements:
-
-   * Pins that are used.
-   * Interrupt priority that might be different.
-
-#. Edit the board's Kconfig files to make sure they match the required system configuration.
-   For example, disable the drivers that will not be used by your device.
-#. Build the application by selecting the name of the new board (for example, ``new_audio_board_name``) in your build system.
-   For example, when building from the command line, add ``-b new_audio_board_name`` to your build command.
-
-FOTA for end products
-=====================
-
-Do not use the default MCUboot key for end products.
-See :ref:`ug_fw_update` and :ref:`west-sign` for more information.
-
-To create your own app that supports DFU, you can use the `nRF Connect Device Manager`_ libraries for Android and iOS.
-
-Changing default values
-=======================
-
-Given the requirements for the Coordinated Set Identification Service (CSIS), make sure to change the Set Identity Resolving Key (SIRK) value when adapting the application.
-
 Dependencies
 ************
 
@@ -1169,6 +822,7 @@ The application also depends on the following Zephyr libraries:
 
 * :ref:`zephyr:logging_api`
 * :ref:`zephyr:kernel_api`
+* :ref:`zephyr:zbus`
 * :ref:`zephyr:api_peripherals`:
 
    * :ref:`zephyr:usb_api`
@@ -1180,17 +834,13 @@ The application also depends on the following Zephyr libraries:
   * :file:`include/bluetooth/hci.h`
   * :file:`include/bluetooth/uuid.h`
 
+.. _nrf53_audio_app_options:
+.. _config_nrf53_audio_app_options:
+
 Application configuration options
 *********************************
 
 .. options-from-kconfig::
    :show-type:
-
-.. _nrf53_audio_app_dk_legal:
-
-Disclaimers for the nRF5340 Audio application
-*********************************************
-
-This application and its DFU/FOTA functionality are marked as :ref:`experimental <software_maturity>`.
 
 .. |usb_known_issues| replace:: Make sure to check the :ref:`nRF5340 Audio application known issues <known_issues_nrf5340audio>` related to serial connection with the USB.

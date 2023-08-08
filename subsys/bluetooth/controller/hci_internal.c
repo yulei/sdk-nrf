@@ -5,7 +5,6 @@
  */
 
 #include <zephyr/bluetooth/hci.h>
-#include <zephyr/bluetooth/hci_err.h>
 #include <zephyr/bluetooth/buf.h>
 #include <zephyr/sys/byteorder.h>
 #include <sdc_hci.h>
@@ -92,6 +91,10 @@ static bool is_host_using_legacy_and_extended_commands(uint16_t hci_opcode)
 	case SDC_HCI_OPCODE_CMD_LE_SET_PERIODIC_ADV_DATA:
 	case SDC_HCI_OPCODE_CMD_LE_SET_PERIODIC_ADV_ENABLE:
 #endif  /* CONFIG_BT_PER_ADV */
+#if defined(CONFIG_BT_CTLR_SDC_PAWR_ADV)
+	case SDC_HCI_OPCODE_CMD_LE_SET_PERIODIC_ADV_PARAMS_V2:
+	case SDC_HCI_OPCODE_CMD_LE_SET_PERIODIC_ADV_SUBEVENT_DATA:
+#endif /* CONFIG_BT_CTLR_SDC_PAWR_ADV */
 #endif  /* CONFIG_BT_BROADCASTER */
 #if defined(CONFIG_BT_OBSERVER)
 	case SDC_HCI_OPCODE_CMD_LE_SET_EXT_SCAN_PARAMS:
@@ -99,7 +102,10 @@ static bool is_host_using_legacy_and_extended_commands(uint16_t hci_opcode)
 #endif  /* CONFIG_BT_OBSERVER */
 #if defined(CONFIG_BT_CENTRAL)
 	case SDC_HCI_OPCODE_CMD_LE_EXT_CREATE_CONN:
-#endif
+#if defined(CONFIG_BT_CTLR_SDC_PAWR_ADV)
+	case SDC_HCI_OPCODE_CMD_LE_EXT_CREATE_CONN_V2:
+#endif /* CONFIG_BT_CTLR_SDC_PAWR_ADV */
+#endif /* CONFIG_BT_CENTRAL */
 #if defined(CONFIG_BT_PER_ADV_SYNC)
 	case SDC_HCI_OPCODE_CMD_LE_PERIODIC_ADV_CREATE_SYNC:
 	case SDC_HCI_OPCODE_CMD_LE_PERIODIC_ADV_CREATE_SYNC_CANCEL:
@@ -108,6 +114,10 @@ static bool is_host_using_legacy_and_extended_commands(uint16_t hci_opcode)
 	case SDC_HCI_OPCODE_CMD_LE_REMOVE_DEVICE_FROM_PERIODIC_ADV_LIST:
 	case SDC_HCI_OPCODE_CMD_LE_CLEAR_PERIODIC_ADV_LIST:
 	case SDC_HCI_OPCODE_CMD_LE_READ_PERIODIC_ADV_LIST_SIZE:
+#endif
+#if defined(CONFIG_BT_CTLR_SDC_PAWR_SYNC)
+	case SDC_HCI_OPCODE_CMD_LE_SET_PERIODIC_SYNC_SUBEVENT:
+	case SDC_HCI_OPCODE_CMD_LE_SET_PERIODIC_ADV_RESPONSE_DATA:
 #endif
 #if defined(CONFIG_BT_PER_ADV_SYNC_TRANSFER_RECEIVER)
 	case SDC_HCI_OPCODE_CMD_LE_SET_PERIODIC_ADV_SYNC_TRANSFER_PARAMS:
@@ -183,7 +193,7 @@ static void encode_command_complete_header(uint8_t * const event,
 	event[BT_HCI_EVT_HDR_SIZE + sizeof(struct bt_hci_evt_cmd_complete)] = status;
 }
 
-static void supported_commands(sdc_hci_ip_supported_commands_t *cmds)
+void hci_internal_supported_commands(sdc_hci_ip_supported_commands_t *cmds)
 {
 	memset(cmds, 0, sizeof(*cmds));
 
@@ -454,6 +464,8 @@ static void vs_supported_commands(sdc_hci_vs_supported_vs_commands_t *cmds)
 	cmds->event_length_set = 1;
 #if defined(CONFIG_BT_CTLR_LE_POWER_CONTROL)
 	cmds->write_remote_tx_power = 1;
+	cmds->set_auto_power_control_request_param = 1;
+	cmds->set_power_control_apr_handling = 1;
 #endif
 }
 #endif	/* CONFIG_BT_HCI_VS */
@@ -466,7 +478,8 @@ static void supported_features(sdc_hci_ip_lmp_features_t *features)
 	features->le_supported = 1;
 }
 
-static void le_supported_features(sdc_hci_cmd_le_read_local_supported_features_return_t *features)
+void hci_internal_le_supported_features(
+	sdc_hci_cmd_le_read_local_supported_features_return_t *features)
 {
 	memset(features, 0, sizeof(*features));
 
@@ -694,7 +707,7 @@ static uint8_t info_param_cmd_put(uint8_t const * const cmd,
 		return sdc_hci_cmd_ip_read_local_version_information((void *)event_out_params);
 	case SDC_HCI_OPCODE_CMD_IP_READ_LOCAL_SUPPORTED_COMMANDS:
 		*param_length_out += sizeof(sdc_hci_cmd_ip_read_local_supported_commands_return_t);
-		supported_commands((void *)event_out_params);
+		hci_internal_supported_commands((void *)event_out_params);
 		return 0;
 	case SDC_HCI_OPCODE_CMD_IP_READ_LOCAL_SUPPORTED_FEATURES:
 		*param_length_out += sizeof(sdc_hci_cmd_ip_read_local_supported_features_return_t);
@@ -748,7 +761,7 @@ static uint8_t le_controller_cmd_put(uint8_t const * const cmd,
 
 	case SDC_HCI_OPCODE_CMD_LE_READ_LOCAL_SUPPORTED_FEATURES:
 		*param_length_out += sizeof(sdc_hci_cmd_le_read_local_supported_features_return_t);
-		le_supported_features((void *)event_out_params);
+		hci_internal_le_supported_features((void *)event_out_params);
 		return 0;
 
 	case SDC_HCI_OPCODE_CMD_LE_SET_RANDOM_ADDRESS:
@@ -1188,6 +1201,10 @@ static uint8_t vs_cmd_put(uint8_t const * const cmd,
 		return sdc_hci_cmd_vs_conn_event_extend((void *)cmd_params);
 	case SDC_HCI_OPCODE_CMD_VS_QOS_CONN_EVENT_REPORT_ENABLE:
 		return sdc_hci_cmd_vs_qos_conn_event_report_enable((void *)cmd_params);
+#ifdef CONFIG_BT_CTLR_SDC_QOS_CHANNEL_SURVEY
+	case SDC_HCI_OPCODE_CMD_VS_QOS_CHANNEL_SURVEY_ENABLE:
+		return sdc_hci_cmd_vs_qos_channel_survey_enable((void *)cmd_params);
+#endif
 	case SDC_HCI_OPCODE_CMD_VS_EVENT_LENGTH_SET:
 		return sdc_hci_cmd_vs_event_length_set((void *)cmd_params);
 #ifdef CONFIG_BT_PERIPHERAL
@@ -1201,6 +1218,10 @@ static uint8_t vs_cmd_put(uint8_t const * const cmd,
 #if defined(CONFIG_BT_CTLR_LE_POWER_CONTROL)
 	case SDC_HCI_OPCODE_CMD_VS_WRITE_REMOTE_TX_POWER:
 		return sdc_hci_cmd_vs_write_remote_tx_power((void *)cmd_params);
+	case SDC_HCI_OPCODE_CMD_VS_SET_AUTO_POWER_CONTROL_REQUEST_PARAM:
+		return sdc_hci_cmd_vs_set_auto_power_control_request_param((void *)cmd_params);
+	case SDC_HCI_OPCODE_CMD_VS_SET_POWER_CONTROL_APR_HANDLING:
+		return sdc_hci_cmd_vs_set_power_control_apr_handling((void *)cmd_params);
 #endif
 	default:
 		return BT_HCI_ERR_UNKNOWN_CMD;
@@ -1311,17 +1332,28 @@ int hci_internal_cmd_put(uint8_t *cmd_in)
 		}
 	}
 
+	cmd_complete_or_status.occurred = true;
+
 #if defined(CONFIG_BT_HCI_ACL_FLOW_CONTROL)
-	if ((opcode != SDC_HCI_OPCODE_CMD_CB_HOST_NUMBER_OF_COMPLETED_PACKETS)
-	    ||
-	    (cmd_complete_or_status.raw_event[CMD_COMPLETE_MIN_SIZE - 1] != 0))
-#endif
-	{
+	if (opcode == SDC_HCI_OPCODE_CMD_CB_HOST_NUMBER_OF_COMPLETED_PACKETS
+	    &&
+	    cmd_complete_or_status.raw_event[CMD_COMPLETE_MIN_SIZE - 1] == 0) {
 		/* SDC_HCI_OPCODE_CMD_CB_HOST_NUMBER_OF_COMPLETED_PACKETS will only generate
 		 *  command complete if it fails.
 		 */
 
-		cmd_complete_or_status.occurred = true;
+		cmd_complete_or_status.occurred = false;
+	}
+#endif
+
+	if (opcode == SDC_HCI_OPCODE_CMD_LE_SET_PERIODIC_ADV_RESPONSE_DATA
+		&&
+		cmd_complete_or_status.raw_event[0] == BT_HCI_EVT_CMD_COMPLETE) {
+		/* SDC_HCI_OPCODE_CMD_LE_SET_PERIODIC_ADV_RESPONSE_DATA
+		 * will generate command complete at a later time (unless unsupported)
+		 */
+
+		cmd_complete_or_status.occurred = false;
 	}
 
 	return 0;

@@ -163,6 +163,39 @@ out:
 }
 
 
+#ifdef CONFIG_NRF700X_RX_WQ_ENABLED
+void wifi_nrf_fmac_rx_tasklet(void *data)
+{
+	struct wifi_nrf_fmac_dev_ctx *fmac_dev_ctx = (struct wifi_nrf_fmac_dev_ctx *)data;
+	struct nrf_wifi_rx_buff *config = NULL;
+	enum wifi_nrf_status status = WIFI_NRF_STATUS_FAIL;
+
+	config = (struct nrf_wifi_rx_buff *)wifi_nrf_utils_q_dequeue(
+		fmac_dev_ctx->fpriv->opriv,
+		fmac_dev_ctx->rx_tasklet_event_q);
+
+	if (!config) {
+		wifi_nrf_osal_log_err(fmac_dev_ctx->fpriv->opriv,
+				      "%s: No RX config available\n",
+				      __func__);
+		goto out;
+	}
+
+	status = wifi_nrf_fmac_rx_event_process(fmac_dev_ctx,
+						config);
+
+	if (status != WIFI_NRF_STATUS_SUCCESS) {
+		wifi_nrf_osal_log_err(fmac_dev_ctx->fpriv->opriv,
+				      "%s: wifi_nrf_fmac_rx_event_process failed\n",
+				      __func__);
+		goto out;
+	}
+out:
+	wifi_nrf_osal_mem_free(fmac_dev_ctx->fpriv->opriv,
+			       config);
+}
+#endif /* CONFIG_NRF700X_RX_WQ_ENABLED */
+
 enum wifi_nrf_status wifi_nrf_fmac_rx_event_process(struct wifi_nrf_fmac_dev_ctx *fmac_dev_ctx,
 						    struct nrf_wifi_rx_buff *config)
 {
@@ -176,12 +209,18 @@ enum wifi_nrf_status wifi_nrf_fmac_rx_event_process(struct wifi_nrf_fmac_dev_ctx
 	unsigned int desc_id = 0;
 	unsigned int i = 0;
 	unsigned int pkt_len = 0;
+#ifdef CONFIG_NRF700X_STA_MODE
 	struct wifi_nrf_fmac_ieee80211_hdr hdr;
 	unsigned short eth_type = 0;
 	unsigned int size = 0;
+#endif /* CONFIG_NRF700X_STA_MODE */
 
 	vif_ctx = fmac_dev_ctx->vif_ctx[config->wdev_id];
 
+#ifdef CONFIG_NRF700X_STA_MODE
+	fmac_dev_ctx->fpriv->callbk_fns.process_rssi_from_rx(vif_ctx->os_vif_ctx,
+							     config->signal);
+#endif /* CONFIG_NRF700X_STA_MODE */
 	num_pkts = config->rx_pkt_cnt;
 
 	for (i = 0; i < num_pkts; i++) {
@@ -236,6 +275,7 @@ enum wifi_nrf_status wifi_nrf_fmac_rx_event_process(struct wifi_nrf_fmac_dev_ctx
 		rx_buf_info->mapped = false;
 
 		if (config->rx_pkt_type == NRF_WIFI_RX_PKT_DATA) {
+#ifdef CONFIG_NRF700X_STA_MODE
 			switch (config->rx_buff_info[i].pkt_type) {
 			case PKT_TYPE_MPDU:
 				wifi_nrf_osal_mem_cpy(fmac_dev_ctx->fpriv->opriv,
@@ -282,7 +322,15 @@ enum wifi_nrf_status wifi_nrf_fmac_rx_event_process(struct wifi_nrf_fmac_dev_ctx
 			}
 			fmac_dev_ctx->fpriv->callbk_fns.rx_frm_callbk_fn(vif_ctx->os_vif_ctx,
 									 nwb);
+#endif /* CONFIG_NRF700X_STA_MODE */
 		} else if (config->rx_pkt_type == NRF_WIFI_RX_PKT_BCN_PRB_RSP) {
+#ifdef CONFIG_WIFI_MGMT_RAW_SCAN_RESULTS
+			fmac_dev_ctx->fpriv->callbk_fns.rx_bcn_prb_resp_callbk_fn(
+							vif_ctx->os_vif_ctx,
+							nwb,
+							config->frequency,
+							config->signal);
+#endif /* CONFIG_WIFI_MGMT_RAW_SCAN_RESULTS */
 			wifi_nrf_osal_nbuf_free(fmac_dev_ctx->fpriv->opriv,
 						nwb);
 		} else {

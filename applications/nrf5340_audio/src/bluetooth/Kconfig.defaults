@@ -7,19 +7,21 @@
 config BT_AUDIO
 	default y
 
-# Not supported on LE Audio Controller Subsystem for nRF53
-config BT_ATT_ENFORCE_FLOW
-	default n
+config BT_DEVICE_NAME
+	default "NRF5340_AUDIO"
 
-# Disable Zephyr HCI Vendor-Specific extensions
-config BT_HCI_VS_EXT
-	default n
+config BT_ECC
+	default y if BT
 
 config BT_EXT_ADV
 	default y
 
 config BT_DEVICE_NAME
 	default "NRF5340_AUDIO"
+
+# Mandatory to support at least 1 for ASCS
+config BT_ATT_PREPARE_COUNT
+	default 1
 
 if TRANSPORT_CIS # Depends on TRANSPORT_CIS
 
@@ -30,9 +32,6 @@ config BT_BONDABLE
 	default y
 
 config BT_PRIVACY
-	default y
-
-config BT_SCAN_WITH_IDENTITY
 	default y
 
 config BT_SMP
@@ -75,7 +74,7 @@ config NVS_LOG_LEVEL
 # HEADSET
 if AUDIO_DEV = 1
 
-config BT_AUDIO_UNICAST_SERVER
+config BT_BAP_UNICAST_SERVER
 	default y
 
 config BT_MAX_CONN
@@ -109,7 +108,6 @@ config BT_MCC
 	default n if WALKIE_TALKIE_DEMO
 	default y
 
-
 config BT_PACS_SNK_CONTEXT
 	default 0x0007 if STREAM_BIDIRECTIONAL
 	default 0x0005
@@ -118,15 +116,18 @@ config BT_PACS_SRC_CONTEXT
 	default 0x0007 if STREAM_BIDIRECTIONAL
 
 config BT_CSIP_SET_MEMBER
-	bool
 	default y
 
 config BT_CAP_ACCEPTOR
-	bool
 	default y
 
 config BT_CAP_ACCEPTOR_SET_MEMBER
-	bool
+	default y
+
+config BT_AUDIO_TX
+	default y if STREAM_BIDIRECTIONAL
+
+config BT_AUDIO_RX
 	default y
 
 endif # AUDIO_DEV = 1 (HEADSET)
@@ -134,7 +135,7 @@ endif # AUDIO_DEV = 1 (HEADSET)
 # GATEWAY
 if AUDIO_DEV = 2
 
-config BT_AUDIO_UNICAST_CLIENT
+config BT_BAP_UNICAST_CLIENT
 	default y
 
 config BT_ISO_TX_BUF_COUNT
@@ -154,14 +155,14 @@ config BT_ISO_MAX_CHAN
 config BT_MAX_PAIRED
 	default 2
 
-config BT_AUDIO_UNICAST_CLIENT_GROUP_STREAM_COUNT
+config BT_BAP_UNICAST_CLIENT_GROUP_STREAM_COUNT
 	default 4 if STREAM_BIDIRECTIONAL
 	default 2
 
-config BT_AUDIO_UNICAST_CLIENT_ASE_SNK_COUNT
+config BT_BAP_UNICAST_CLIENT_ASE_SNK_COUNT
 	default 2
 
-config BT_AUDIO_UNICAST_CLIENT_ASE_SRC_COUNT
+config BT_BAP_UNICAST_CLIENT_ASE_SRC_COUNT
 	default 2 if STREAM_BIDIRECTIONAL
 	default 0
 
@@ -190,6 +191,12 @@ config MCTL_LOCAL_PLAYER_CONTROL
 config MCTL_LOCAL_PLAYER_REMOTE_CONTROL
 	default y
 
+config BT_AUDIO_TX
+	default y
+
+config BT_AUDIO_RX
+	default y if STREAM_BIDIRECTIONAL
+
 endif # AUDIO_DEV = 2 (GATEWAY)
 
 endif # TRANSPORT_CIS
@@ -197,7 +204,6 @@ endif # TRANSPORT_CIS
 if TRANSPORT_BIS # Depends on TRANSPORT_BIS
 
 config BT_BUF_ACL_RX_SIZE
-	int
 	default 502 if (AUDIO_DFU > 0)
 
 # HEADSET
@@ -216,10 +222,13 @@ config BT_DEVICE_APPEARANCE
 config BT_ISO_SYNC_RECEIVER
 	default y
 
-config BT_AUDIO_BROADCAST_SINK
+config BT_BAP_BROADCAST_SINK
 	default y
 
-config BT_AUDIO_BROADCAST_SNK_STREAM_COUNT
+config BT_BAP_SCAN_DELEGATOR
+	default y
+
+config BT_BAP_BROADCAST_SNK_STREAM_COUNT
 	default 2
 
 config BT_ISO_MAX_CHAN
@@ -229,6 +238,9 @@ config BT_SMP
 	default y
 
 config BT_PAC_SNK
+	default y
+
+config BT_AUDIO_RX
 	default y
 
 endif # AUDIO_DEV = 1 (HEADSET)
@@ -246,17 +258,20 @@ config BT_DEVICE_APPEARANCE
 config BT_ISO_BROADCASTER
 	default y
 
-config BT_AUDIO_BROADCAST_SOURCE
+config BT_BAP_BROADCAST_SOURCE
 	default y
 
 config BT_ISO_TX_BUF_COUNT
 	default 2
 
-config BT_AUDIO_BROADCAST_SRC_STREAM_COUNT
+config BT_BAP_BROADCAST_SRC_STREAM_COUNT
 	default 2
 
 config BT_ISO_MAX_CHAN
 	default 2
+
+config BT_AUDIO_TX
+	default y
 
 endif # AUDIO_DEV = 2 (GATEWAY)
 

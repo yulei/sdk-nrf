@@ -44,8 +44,8 @@ IPv6 network support
 The development kits for this sample offer the following IPv6 network support for Matter:
 
 * Matter over Thread is supported for ``nrf52840dk_nrf52840``, ``nrf5340dk_nrf5340_cpuapp``, and ``nrf21540dk_nrf52840``.
-* Matter over Wi-Fi is supported for ``nrf5340dk_nrf5340_cpuapp`` with the ``nrf7002_ek`` shield attached or for ``nrf7002dk_nrf5340_cpuapp``.
-* :ref:`Switching of Matter over Thread and Matter over Wi-Fi <matter_lock_sample_wifi_thread_switching>` is supported for ``nrf5340dk_nrf5340_cpuapp`` with the ``nrf7002_ek`` shield attached, using the ``thread_wifi_switched`` build type.
+* Matter over Wi-Fi is supported for ``nrf5340dk_nrf5340_cpuapp`` with the ``nrf7002ek`` shield attached or for ``nrf7002dk_nrf5340_cpuapp``.
+* :ref:`Switching of Matter over Thread and Matter over Wi-Fi <matter_lock_sample_wifi_thread_switching>` is supported for ``nrf5340dk_nrf5340_cpuapp`` with the ``nrf7002ek`` shield attached, using the ``thread_wifi_switched`` build type.
 
 Overview
 ********
@@ -146,7 +146,7 @@ Other build types are covered by dedicated files with the build type added as a 
 For example, the ``release`` build type file name is :file:`prj_release.conf`.
 If a board has other configuration files, for example associated with partition layout or child image configuration, these follow the same pattern.
 
-.. include:: /getting_started/modifying.rst
+.. include:: /config_and_build/modifying.rst
    :start-after: build_types_overview_start
    :end-before: build_types_overview_end
 
@@ -220,6 +220,10 @@ Enabling Matter Bluetooth LE with Nordic UART Service
 =====================================================
 
 You can enable the :ref:`matter_lock_sample_ble_nus` feature by setting the :kconfig:option:`CONFIG_CHIP_NUS` Kconfig option to ``y``.
+
+.. note::
+   This sample supports one Bluetooth LE connection at a time.
+   Matter commissioning, DFU, and NUS over Bluetooth LE must be run separately.
 
 The door lock's Bluetooth LE service extension with NUS requires a secure connection with a smartphone, which is established using a security PIN code.
 The PIN code is different depending on the build type:
@@ -321,14 +325,14 @@ Before you start testing the application, you can select one of the `Matter door
 Selecting a build type in |VSC|
 -------------------------------
 
-.. include:: /getting_started/modifying.rst
+.. include:: /config_and_build/modifying.rst
    :start-after: build_types_selection_vsc_start
    :end-before: build_types_selection_vsc_end
 
 Selecting a build type from command line
 ----------------------------------------
 
-.. include:: /getting_started/modifying.rst
+.. include:: /config_and_build/modifying.rst
    :start-after: build_types_selection_cmd_start
    :end-before: For example, you can replace the
 
@@ -398,6 +402,9 @@ Remote control allows you to control the Matter door lock device from a Thread o
 Commissioning the device
 ------------------------
 
+.. note::
+   Before starting the commissioning to Matter procedure, ensure that there is no other Bluetooth LE connection established with the device.
+
 .. matter_door_lock_sample_commissioning_start
 
 To commission the device, go to the :ref:`ug_matter_gs_testing` page and complete the steps for the Matter network environment and the Matter controller you want to use.
@@ -435,6 +442,8 @@ For this sample, you can use one of the following :ref:`onboarding information f
        - MT:8IXS142C00KA0648G00
        - 34970112332
 
+|matter_cd_info_note_for_samples|
+
 Upgrading the device firmware
 =============================
 
@@ -454,7 +463,7 @@ To test this feature, complete the following steps:
 
    .. code-block:: console
 
-      west build -b nrf5340dk_nrf5340_cpuapp -- -DCONF_FILE=prj_thread_wifi_switched.conf -DSHIELD=nrf7002_ek -Dhci_rpmsg_SHIELD=nrf7002_ek_coex -DCONFIG_CHIP_WIFI=n
+      west build -b nrf5340dk_nrf5340_cpuapp -- -DCONF_FILE=prj_thread_wifi_switched.conf -DSHIELD=nrf7002ek -Dhci_rpmsg_SHIELD=nrf7002ek_coex -DCONFIG_CHIP_WIFI=n
 
 #. Program the application to the kit using the following command:
 
@@ -478,7 +487,7 @@ To test this feature, complete the following steps:
 
    .. code-block:: console
 
-      west build -b nrf5340dk_nrf5340_cpuapp -p always -- -DCONF_FILE=prj_thread_wifi_switched.conf -DSHIELD=nrf7002_ek -Dhci_rpmsg_SHIELD=nrf7002_ek_coex
+      west build -b nrf5340dk_nrf5340_cpuapp -p always -- -DCONF_FILE=prj_thread_wifi_switched.conf -DSHIELD=nrf7002ek -Dhci_rpmsg_SHIELD=nrf7002ek_coex
 
 #. Program the application to another partition of the external flash using the following command:
 
@@ -515,14 +524,14 @@ Complete the following steps to generate the Matter OTA combined image file:
 
    .. code-block:: console
 
-      west build -b nrf5340dk_nrf5340_cpuapp -d build_thread -- -DCONF_FILE=prj_thread_wifi_switched.conf -DSHIELD=nrf7002_ek -Dhci_rpmsg_SHIELD=nrf7002_ek_coex -DCONFIG_CHIP_WIFI=n
+      west build -b nrf5340dk_nrf5340_cpuapp -d build_thread -- -DCONF_FILE=prj_thread_wifi_switched.conf -DSHIELD=nrf7002ek -Dhci_rpmsg_SHIELD=nrf7002ek_coex -DCONFIG_CHIP_WIFI=n
 
    This command creates the *build_thread* directory, where the Matter over Thread application is stored.
 #. Build the door lock application for Matter over Wi-Fi by running the following command:
 
    .. code-block:: console
 
-      west build -b nrf5340dk_nrf5340_cpuapp -d build_wifi -- -DCONF_FILE=prj_thread_wifi_switched.conf -DSHIELD=nrf7002_ek -Dhci_rpmsg_SHIELD=nrf7002_ek_coex
+      west build -b nrf5340dk_nrf5340_cpuapp -d build_wifi -- -DCONF_FILE=prj_thread_wifi_switched.conf -DSHIELD=nrf7002ek -Dhci_rpmsg_SHIELD=nrf7002ek_coex
 
    This command creates the *build_wifi* directory, where the Matter over Wi-Fi application is stored.
 #. Combine Matter OTA image files generated for both variants by running the ``combine_ota_images.py`` script in the sample directory by running the following command (with ``<output_directory>`` changed to the directory name of your choice):
@@ -578,6 +587,9 @@ To test the :ref:`matter_lock_sample_ble_nus` feature, complete the following st
 #. Tap on the generated macros and observe the **LED 2** on the DK.
 
 The Bluetooth LE connection between a phone and the DK will be suspended when the commissioning to the Matter network is in progress or there is an active session of SMP DFU.
+
+To read the current door lock state from the device, read the Bluetooth LE RX characteristic.
+The new lock state is updated after changing the state from any of the following sources: NUS, buttons, Matter stack.
 
 Dependencies
 ************

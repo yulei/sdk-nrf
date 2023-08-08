@@ -16,10 +16,11 @@ You can also run them on different hardware like a generic development kit, but 
    :caption: Subpages:
 
    ../../applications/connectivity_bridge/README
+   ../../applications/matter_bridge/README
    ../../applications/asset_tracker_v2/README
    ../../applications/serial_lte_modem/README
    ../../applications/nrf_desktop/README
-   ../../applications/nrf5340_audio/README
+   ../../applications/nrf5340_audio/doc/index
    ../../applications/machine_learning/README
    ../../applications/matter_weather_station/README
    ../../applications/zigbee_weather_station/README

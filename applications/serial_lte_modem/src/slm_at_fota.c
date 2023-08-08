@@ -3,91 +3,49 @@
  *
  * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
-#include <zephyr/logging/log.h>
-
 #include <stdint.h>
-#include <zephyr/kernel.h>
 #include <stdio.h>
+#include <modem/nrf_modem_lib.h>
 #include <nrf_modem_delta_dfu.h>
-#include <zephyr/dfu/mcuboot.h>
+#include <zephyr/kernel.h>
+#include <zephyr/logging/log.h>
 #include <zephyr/net/tls_credentials.h>
 #include <zephyr/net/http/parser_url.h>
 #include <net/fota_download.h>
 #include "slm_util.h"
+#include "slm_settings.h"
 #include "slm_at_host.h"
 #include "slm_at_fota.h"
 #include "pm_config.h"
 
 LOG_MODULE_REGISTER(slm_fota, CONFIG_SLM_LOG_LEVEL);
 
-/* file_uri: scheme://hostname[:port]path */
-#define FILE_URI_MAX	256
-#define SCHEMA_HTTP	"http"
+/* file_uri: scheme://hostname[:port]path[?parameters] */
+#define FILE_URI_MAX	CONFIG_DOWNLOAD_CLIENT_MAX_FILENAME_SIZE
+#define SCHEMA_HTTP     "http"
 #define SCHEMA_HTTPS	"https"
-#define URI_HOST_MAX	64
+#define URI_HOST_MAX	CONFIG_DOWNLOAD_CLIENT_MAX_HOSTNAME_SIZE
+#define URI_SCHEMA_MAX	8
+#define ERASE_WAIT_TIME 20
+#define ERASE_POLL_TIME 2
 
 /* Some features need fota_download update */
 #define FOTA_FUTURE_FEATURE	0
 
 enum slm_fota_operation {
-	SLM_FOTA_STOP,
-	SLM_FOTA_START_APP,
-	SLM_FOTA_START_MFW,
-	SLM_FOTA_START_BL,
-	SLM_FOTA_PAUSE_RESUME,
-	SLM_FOTA_APP_READ = 6,
-	SLM_FOTA_MFW_READ,
-	SLM_FOTA_ERASE_APP,
-	SLM_FOTA_ERASE_MFW
+	SLM_FOTA_STOP = 0,
+	SLM_FOTA_START_APP = 1,
+	SLM_FOTA_START_MFW = 2,
+	SLM_FOTA_PAUSE_RESUME = 4,
+	SLM_FOTA_MFW_READ = 7,
+	SLM_FOTA_ERASE_MFW = 9
 };
 
-static char path[SLM_MAX_URL];
+static char path[FILE_URI_MAX];
 static char hostname[URI_HOST_MAX];
-
-/* global functions defined in different files */
-int slm_setting_fota_init(void);
-int slm_setting_fota_save(void);
 
 /* global variable defined in different files */
 extern struct at_param_list at_param_list;
-extern uint8_t fota_type;
-extern uint8_t fota_stage;
-extern uint8_t fota_status;
-extern int32_t fota_info;
-
-static int do_fota_erase_app(void)
-{
-	int ret;
-
-	LOG_INF("Erasing mcuboot secondary");
-
-	ret = boot_erase_img_bank(PM_MCUBOOT_SECONDARY_ID);
-	if (ret) {
-		LOG_ERR("boot_erase_img_bank error: %d", ret);
-	} else {
-		LOG_INF("Erase completed");
-	}
-
-	return ret;
-}
-
-static void do_fota_app_read(uint8_t area_id)
-{
-	int err;
-	struct mcuboot_img_header header;
-
-	err = boot_read_bank_header(area_id, &header, sizeof(header));
-	if (err) {
-		LOG_WRN("failed in area %d banker header: %d", area_id, err);
-		return;
-	}
-
-	rsp_send("\r\n#XFOTA: %d,%d,%d,\"%d.%d.%d+%d\"\r\n", area_id,
-		header.mcuboot_version,
-		header.h.v1.image_size,
-		header.h.v1.sem_ver.major, header.h.v1.sem_ver.minor,
-		header.h.v1.sem_ver.revision, header.h.v1.sem_ver.build_num);
-}
 
 static int do_fota_mfw_read(void)
 {
@@ -116,30 +74,35 @@ static int do_fota_erase_mfw(void)
 {
 	int err;
 	size_t offset = 0;
+	bool in_progress = false;
 
 	err = nrf_modem_delta_dfu_offset(&offset);
 	if (err) {
-		LOG_ERR("failed in delta dfu offset: %d", err);
-		return err;
-	}
-	if (offset == 0) {
-		/* no need of erasing */
-		return 0;
-	}
-	err = nrf_modem_delta_dfu_erase();
-	if (err) {
-		LOG_ERR("failed in delta dfu erase: %d", err);
-		return err;
+		if (err == NRF_MODEM_DELTA_DFU_ERASE_PENDING) {
+			in_progress = true;
+		} else {
+			LOG_ERR("failed in delta dfu offset: %d", err);
+			return err;
+		}
 	}
 
-	/* Based on measurement, erasing takes about 10 seconds */
-	#define WAIT_TIME 10
-	#define POLL_TIME 2
+	if (offset != NRF_MODEM_DELTA_DFU_OFFSET_DIRTY && !in_progress) {
+		/* No need to erase. */
+		return 0;
+	}
+
+	if (!in_progress) {
+		err = nrf_modem_delta_dfu_erase();
+		if (err) {
+			LOG_ERR("failed in delta dfu erase: %d", err);
+			return err;
+		}
+	}
 
 	int time_elapsed = 0;
 
 	do {
-		k_sleep(K_SECONDS(POLL_TIME));
+		k_sleep(K_SECONDS(ERASE_POLL_TIME));
 		err = nrf_modem_delta_dfu_offset(&offset);
 		if (err != 0 && err != NRF_MODEM_DELTA_DFU_ERASE_PENDING) {
 			LOG_ERR("failed in delta dfu offset: %d", err);
@@ -149,10 +112,10 @@ static int do_fota_erase_mfw(void)
 			LOG_INF("Erase completed");
 			break;
 		}
-		time_elapsed += POLL_TIME;
-	} while (time_elapsed < WAIT_TIME);
+		time_elapsed += ERASE_POLL_TIME;
+	} while (time_elapsed < ERASE_WAIT_TIME);
 
-	if (time_elapsed >= WAIT_TIME) {
+	if (time_elapsed >= ERASE_WAIT_TIME) {
 		LOG_WRN("Erase timeout");
 		return -ETIME;
 	}
@@ -168,7 +131,7 @@ static int do_fota_start(int op, const char *file_uri, int sec_tag,
 		/* UNINIT checker fix, assumed UF_SCHEMA existence */
 		.field_set = 0
 	};
-	char schema[8];
+	char schema[URI_SCHEMA_MAX];
 
 	http_parser_url_init(&parser);
 	ret = http_parser_parse_url(file_uri, strlen(file_uri), 0, &parser);
@@ -176,54 +139,56 @@ static int do_fota_start(int op, const char *file_uri, int sec_tag,
 		LOG_ERR("Parse URL error");
 		return -EINVAL;
 	}
+
+	/* Schema stores http/https information */
 	memset(schema, 0x00, 8);
 	if (parser.field_set & (1 << UF_SCHEMA)) {
-		strncpy(schema, file_uri + parser.field_data[UF_SCHEMA].off,
-			parser.field_data[UF_SCHEMA].len);
+		if (parser.field_data[UF_SCHEMA].len < URI_SCHEMA_MAX) {
+			strncpy(schema, file_uri + parser.field_data[UF_SCHEMA].off,
+				parser.field_data[UF_SCHEMA].len);
+		} else {
+			LOG_ERR("URL schema length %d too long, exceeds the max length of %d",
+				parser.field_data[UF_SCHEMA].len, URI_SCHEMA_MAX);
+			return -ENOMEM;
+		}
 	} else {
 		LOG_ERR("Parse schema error");
 		return -EINVAL;
 	}
-	memset(path, 0x00, SLM_MAX_URL);
+
+	/* Path includes folder and file information */
+	/* This stores also the query data after folder and file description */
+	memset(path, 0x00, FILE_URI_MAX);
 	if (parser.field_set & (1 << UF_PATH)) {
 		/* Remove the leading '/' as some HTTP servers don't like it */
-		strncpy(path, file_uri + parser.field_data[UF_PATH].off + 1,
-			parser.field_data[UF_PATH].len - 1);
+		if ((strlen(file_uri) - parser.field_data[UF_PATH].off + 1) < FILE_URI_MAX) {
+			strncpy(path, file_uri + parser.field_data[UF_PATH].off + 1,
+				strlen(file_uri) - parser.field_data[UF_PATH].off - 1);
+		} else {
+			LOG_ERR("URL path length %d too long, exceeds the max length of %d",
+					strlen(file_uri) - parser.field_data[UF_PATH].off - 1,
+					FILE_URI_MAX);
+			return -ENOMEM;
+		}
 	} else {
 		LOG_ERR("Parse path error");
 		return -EINVAL;
 	}
 
-#if defined(CONFIG_SECURE_BOOT)
-	/* When download MCUBOOT bootloader, S0 and S1 must be separated by "+"
-	 * Convert "+" to " " SPACE as this is required in fota_download
-	 */
-	char *delimiter = strstr(path, "+");
-
-	if (delimiter == NULL) {
-		LOG_ERR("Invalid S0/S1 string");
+	/* Stores everything before path (schema, hostname, port) */
+	memset(hostname, 0x00, URI_HOST_MAX);
+	if (parser.field_set & (1 << UF_HOST)) {
+		if (parser.field_data[UF_PATH].off < URI_HOST_MAX) {
+			strncpy(hostname, file_uri, parser.field_data[UF_PATH].off);
+		} else {
+			LOG_ERR("URL host name length %d too long, exceeds the max length of %d",
+					parser.field_data[UF_PATH].off, URI_HOST_MAX);
+			return -ENOMEM;
+		}
+	} else {
+		LOG_ERR("Parse host error");
 		return -EINVAL;
 	}
-
-	*delimiter = ' ';
-
-	/* When download MCUBOOT bootloader, S0 and S1 must be two full filepath
-	 * as this is required in fota_download
-	 */
-	char *tmp = strrchr(path, '/');
-
-	if (tmp != NULL) {
-		char path2[SLM_MAX_URL] = { 0 };
-
-		memcpy(path2, path, tmp - path + 1);
-		tmp = delimiter + 1;
-		strcat(path2, tmp);
-		strcpy(tmp, path2);
-	}
-#endif
-
-	memset(hostname, 0x00, URI_HOST_MAX);
-	strncpy(hostname, file_uri, strlen(file_uri) - parser.field_data[UF_PATH].len);
 
 	/* start HTTP(S) FOTA */
 	if (slm_util_cmd_casecmp(schema, SCHEMA_HTTPS)) {
@@ -260,32 +225,34 @@ static void fota_dl_handler(const struct fota_download_evt *evt)
 	case FOTA_DOWNLOAD_EVT_FINISHED:
 		fota_stage = FOTA_STAGE_ACTIVATE;
 		fota_info = 0;
-		rsp_send("\r\n#XFOTA: %d,%d\r\n", fota_stage, fota_status);
 		/* Save, in case reboot by reset */
-		slm_setting_fota_save();
+		slm_settings_fota_save();
+		rsp_send("\r\n#XFOTA: %d,%d\r\n", fota_stage, fota_status);
 		break;
 	case FOTA_DOWNLOAD_EVT_ERASE_PENDING:
 		fota_stage = FOTA_STAGE_DOWNLOAD_ERASE_PENDING;
 		rsp_send("\r\n#XFOTA: %d,%d\r\n", fota_stage, fota_status);
 		break;
 	case FOTA_DOWNLOAD_EVT_ERASE_DONE:
-		fota_stage = FOTA_STAGE_DOWNLOAD_ERASED;
-		rsp_send("\r\n#XFOTA: %d,%d\r\n", fota_stage, fota_status);
+		rsp_send("\r\n#XFOTA: %d,%d\r\n", FOTA_STAGE_DOWNLOAD_ERASED, fota_status);
+		/* Back to init now that the erasure is complete so that potential pre-start
+		 * error codes are printed with the same stage than if there had been no erasure.
+		 */
+		fota_stage = FOTA_STAGE_INIT;
 		break;
 	case FOTA_DOWNLOAD_EVT_ERROR:
 		fota_status = FOTA_STATUS_ERROR;
 		fota_info = evt->cause;
 		rsp_send("\r\n#XFOTA: %d,%d,%d\r\n", fota_stage, fota_status, fota_info);
 		/* FOTA session terminated */
-		slm_setting_fota_init();
+		slm_settings_fota_init();
 		break;
-
 	case FOTA_DOWNLOAD_EVT_CANCELLED:
 		fota_status = FOTA_STATUS_CANCELLED;
 		fota_info = 0;
 		rsp_send("\r\n#XFOTA: %d,%d\r\n", fota_stage, fota_status);
 		/* FOTA session terminated */
-		slm_setting_fota_init();
+		slm_settings_fota_init();
 		break;
 
 	default:
@@ -293,8 +260,8 @@ static void fota_dl_handler(const struct fota_download_evt *evt)
 	}
 }
 
-/**@brief handle AT#XFOTA commands
- *  AT#XFOTA=<op>,<file_uri>[,<sec_tag>[,<pdn_id>]]
+/** @brief Handles AT#XFOTA commands.
+ *  AT#XFOTA=<op>[,<file_url>[,<sec_tag>[,<pdn_id>]]]
  *  AT#XFOTA? TEST command not supported
  *  AT#XFOTA=?
  */
@@ -314,12 +281,7 @@ int handle_at_fota(enum at_cmd_type cmd_type)
 		}
 		if (op == SLM_FOTA_STOP) {
 			err = fota_download_cancel();
-#if defined(CONFIG_SECURE_BOOT)
-		} else if (op == SLM_FOTA_START_APP || op == SLM_FOTA_START_MFW ||
-			   op == SLM_FOTA_START_BL) {
-#else
 		} else if (op == SLM_FOTA_START_APP || op == SLM_FOTA_START_MFW) {
-#endif
 			char uri[FILE_URI_MAX];
 			uint16_t pdn_id;
 			int size = FILE_URI_MAX;
@@ -333,7 +295,7 @@ int handle_at_fota(enum at_cmd_type cmd_type)
 			if (at_params_valid_count_get(&at_param_list) > 3) {
 				at_params_unsigned_int_get(&at_param_list, 3, &sec_tag);
 			}
-			if (op == SLM_FOTA_START_APP || op == SLM_FOTA_START_BL) {
+			if (op == SLM_FOTA_START_APP) {
 				type = DFU_TARGET_IMAGE_TYPE_MCUBOOT;
 			} else {
 				type = DFU_TARGET_IMAGE_TYPE_MODEM_DELTA;
@@ -344,16 +306,6 @@ int handle_at_fota(enum at_cmd_type cmd_type)
 			} else {
 				err = do_fota_start(op, uri, sec_tag, 0, type);
 			}
-#if defined(CONFIG_SECURE_BOOT)
-			if (op == SLM_FOTA_START_BL) {
-				bool s0_active;
-
-				/* Override fota_type with SLM specified type */
-				fota_type = SLM_DFU_TARGET_IMAGE_TYPE_BL1;
-				(void)fota_download_s0_active_get(&s0_active);
-				LOG_INF("orig s0_active %d", s0_active);
-			}
-#endif
 #if FOTA_FUTURE_FEATURE
 		} else if (op == SLM_FOTA_PAUSE_RESUME) {
 			if (paused) {
@@ -365,14 +317,8 @@ int handle_at_fota(enum at_cmd_type cmd_type)
 			}
 			err = 0;
 #endif
-		} else if (op == SLM_FOTA_APP_READ) {
-			do_fota_app_read(PM_MCUBOOT_PRIMARY_ID);
-			do_fota_app_read(PM_MCUBOOT_SECONDARY_ID);
-			err = 0;
 		} else if (op == SLM_FOTA_MFW_READ) {
 			err = do_fota_mfw_read();
-		} else if (op == SLM_FOTA_ERASE_APP) {
-			err = do_fota_erase_app();
 		} else if (op == SLM_FOTA_ERASE_MFW) {
 			err = do_fota_erase_mfw();
 		} else {
@@ -380,17 +326,9 @@ int handle_at_fota(enum at_cmd_type cmd_type)
 		} break;
 
 	case AT_CMD_TYPE_TEST_COMMAND:
-#if defined(CONFIG_SECURE_BOOT)
-		rsp_send("\r\n#XFOTA: (%d,%d,%d,%d,%d,%d,%d,%d),<file_uri>,<sec_tag>,<apn>\r\n",
-			SLM_FOTA_STOP, SLM_FOTA_START_APP, SLM_FOTA_START_MFW, SLM_FOTA_START_BL,
-			SLM_FOTA_APP_READ, SLM_FOTA_MFW_READ,
-			SLM_FOTA_ERASE_APP, SLM_FOTA_ERASE_MFW);
-#else
-		rsp_send("\r\n#XFOTA: (%d,%d,%d,%d,%d,%d,%d),<file_uri>,<sec_tag>,<apn>\r\n",
+		rsp_send("\r\n#XFOTA: (%d,%d,%d,%d,%d)[,<file_url>[,<sec_tag>[,<pdn_id>]]]\r\n",
 			SLM_FOTA_STOP, SLM_FOTA_START_APP, SLM_FOTA_START_MFW,
-			SLM_FOTA_APP_READ, SLM_FOTA_MFW_READ,
-			SLM_FOTA_ERASE_APP, SLM_FOTA_ERASE_MFW);
-#endif
+			SLM_FOTA_MFW_READ, SLM_FOTA_ERASE_MFW);
 		err = 0;
 		break;
 
@@ -401,22 +339,16 @@ int handle_at_fota(enum at_cmd_type cmd_type)
 	return err;
 }
 
-/**@brief API to initialize FOTA AT commands handler
- */
 int slm_at_fota_init(void)
 {
 	return fota_download_init(fota_dl_handler);
 }
 
-/**@brief API to uninitialize FOTA AT commands handler
- */
 int slm_at_fota_uninit(void)
 {
 	return 0;
 }
 
-/**@brief API to handle post-FOTA processing
- */
 void slm_fota_post_process(void)
 {
 	LOG_DBG("FOTA result %d,%d,%d", fota_stage, fota_status, fota_info);
@@ -428,8 +360,42 @@ void slm_fota_post_process(void)
 			rsp_send("\r\n#XFOTA: %d,%d,%d\r\n", fota_stage, fota_status,
 				fota_info);
 		}
+
+		/* This condition might not be true in case of
+		 * NRF_MODEM_DFU_RESULT_VOLTAGE_LOW. In that case we want to remember
+		 * that a firmware update is still ongoing when a reset is next done.
+		 */
+		if (fota_stage != FOTA_STAGE_ACTIVATE) {
+			/* FOTA session completed */
+			slm_settings_fota_init();
+		}
+		slm_settings_fota_save();
 	}
-	/* FOTA session completed */
-	slm_setting_fota_init();
-	slm_setting_fota_save();
+}
+
+void slm_finish_modem_fota(int modem_lib_init_ret)
+{
+	if (handle_nrf_modem_lib_init_ret(modem_lib_init_ret)) {
+		char buf[40];
+
+		LOG_INF("Re-initializing the modem due to"
+				" ongoing modem firmware update.");
+
+		/* The second init needs to be done regardless of the return value.
+		 * Refer to the below link for more information on the procedure.
+		 * https://developer.nordicsemi.com/nRF_Connect_SDK/doc/latest/nrfxlib/nrf_modem/doc/delta_dfu.html#reinitializing-the-modem-to-run-the-new-firmware
+		 */
+		modem_lib_init_ret = nrf_modem_lib_init();
+		handle_nrf_modem_lib_init_ret(modem_lib_init_ret);
+
+		nrf_modem_at_cmd(buf, sizeof(buf), "%s", "AT%SHORTSWVER");
+		if (strstr(buf, "1.3.4") || strstr(buf, "1.3.5")) {
+			/* Those versions suffer from a bug that provokes UICC failure (+CEREG: 90)
+			 * after the update, preventing the modem from registering to the network.
+			 */
+			LOG_INF("Applying the workaround to a modem firmware update issue...");
+			nrf_modem_lib_shutdown();
+			nrf_modem_lib_init();
+		}
+	}
 }

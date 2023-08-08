@@ -51,42 +51,49 @@ config DESKTOP_MOTION_SENSOR_TYPE
 	default "pmw3360" if DESKTOP_MOTION_SENSOR_PMW3360_ENABLE
 	default "paw3212" if DESKTOP_MOTION_SENSOR_PAW3212_ENABLE
 
-config DESKTOP_MOTION_UP_KEY_ID
+config DESKTOP_MOTION_BUTTONS_UP_KEY_ID
 	int "Up key ID"
 	depends on DESKTOP_MOTION_BUTTONS_ENABLE
 	default 0
 	help
 	  ID of key use for generating up motion.
 
-config DESKTOP_MOTION_DOWN_KEY_ID
+config DESKTOP_MOTION_BUTTONS_DOWN_KEY_ID
 	int "Down key ID"
 	depends on DESKTOP_MOTION_BUTTONS_ENABLE
 	default 0
 	help
 	  ID of key use for generating down motion.
 
-config DESKTOP_MOTION_LEFT_KEY_ID
+config DESKTOP_MOTION_BUTTONS_LEFT_KEY_ID
 	int "Left key ID"
 	depends on DESKTOP_MOTION_BUTTONS_ENABLE
 	default 0
 	help
 	  ID of key use for generating left motion.
 
-config DESKTOP_MOTION_RIGHT_KEY_ID
+config DESKTOP_MOTION_BUTTONS_RIGHT_KEY_ID
 	int "Right key ID"
 	depends on DESKTOP_MOTION_BUTTONS_ENABLE
 	default 0
 	help
 	  ID of key use for generating right motion.
 
+config DESKTOP_MOTION_BUTTONS_MOTION_PER_SEC
+	int "Motion generated per second during a button press"
+	depends on DESKTOP_MOTION_BUTTONS_ENABLE
+	range 1 100000
+	default 1000
+
 config DESKTOP_MOTION_SIMULATED_EDGE_TIME
-	int "Time for transition between two points in a trajectory [ms]"
+	int "Time for transition between two points in a trajectory [us]"
 	depends on DESKTOP_MOTION_SIMULATED_ENABLE
-	range 8 1000000
-	default 16
+	range 8 1000000000
+	default 16384
 	help
 	  The simulated movement data will be tracing predefined path, an eight-sided polygon.
 	  Must be power of two (calculations speedup).
+	  The resolution may be limited by the precision of the system's hardware clock.
 
 config DESKTOP_MOTION_SIMULATED_SCALE_FACTOR
 	int "Scale factor for given shape"
@@ -174,6 +181,14 @@ config DESKTOP_MOTION_SENSOR_SLEEP_DISABLE_ON_USB
 	help
 	  Low power modes reduce device power consumption, but increase
 	  response time.
+
+config DESKTOP_MOTION_PM_EVENTS
+	bool "Power management events support"
+	depends on DESKTOP_MOTION_SIMULATED_ENABLE || DESKTOP_MOTION_SENSOR_ENABLE
+	depends on CAF_PM_EVENTS
+	default y
+	help
+	  React on power management events in motion module.
 
 if !DESKTOP_MOTION_NONE
 module = DESKTOP_MOTION

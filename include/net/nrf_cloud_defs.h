@@ -9,6 +9,10 @@
 
 #include <zephyr/toolchain/common.h>
 
+/** @defgroup nrf_cloud_defs nRF Cloud common defines
+ * @{
+ */
+
 /* Message schemas defined by nRF Cloud:
  * https://github.com/nRFCloud/application-protocols/tree/v1/schemas
  */
@@ -30,6 +34,8 @@
 #define NRF_CLOUD_JSON_APPID_VAL_LIGHT		"LIGHT"
 #define NRF_CLOUD_JSON_APPID_VAL_MODEM		"MODEM"
 #define NRF_CLOUD_JSON_APPID_VAL_ALERT		"ALERT"
+#define NRF_CLOUD_JSON_APPID_VAL_LOG		"LOG"
+#define NRF_CLOUD_JSON_APPID_VAL_DICTIONARY_LOG	"DICTLOG"
 
 /* Message type */
 #define NRF_CLOUD_JSON_MSG_TYPE_KEY		"messageType"
@@ -114,6 +120,8 @@
 /* REST */
 #define NRF_CLOUD_REST_ERROR_CODE_KEY		"code"
 #define NRF_CLOUD_REST_ERROR_MSG_KEY		"message"
+#define NRF_CLOUD_REST_TOPIC_KEY		"topic"
+#define NRF_CLOUD_REST_MSG_KEY			"message"
 
 /* GNSS - PVT */
 #define NRF_CLOUD_JSON_GNSS_PVT_KEY_LAT		"lat"
@@ -128,11 +136,18 @@
 #define NRF_CLOUD_DEVICE_JSON_KEY_SIM_INF	"simInfo"
 #define NRF_CLOUD_DEVICE_JSON_KEY_DEV_INF	"deviceInfo"
 
-/* ALERTS */
+/* Alerts */
 #define NRF_CLOUD_JSON_ALERT_SEQUENCE		"seq"
 #define NRF_CLOUD_JSON_ALERT_DESCRIPTION	"desc"
 #define NRF_CLOUD_JSON_ALERT_TYPE		"type"
 #define NRF_CLOUD_JSON_ALERT_VALUE		"value"
+
+/* Logs */
+#define NRF_CLOUD_JSON_LOG_KEY_SEQUENCE		"seq"
+#define NRF_CLOUD_JSON_LOG_KEY_DOMAIN		"dom"
+#define NRF_CLOUD_JSON_LOG_KEY_SOURCE		"src"
+#define NRF_CLOUD_JSON_LOG_KEY_LEVEL		"lvl"
+#define NRF_CLOUD_JSON_LOG_KEY_MESSAGE		"msg"
 
 /* Settings Module */
 /** nRF Cloud's string identifier for persistent settings */
@@ -171,9 +186,9 @@
 #define NRF_CLOUD_JSON_KEY_APP_VER		"appVersion"
 #define NRF_CLOUD_JSON_VAL_NOT_ASSOC		"not_associated"
 #define NRF_CLOUD_JSON_VAL_PAIRED		"paired"
-/** Current FOTA version string used in device shadow */
+/* Current FOTA version string used in device shadow */
 #define NRF_CLOUD_FOTA_VER_STR			"fota_v" STRINGIFY(NRF_CLOUD_FOTA_VER)
-/** Max length of nRF Cloud's stage/environment name */
+/* Max length of nRF Cloud's stage/environment name */
 #define NRF_CLOUD_STAGE_ID_MAX_LEN		8
 /** Max length of a tenant ID on nRF Cloud */
 #define NRF_CLOUD_TENANT_ID_MAX_LEN		64
@@ -195,5 +210,7 @@
 #define NRF_CLOUD_JSON_VAL_TOPIC_GND_FIX	"/ground_fix"
 #define NRF_CLOUD_JSON_VAL_TOPIC_RCV		"/r"
 #define NRF_CLOUD_JSON_VAL_TOPIC_WILDCARD	"/+"
+#define NRF_CLOUD_JSON_VAL_TOPIC_BIN		"/bin"
 
+/** @} */
 #endif /* NRF_CLOUD_DEFS_H__ */

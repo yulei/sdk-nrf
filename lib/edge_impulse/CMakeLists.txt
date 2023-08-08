@@ -30,9 +30,7 @@ if(NOT ${EI_URI} MATCHES "^[a-z]+://")
   endif()
 endif()
 
-
-file(GLOB_RECURSE  edge_impulse_all_headers CONFIGURE_DEPENDS "${EDGE_IMPULSE_SOURCE_DIR}/*.h")
-
+file(GLOB_RECURSE  edge_impulse_all_headers "${EDGE_IMPULSE_SOURCE_DIR}/*.h")
 
 include(ExternalProject)
 ExternalProject_Add(edge_impulse_project
@@ -62,6 +60,7 @@ ExternalProject_Add(edge_impulse_project
     BUILD_ALWAYS True
     USES_TERMINAL_BUILD True
 )
+add_dependencies(edge_impulse_project zephyr_generated_headers)
 
 # This targets remove the `edge_impulse_project-download` stamp file, which
 # causes the Edge impulse library to be fetched on each build invocation.
@@ -103,6 +102,7 @@ target_include_directories(edge_impulse INTERFACE
 target_link_libraries(edge_impulse INTERFACE ${EDGE_IMPULSE_LIBRARY})
 
 add_dependencies(edge_impulse
+                 zephyr_interface
                  edge_impulse_project
                  edge_impulse_project_download
 )

@@ -14,11 +14,14 @@
 #include <zephyr/logging/log.h>
 
 #include "zephyr_fmac_main.h"
+#include "zephyr_wifi_mgmt.h"
 #include "zephyr_wpa_supp_if.h"
 
 LOG_MODULE_DECLARE(wifi_nrf, CONFIG_WIFI_LOG_LEVEL);
 
 K_SEM_DEFINE(wait_for_event_sem, 0, 1);
+
+#define ACTION_FRAME_RESP_TIMEOUT_MS 5000
 
 static int get_wifi_nrf_auth_type(int wpa_auth_alg)
 {
@@ -136,6 +139,7 @@ void wifi_nrf_wpa_supp_event_proc_scan_done(void *if_priv,
 		vif_ctx_zep->supp_callbk_fns.scan_done(vif_ctx_zep->supp_drv_if_ctx,
 			&event);
 	}
+	k_work_cancel_delayable(&vif_ctx_zep->scan_timeout_work);
 }
 
 void wifi_nrf_wpa_supp_event_proc_scan_res(void *if_priv,
@@ -424,6 +428,8 @@ void wifi_nrf_wpa_supp_event_proc_disassoc(void *if_priv,
 	if (vif_ctx_zep->supp_drv_if_ctx && vif_ctx_zep->supp_callbk_fns.disassoc)	{
 		vif_ctx_zep->supp_callbk_fns.disassoc(vif_ctx_zep->supp_drv_if_ctx, &event);
 	}
+
+	(void) wifi_nrf_twt_teardown_flows(vif_ctx_zep, 0, NRF_WIFI_MAX_TWT_FLOWS);
 }
 
 void *wifi_nrf_wpa_supp_dev_init(void *supp_drv_if_ctx, const char *iface_name,
@@ -480,7 +486,7 @@ int wifi_nrf_wpa_supp_scan2(void *if_priv, struct wpa_driver_scan_params *params
 	rpu_ctx_zep = vif_ctx_zep->rpu_ctx_zep;
 
 	if (vif_ctx_zep->scan_in_progress) {
-		LOG_INF("%s: Scan already in progress\n", __func__);
+		LOG_ERR("%s: Scan already in progress\n", __func__);
 		ret = -EBUSY;
 		goto out;
 	}
@@ -540,6 +546,8 @@ int wifi_nrf_wpa_supp_scan2(void *if_priv, struct wpa_driver_scan_params *params
 	vif_ctx_zep->scan_type = SCAN_CONNECT;
 	vif_ctx_zep->scan_in_progress = true;
 
+	k_work_schedule(&vif_ctx_zep->scan_timeout_work, WIFI_NRF_SCAN_TIMEOUT);
+
 	ret = 0;
 out:
 	if (scan_info)
@@ -557,7 +565,7 @@ int wifi_nrf_wpa_supp_scan_abort(void *if_priv)
 	rpu_ctx_zep = vif_ctx_zep->rpu_ctx_zep;
 
 	if (!vif_ctx_zep->scan_in_progress) {
-		LOG_INF("%s:Ignore scan abort, no scan in progress", __func__);
+		LOG_ERR("%s:Ignore scan abort, no scan in progress", __func__);
 		goto out;
 	}
 
@@ -629,7 +637,7 @@ int wifi_nrf_wpa_supp_deauthenticate(void *if_priv, const char *addr, unsigned s
 		goto out;
 	}
 
-	ret = 0;
+	ret = wifi_nrf_twt_teardown_flows(vif_ctx_zep, 0, NRF_WIFI_MAX_TWT_FLOWS);
 out:
 	return ret;
 }
@@ -731,6 +739,19 @@ int wifi_nrf_wpa_supp_authenticate(void *if_priv, struct wpa_driver_auth_params 
 		auth_info.auth_type = type;
 	}
 
+	if (type == NRF_WIFI_AUTHTYPE_SHARED_KEY) {
+		size_t key_len = params->wep_key_len[params->wep_tx_keyidx];
+		struct nrf_wifi_umac_key_info *key_info = &auth_info.key_info;
+
+		key_info->cipher_suite = wpa_alg_to_cipher_suite(params->auth_alg, key_len);
+		memcpy(key_info->key.nrf_wifi_key,
+			   params->wep_key[params->wep_tx_keyidx],
+			   key_len);
+		key_info->key.nrf_wifi_key_len = key_len;
+		key_info->valid_fields |= NRF_WIFI_KEY_VALID | NRF_WIFI_KEY_IDX_VALID |
+			NRF_WIFI_CIPHER_SUITE_VALID;
+	}
+
 	if (params->local_state_change) {
 		auth_info.nrf_wifi_flags |= NRF_WIFI_CMD_AUTHENTICATE_LOCAL_STATE_CHANGE;
 	}
@@ -742,7 +763,7 @@ int wifi_nrf_wpa_supp_authenticate(void *if_priv, struct wpa_driver_auth_params 
 		count++;
 		ret = -1;
 	} else {
-		LOG_INF("%s:Authentication request sent successfully\n", __func__);
+		LOG_DBG("%s:Authentication request sent successfully\n", __func__);
 		ret = 0;
 	}
 out:
@@ -801,12 +822,16 @@ int wifi_nrf_wpa_supp_associate(void *if_priv, struct wpa_driver_associate_param
 		assoc_info.use_mfp = NRF_WIFI_MFP_REQUIRED;
 	}
 
+	if (params->bss_max_idle_period) {
+		assoc_info.bss_max_idle_time = params->bss_max_idle_period;
+	}
+
 	status = wifi_nrf_fmac_assoc(rpu_ctx_zep->rpu_ctx, vif_ctx_zep->vif_idx, &assoc_info);
 
 	if (status != WIFI_NRF_STATUS_SUCCESS) {
 		LOG_ERR("%s: MLME command failed (assoc)\n", __func__);
 	} else {
-		LOG_INF("%s: Association request sent successfully\n", __func__);
+		LOG_DBG("%s: Association request sent successfully\n", __func__);
 		ret = 0;
 	}
 
@@ -945,6 +970,11 @@ int wifi_nrf_wpa_set_supp_port(void *if_priv, int authorized, char *bssid)
 	vif_ctx_zep = if_priv;
 	rpu_ctx_zep = vif_ctx_zep->rpu_ctx_zep;
 
+	if (vif_ctx_zep->if_op_state != WIFI_NRF_FMAC_IF_OP_STATE_UP) {
+		LOG_DBG("%s: Interface not UP, ignoring\n", __func__);
+		return 0;
+	}
+
 	memset(&chg_sta_info, 0x0, sizeof(chg_sta_info));
 
 	memcpy(chg_sta_info.mac_addr, bssid, ETH_ALEN);
@@ -975,6 +1005,7 @@ int wifi_nrf_wpa_supp_signal_poll(void *if_priv, struct wpa_signal_info *si, uns
 	struct wifi_nrf_fmac_dev_ctx *fmac_dev_ctx = NULL;
 	enum wifi_nrf_status ret = WIFI_NRF_STATUS_FAIL;
 	int sem_ret;
+	int rssi_record_elapsed_time_ms = 0;
 
 	if (!if_priv || !si || !bssid) {
 		LOG_ERR("%s: Invalid params\n", __func__);
@@ -986,22 +1017,30 @@ int wifi_nrf_wpa_supp_signal_poll(void *if_priv, struct wpa_signal_info *si, uns
 	fmac_dev_ctx = rpu_ctx_zep->rpu_ctx;
 
 	vif_ctx_zep->signal_info = si;
-	ret = wifi_nrf_fmac_get_station(rpu_ctx_zep->rpu_ctx, vif_ctx_zep->vif_idx, bssid);
-	if (ret != WIFI_NRF_STATUS_SUCCESS) {
-		LOG_ERR("%s: Failed to get station info\n", __func__);
-		goto out;
-	}
 
-	sem_ret = k_sem_take(&wait_for_event_sem, K_MSEC(RPU_RESP_EVENT_TIMEOUT));
-	if (sem_ret) {
-		LOG_ERR("%s: Failed to get station info, ret = %d\n", __func__, sem_ret);
-		ret = WIFI_NRF_STATUS_FAIL;
-		goto out;
+	rssi_record_elapsed_time_ms = wifi_nrf_osal_time_elapsed_us(fmac_dev_ctx->fpriv->opriv,
+						    vif_ctx_zep->rssi_record_timestamp_us) / 1000;
+
+	if (rssi_record_elapsed_time_ms > CONFIG_NRF700X_RSSI_STALE_TIMEOUT_MS) {
+		ret = wifi_nrf_fmac_get_station(rpu_ctx_zep->rpu_ctx, vif_ctx_zep->vif_idx, bssid);
+		if (ret != WIFI_NRF_STATUS_SUCCESS) {
+			LOG_ERR("%s: Failed to send get station info command\n", __func__);
+			goto out;
+		}
+
+		sem_ret = k_sem_take(&wait_for_event_sem, K_MSEC(RPU_RESP_EVENT_TIMEOUT));
+		if (sem_ret) {
+			LOG_ERR("%s: Failed to get station info, ret = %d\n", __func__, sem_ret);
+			ret = WIFI_NRF_STATUS_FAIL;
+			goto out;
+		}
+	} else {
+		si->current_signal = (int)vif_ctx_zep->rssi;
 	}
 
 	ret = wifi_nrf_fmac_get_interface(rpu_ctx_zep->rpu_ctx, vif_ctx_zep->vif_idx);
 	if (ret != WIFI_NRF_STATUS_SUCCESS) {
-		LOG_ERR("%s: Failed to get interface info\n", __func__);
+		LOG_ERR("%s: Failed to send get interface info command\n", __func__);
 		goto out;
 	}
 
@@ -1243,6 +1282,10 @@ int wifi_nrf_nl80211_send_mlme(void *if_priv, const u8 *data,
 	 * to 0 always.
 	 */
 	if (wait_time || !noack) {
+		if (!noack && !wait_time) {
+			wait_time = ACTION_FRAME_RESP_TIMEOUT_MS;
+		}
+
 		while (!vif_ctx_zep->cookie_resp_received &&
 			timeout++ < wait_time) {
 			k_sleep(K_MSEC(1));
@@ -1271,6 +1314,9 @@ enum wifi_nrf_status wifi_nrf_parse_sband(
 {
 	int count;
 
+	if (event && (event->nrf_wifi_n_bitrates == 0 || event->nrf_wifi_n_channels == 0)) {
+		return WIFI_NRF_STATUS_FAIL;
+	}
 	memset(band, 0, sizeof(*band));
 
 	band->wpa_supp_n_channels = event->nrf_wifi_n_channels;
@@ -1398,7 +1444,7 @@ void wifi_nrf_wpa_supp_event_get_wiphy(void *if_priv,
 
 	for (int i = 0; i < NRF_WIFI_EVENT_GET_WIPHY_NUM_BANDS; i++) {
 		if (wifi_nrf_parse_sband(&wiphy_info->sband[i], &band) != WLAN_STATUS_SUCCESS) {
-			break;
+			continue;
 		}
 		if (vif_ctx_zep->supp_drv_if_ctx && vif_ctx_zep->supp_callbk_fns.get_wiphy_res) {
 			vif_ctx_zep->supp_callbk_fns.get_wiphy_res(vif_ctx_zep->supp_drv_if_ctx,
@@ -1581,4 +1627,63 @@ void wifi_nrf_wpa_supp_event_mac_chgd(void *if_priv)
 	if (vif_ctx_zep->supp_drv_if_ctx && vif_ctx_zep->supp_callbk_fns.mac_changed) {
 		vif_ctx_zep->supp_callbk_fns.mac_changed(vif_ctx_zep->supp_drv_if_ctx);
 	}
+
+}
+
+
+int wifi_nrf_supp_get_conn_info(void *if_priv, struct wpa_conn_info *info)
+{
+	struct wifi_nrf_vif_ctx_zep *vif_ctx_zep = NULL;
+	struct wifi_nrf_ctx_zep *rpu_ctx_zep = NULL;
+	struct wifi_nrf_fmac_dev_ctx *fmac_dev_ctx = NULL;
+	enum wifi_nrf_status ret = WIFI_NRF_STATUS_FAIL;
+	int sem_ret;
+
+	if (!if_priv || !info) {
+		LOG_ERR("%s: Invalid params\n", __func__);
+		goto out;
+	}
+
+	vif_ctx_zep = if_priv;
+	rpu_ctx_zep = vif_ctx_zep->rpu_ctx_zep;
+	fmac_dev_ctx = rpu_ctx_zep->rpu_ctx;
+
+	vif_ctx_zep->conn_info = info;
+	ret = wifi_nrf_fmac_get_conn_info(rpu_ctx_zep->rpu_ctx, vif_ctx_zep->vif_idx);
+	if (ret != WIFI_NRF_STATUS_SUCCESS) {
+		LOG_ERR("%s: Failed to get beacon info\n", __func__);
+		goto out;
+	}
+
+	sem_ret = k_sem_take(&wait_for_event_sem, K_MSEC(RPU_RESP_EVENT_TIMEOUT));
+	if (sem_ret) {
+		LOG_ERR("%s: Failed to get station info, ret = %d\n", __func__, sem_ret);
+		ret = WIFI_NRF_STATUS_FAIL;
+		goto out;
+	}
+
+out:
+	return ret;
+}
+
+
+void wifi_nrf_supp_event_proc_get_conn_info(void *if_priv,
+					   struct nrf_wifi_umac_event_conn_info *info,
+					   unsigned int event_len)
+{
+	struct wifi_nrf_vif_ctx_zep *vif_ctx_zep = NULL;
+	struct wpa_conn_info *conn_info = NULL;
+
+	if (!if_priv || !info) {
+		LOG_ERR("%s: Invalid params\n", __func__);
+		k_sem_give(&wait_for_event_sem);
+		return;
+	}
+	vif_ctx_zep = if_priv;
+	conn_info = vif_ctx_zep->conn_info;
+
+	conn_info->beacon_interval = info->beacon_interval;
+	conn_info->dtim_period = info->dtim_interval;
+	conn_info->twt_capable = info->twt_capable;
+	k_sem_give(&wait_for_event_sem);
 }

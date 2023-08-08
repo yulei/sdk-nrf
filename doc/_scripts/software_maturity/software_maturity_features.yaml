@@ -5,14 +5,22 @@ top_table:
   LTE: LTE_LINK_CONTROL
   HomeKit: HOMEKIT
   Matter: CHIP
-  Wi-Fi: WIFI && WIFI_NRF700X
+  Wi-Fi:
+    rule: WIFI && WIFI_NRF700X
+    boards_and_shields:
+      - SHIELD_NRF7002EK
+      - SHIELD_NRF7002EK_NRF7000
+      - SHIELD_NRF7002EK_NRF7001
+      - SHIELD_NRF7002EB
+      - BOARD_NRF7002DK_NRF5340_CPUAPP
+      - BOARD_NRF7002DK_NRF7001_NRF5340_CPUAPP
 features:
   bluetooth:
-    Bluetooth LE peripheral/central: BT_CTLR && (BT_CENTRAL || BT_PERIPHERAL)
+    Bluetooth LE Peripheral/Central: BT_CTLR && (BT_CENTRAL || BT_PERIPHERAL)
     LLPM: BT_CTLR_SDC_LLPM
-    LE coded PHY: BT_CTLR_PHY_CODED_SUPPORT
+    LE Coded PHY: BT_CTLR_PHY_CODED_SUPPORT
     Bluetooth Mesh: BT_MESH
-    Connectionless CTE Advertising: BT_CTLR_DF_CTE_TX
+    Connectionless/Connected CTE Transmitter: BT_CTLR_DF_CTE_TX_SUPPORT
   zigbee:
     Zigbee (Sleepy) End Device: ZIGBEE_ROLE_END_DEVICE
     Zigbee Router: CONFIG_ZIGBEE_ROLE_ROUTER
@@ -20,9 +28,13 @@ features:
     Zigbee + Bluetooth LE multiprotocol: ZIGBEE && BT
     Zigbee Network Co-Processor (NCP): ZIGBEE_LIBRARY_NCP_DEV
     OTA DFU over Zigbee: ZIGBEE_FOTA
-    Zigbee + nRF21540 (GPIO): ZIGBEE && (MPSL_FEM_NRF21540_GPIO_SUPPORT || MPSL_FEM_GENERIC_TWO_CTRL_PINS_SUPPORT)
+    Zigbee + nRF21540 (GPIO):
+      ZIGBEE && (MPSL_FEM_NRF21540_GPIO_SUPPORT || MPSL_FEM_GENERIC_TWO_CTRL_PINS_SUPPORT)
   thread:
-    Thread 1.1: OPENTHREAD_THREAD_VERSION_1_1 || OPENTHREAD_THREAD_VERSION_1_2 || OPENTHREAD_THREAD_VERSION_1_3
+    Thread 1.1:
+      OPENTHREAD_THREAD_VERSION_1_1 ||
+      OPENTHREAD_THREAD_VERSION_1_2 ||
+      OPENTHREAD_THREAD_VERSION_1_3
     Thread 1.2 - Core: OPENTHREAD_THREAD_VERSION_1_2 || OPENTHREAD_THREAD_VERSION_1_3
     Thread 1.2 - CSL Receiver: OPENTHREAD_CSL_RECEIVER
     Thread 1.2 - Link Metrics: OPENTHREAD_LINK_METRICS_INITIATOR && OPENTHREAD_LINK_METRICS_SUBJECT
@@ -32,17 +44,20 @@ features:
     Thread FTD + Bluetooth LE multiprotocol: OPENTHREAD_FTD && BT
     Thread MTD + Bluetooth LE multiprotocol: OPENTHREAD_MTD && BT
     Thread Radio Co-Processor (RCP): OPENTHREAD_COPROCESSOR && OPENTHREAD_COPROCESSOR_RCP
-    Thread + nRF21540 (GPIO): NET_L2_OPENTHREAD && (MPSL_FEM_NRF21540_GPIO_SUPPORT || MPSL_FEM_GENERIC_TWO_CTRL_PINS_SUPPORT)
+    Thread + nRF21540 (GPIO):
+      NET_L2_OPENTHREAD &&
+      (MPSL_FEM_NRF21540_GPIO_SUPPORT || MPSL_FEM_GENERIC_TWO_CTRL_PINS_SUPPORT)
     Thread TCP: OPENTHREAD_TCP_ENABLE
   matter:
     Matter over Thread: CHIP && NET_L2_OPENTHREAD
-    Matter over Wi-Fi: CHIP_OVER_WIFI
+    Matter over Wi-Fi: CHIP && WIFI_NRF700X
     Matter commissioning over IP: CHIP
     Matter commissioning over Bluetooth LE with QR code onboarding: CHIP && BT
     Matter commissioning over Bluetooth LE with NFC onboarding: CHIP && BT && CHIP_NFC_COMMISSIONING
-    Matter - OTA DFU over Bluetooth LE: CHIP && BT && MCUMGR_SMP_BT
+    Matter - OTA DFU over Bluetooth LE: CHIP && BT && MCUMGR_TRANSPORT_BT
     OTA DFU over Matter: CHIP && CHIP_OTA_REQUESTOR
-    Matter Sleepy End Device: CHIP && CHIP_ENABLE_SLEEPY_END_DEVICE_SUPPORT && NET_L2_OPENTHREAD && OPENTHREAD_MTD_SED
+    Matter Sleepy End Device: CHIP && CHIP_ENABLE_SLEEPY_END_DEVICE_SUPPORT &&
+      NET_L2_OPENTHREAD && OPENTHREAD_MTD_SED
   homekit:
     HomeKit over Bluetooth LE: HOMEKIT && BT && !CONFIG_HAP_HAVE_THREAD
     HomeKit over Thread FTD: HOMEKIT && BT && OPENTHREAD_FTD
@@ -52,9 +67,32 @@ features:
     HomeKit - OTA DFU over Bluetooth LE: HOMEKIT && HOMEKIT_NORDIC_DFU
     HomeKit - OTA DFU over HomeKit: HOMEKIT && BT && CONFIG_HAP_FIRMWARE_UPDATE
   wifi:
-    STA Mode: WPA_SUPP && WIFI_NRF700X
-    Scan only (for location accuracy): WIFI_NRF700X && !WPA_SUPP
-    BLE Co-existence: WIFI_NRF700X && NRF700X_BT_COEX
+    STA Mode:
+      rule: WPA_SUPP && WIFI_NRF700X
+      boards_and_shields:
+        - SHIELD_NRF7002EK
+        - SHIELD_NRF7002EK_NRF7000
+        - SHIELD_NRF7002EK_NRF7001
+        - SHIELD_NRF7002EB
+        - BOARD_NRF7002DK_NRF5340_CPUAPP
+        - BOARD_NRF7002DK_NRF7001_NRF5340_CPUAPP
+    Scan only (for location accuracy):
+      rule: WIFI_NRF700X && !WPA_SUPP
+      boards_and_shields:
+        - SHIELD_NRF7002EK
+        - SHIELD_NRF7002EK_NRF7000
+        - SHIELD_NRF7002EK_NRF7001
+        - SHIELD_NRF7002EB
+        - BOARD_NRF7002DK_NRF5340_CPUAPP
+        - BOARD_NRF7002DK_NRF7001_NRF5340_CPUAPP
+    Bluetooth LE Co-existence:
+      rule: WIFI_NRF700X && NRF700X_BT_COEX
+      boards_and_shields:
+        - SHIELD_NRF7002EK
+        - SHIELD_NRF7002EK_NRF7001
+        - SHIELD_NRF7002EB
+        - BOARD_NRF7002DK_NRF5340_CPUAPP
+        - BOARD_NRF7002DK_NRF7001_NRF5340_CPUAPP
   trusted_firmware_m:
     Minimal Build: BUILD_WITH_TFM && TFM_PROFILE_TYPE_MINIMAL
     Full build: BUILD_WITH_TFM && TFM_PROFILE_TYPE_NOT_SET && NRF_SECURITY

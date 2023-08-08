@@ -27,12 +27,14 @@ LOG_MODULE_DECLARE(nrf_modem, CONFIG_NRF_MODEM_LIB_LOG_LEVEL);
 #define NRF_MODEM_IPC_IRQ DT_IRQ_BY_IDX(DT_NODELABEL(ipc), 0, irq)
 BUILD_ASSERT(IPC_IRQn == NRF_MODEM_IPC_IRQ, "NRF_MODEM_IPC_IRQ mismatch");
 
+#define AT_CFUN_READ "AT+CFUN?"
+#define AT_CFUN0_VAL 0
+#define AT_CFUN4_VAL 4
+
 /* The heap implementation in `nrf_modem_os.c` require some overhead
  * to allow allocating up to `NRF_MODEM_LIB_SHMEM_TX_SIZE` bytes.
  */
 #define NRF_MODEM_LIB_SHMEM_TX_HEAP_OVERHEAD_SIZE 128
-
-static enum nrf_modem_mode init_mode;
 
 static const struct nrf_modem_init_params init_params = {
 	.ipc_irq_prio = CONFIG_NRF_MODEM_LIB_IPC_IRQ_PRIO,
@@ -107,7 +109,7 @@ static void log_fw_version_uuid(void)
 	}
 }
 
-static int _nrf_modem_lib_init(const struct device *unused)
+static int _nrf_modem_lib_init(void)
 {
 	int rc;
 
@@ -141,22 +143,35 @@ static int _nrf_modem_lib_init(const struct device *unused)
 	return rc;
 }
 
-int nrf_modem_lib_init(enum nrf_modem_mode mode)
+int nrf_modem_lib_init(void)
 {
-	init_mode = mode;
-	if (mode == NORMAL_MODE) {
-		return _nrf_modem_lib_init(NULL);
-	} else {
-		return nrf_modem_bootloader_init(&bootloader_init_params);
-	}
+	return _nrf_modem_lib_init();
+}
+
+int nrf_modem_lib_bootloader_init(void)
+{
+	return nrf_modem_bootloader_init(&bootloader_init_params);
 }
 
 int nrf_modem_lib_shutdown(void)
 {
+	int ret;
+	uint16_t mode;
+
 	LOG_DBG("Shutting down modem library");
 	STRUCT_SECTION_FOREACH(nrf_modem_lib_shutdown_cb, e) {
 		LOG_DBG("Modem shutdown callback: %p", e->callback);
 		e->callback(e->context);
+	}
+
+	/* The application must disable both transmit and receive RF circuits, and deactivate
+	 *  LTE and GNSS services, before calling nrf_modem_shutdown.
+	 */
+	ret = nrf_modem_at_scanf(AT_CFUN_READ, "+CFUN: %hu", &mode);
+	if (ret == 1 && (mode != AT_CFUN0_VAL && mode != AT_CFUN4_VAL)) {
+		LOG_WRN("Application should set minimal functional mode (CFUN=0) before "
+			"shutting down modem library");
+		nrf_modem_at_printf("AT+CFUN=0");
 	}
 
 	nrf_modem_shutdown();

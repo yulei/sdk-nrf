@@ -47,7 +47,9 @@ The data is used for procedures defined by the Fast Pair standard.
 Registering Fast Pair Provider
 ==============================
 
-See the official `Fast Pair Model Registration`_ documentation for information how to register the device and obtain the Model ID and Anti-Spoofing Public/Private Key pair.
+See the official `Fast Pair Model Registration`_ documentation for information on how to register the device and obtain the Model ID and Anti-Spoofing Public/Private Key pair.
+Alternatively, you can use the debug Model ID and Anti-Spoofing Public/Private Key pair obtained by Nordic Semiconductor for the development purposes.
+See the :ref:`peripheral_fast_pair` sample and the :ref:`nrf_desktop` for details about the debug Fast Pair Providers registered by Nordic.
 
 Provisioning registration data onto device
 ==========================================
@@ -159,3 +161,4 @@ For details, see the :ref:`bt_fast_pair_readme` Bluetooth service documentation 
 The Fast Pair GATT service uses a non-volatile memory to store the Fast Pair user data such as Account Keys and the Personalized Name.
 This data can be cleared by calling the :c:func:`bt_fast_pair_factory_reset` function.
 For details, see the :c:func:`bt_fast_pair_factory_reset` function documentation.
+You can also use the :kconfig:option:`CONFIG_BT_FAST_PAIR_STORAGE_USER_RESET_ACTION` Kconfig option to enable a custom user reset action that executes together with this factory reset operation.

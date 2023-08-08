@@ -58,8 +58,8 @@ The following metrics are enabled by default in this sample:
 * Stack usage metrics shows the free stack space in bytes.
   Configurable by the :kconfig:option:`CONFIG_MEMFAULT_NCS_STACK_METRICS` Kconfig option.
 
-  * ``NcsBtRxUnusedStack`` - HCI Rx thread stack.
-  * ``NcsBtTxUnusedStack`` - HCI Tx thread stack.
+  * ``NcsBtRxUnusedStack`` - HCI RX thread stack.
+  * ``NcsBtTxUnusedStack`` - HCI TX thread stack.
 
 Error tracking with trace events
 ================================
@@ -99,7 +99,7 @@ The sample supports a simple user interface.
 You can control the sample using predefined buttons, while LEDs are used to display information.
 
 LED 1:
-   Blinks when the main loop is running (that is, the device is advertising) with a period of two seconds, duty cycle 50%.
+   Blinks, toggling on/off every second, when the main loop is running and the device is advertising.
 
 LED 2:
    Lit when the development kit is connected.
@@ -131,11 +131,9 @@ The Memfault SDK allows configuring some of its options using Kconfig.
 For the options not configurable using Kconfig, use the :file:`samples/bluetooth/peripheral_mds/memfault_config/memfault_platform_config.h` file.
 See `Memfault SDK`_ for more information.
 
-To send data to the Memfault cloud through a Bluetooth gateway, you must configure a project key using the :kconfig:option:`CONFIG_MEMFAULT_NCS_PROJECT_KEY` option.
+To send data to the Memfault cloud through a Bluetooth gateway, you must configure a project key using the :kconfig:option:`CONFIG_MEMFAULT_NCS_PROJECT_KEY` Kconfig option.
 You can find your project key in the project settings at `Memfault Dashboards`_.
-You also need to set the following static configuration option for this sample:
-
-* :kconfig:option:`CONFIG_MEMFAULT_NCS_DEVICE_ID` - Memfault device ID.
+You also need to set the :kconfig:option:`CONFIG_MEMFAULT_NCS_DEVICE_ID` static Kconfig option for this sample
 
 Building and running
 ********************
@@ -179,43 +177,6 @@ You can also use them for your custom applications using the Memfault Diagnostic
 #. When you have finished collecting diagnostic data, tap :guilabel:`Disconnect` to the close connection with your development kit.
 
    As the bond information is preserved, you can tap :guilabel:`Connect` again to immediately reconnect to the device.
-
-Testing with Memfault WebBluetooth Client
------------------------------------------
-
-1. |connect_terminal_ANSI|
-#. Reset your development kit.
-#. Observe that the sample starts.
-#. Open a recent version of the `Google Chrome browser`_.
-#. Run the `Memfault WebBluetooth Client`_ script to forward Memfault diagnostic data to the cloud.
-   For more details, see the `Memfault WebBluetooth Client source code`_.
-#. Make sure that your development kit is advertising.
-#. In the browser, click the :guilabel:`Connect` button and select your device from the list.
-#. Use the buttons on your development kit to confirm or reject a pairing request:
-
-   .. code-block:: console
-
-      Pairing confirmation required for 6D:99:66:6E:19:72 (random)
-      Press Button 1 to confirm, Button 2 to reject.
-
-#. Upon connection, data already collected by the `Memfault SDK`_ is forwarded to the cloud for further the analysis.
-   When connected, the new data is periodically flushed to the cloud with the interval configured by the option :kconfig:option:`CONFIG_BT_MDS_DATA_POLL_INTERVAL`.
-#. Upload the symbol file generated from your build to your Memfault account so that the information from your application can be parsed.
-   The symbol file is located in the build folder :file:`peripheral_memfault/build/zephyr/zephyr.elf`.
-
-   a. In a web browser, navigate to `Memfault`_.
-   #. Log in to your account and select the project you created earlier.
-   #. Navigate to :guilabel:`Fleet` > :guilabel:`Devices` in the left side menu.
-      You can see your newly connected device and the software version in the list.
-   #. Select the software version number for your device and click :guilabel:`Upload` to upload the symbol file.
-
-#. Return to the terminal and press the Tab button on your keyboard to confirm that the Memfault shell is working.
-   The shell commands available are displayed.
-
-   To learn about the Memfault shell commands, issue command ``mflt help``.
-#. Use the buttons to trigger Memfault crashes, traces and metrics collection.
-   See :ref:`peripheral_mds_user_interface` for details about button functions.
-#. Explore the Memfault user interface to see the errors and metrics sent from your device.
 
 Testing with MDS BLE gateway script
 -----------------------------------
@@ -268,6 +229,47 @@ Testing with MDS BLE gateway script
    To learn about the Memfault shell commands, issue command ``mflt help``
 #. Use the buttons to trigger Memfault crashes, traces and metrics collection.
 
+   See :ref:`peripheral_mds_user_interface` for details about button functions.
+#. Explore the Memfault user interface to see the errors and metrics sent from your device.
+
+Testing with Memfault WebBluetooth Client
+-----------------------------------------
+
+.. note::
+   The Web Bluetooth API used by the `Memfault WebBluetooth Client`_ is an experimental feature.
+   The functionality depends on your browser and computer OS compatibility.
+
+1. |connect_terminal_ANSI|
+#. Reset your development kit.
+#. Observe that the sample starts.
+#. Open a recent version of the `Google Chrome browser`_.
+#. Run the `Memfault WebBluetooth Client`_ script to forward Memfault diagnostic data to the cloud.
+   For more details, see the `Memfault WebBluetooth Client source code`_.
+#. Make sure that your development kit is advertising.
+#. In the browser, click the :guilabel:`Connect` button and select your device from the list.
+#. Use the buttons on your development kit to confirm or reject a pairing request:
+
+   .. code-block:: console
+
+      Pairing confirmation required for 6D:99:66:6E:19:72 (random)
+      Press Button 1 to confirm, Button 2 to reject.
+
+#. Upon connection, data already collected by the `Memfault SDK`_ is forwarded to the cloud for further the analysis.
+   When connected, the new data is periodically flushed to the cloud with the interval configured by the Kconfig option :kconfig:option:`CONFIG_BT_MDS_DATA_POLL_INTERVAL`.
+#. Upload the symbol file generated from your build to your Memfault account so that the information from your application can be parsed.
+   The :file:`zephyr.elf` symbol file is located in the build folder :file:`peripheral_memfault/build/zephyr`.
+
+   a. In a web browser, navigate to `Memfault`_.
+   #. Log in to your account and select the project you created earlier.
+   #. Navigate to :guilabel:`Fleet` > :guilabel:`Devices` in the left side menu.
+      You can see your newly connected device and the software version in the list.
+   #. Select the software version number for your device and click :guilabel:`Upload` to upload the symbol file.
+
+#. Return to the terminal and press the Tab button on your keyboard to confirm that the Memfault shell is working.
+   The shell commands available are displayed.
+
+   To learn about the Memfault shell commands, issue command ``mflt help``.
+#. Use the buttons to trigger Memfault crashes, traces and metrics collection.
    See :ref:`peripheral_mds_user_interface` for details about button functions.
 #. Explore the Memfault user interface to see the errors and metrics sent from your device.
 

@@ -804,7 +804,7 @@ static int sys_timer_init(void)
 {
 	nrfx_err_t nrfx_err;
 	const nrfx_timer_config_t config = {
-		.frequency = NRF_TIMER_FREQ_1MHz,
+		.frequency = NRFX_MHZ_TO_HZ(1),
 		.mode = NRF_TIMER_MODE_TIMER,
 		.bit_width = NRF_TIMER_BIT_WIDTH_16,
 	};
@@ -1603,7 +1603,9 @@ int esb_write_payload(const struct esb_payload *payload)
 
 	if (esb_cfg.mode == ESB_MODE_PTX &&
 	    esb_cfg.tx_mode == ESB_TXMODE_AUTO &&
-	    esb_state == ESB_STATE_IDLE) {
+	    (esb_state == ESB_STATE_IDLE ||
+	     (IS_ENABLED(CONFIG_ESB_NEVER_DISABLE_TX) ?
+	      esb_state == ESB_STATE_PTX_TXIDLE : 0))) {
 		start_tx_transaction();
 	}
 

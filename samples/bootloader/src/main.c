@@ -21,10 +21,8 @@
 
 #define HUK_FLAG_OFFSET 0xFFC /* When this word is set, expect HUK to be written. */
 
-int load_huk(const struct device *unused)
+int load_huk(void)
 {
-	(void)unused;
-
 	if (!hw_unique_key_is_written(HUK_KEYSLOT_KDR)) {
 		uint32_t huk_flag_addr = PM_HW_UNIQUE_KEY_PARTITION_ADDRESS + HUK_FLAG_OFFSET;
 
@@ -39,7 +37,11 @@ int load_huk(const struct device *unused)
 
 	}
 
-	hw_unique_key_load_kdr();
+	if (hw_unique_key_load_kdr() != HW_UNIQUE_KEY_SUCCESS) {
+		printk("Error: Cannot load the Hardware Unique Key into the KDR.\n");
+		k_panic();
+		return -1;
+	}
 
 	return 0;
 }
@@ -109,13 +111,13 @@ static void validate_and_boot(const struct fw_info *fw_info, uint16_t slot)
 #define BOOT_SLOT_0 0
 #define BOOT_SLOT_1 1
 
-void main(void)
+int main(void)
 {
 	int err = fprotect_area(PM_B0_ADDRESS, PM_B0_SIZE);
 
 	if (err) {
 		printk("Failed to protect B0 flash, cancel startup.\n\r");
-		return;
+		return 0;
 	}
 
 	uint32_t s0_addr = s0_address_read();
@@ -132,5 +134,5 @@ void main(void)
 	}
 
 	printk("No bootable image found. Aborting boot.\n\r");
-	return;
+	return 0;
 }

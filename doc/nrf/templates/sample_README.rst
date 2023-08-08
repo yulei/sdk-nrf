@@ -9,7 +9,7 @@ Template: Sample
 
 .. note::
    * Give the sample a concise name that corresponds to the folder name.
-     If the sample targets a specific protocol or device, add it in the title before the sample name (for example, "NFC:" or "nRF9160:").
+     If the sample targets a specific protocol or device, add it in the title before the sample name (for example, "NFC:" or "Cellular:").
      Do not include the word "sample" in the title.
    * Put the documentation inside the sample folder and use the file name :file:`README.rst`.
    * Use the provided stock phrases and includes when possible.
@@ -119,6 +119,8 @@ Setup*
    Add information about the initial setup here, for example, that the user must install or enable some library before they can compile this sample, or set up and select a specific backend.
    Most samples do not need this section.
 
+.. _sample_config_options:
+
 Configuration options*
 ======================
 
@@ -195,7 +197,7 @@ Some title*
 .. note::
    If required, add subsections for additional build instructions.
    Use these subsections sparingly and only if the content does not fit into other sections (mainly Configuration).
-   If the additional build instructions are valid for other samples as well, consider adding them to the :ref:`getting_started` section instead and linking to them.
+   If the additional build instructions are valid for other samples as well, consider adding them to the :ref:`configuration_and_build` section instead and linking to them.
 
 
 Testing

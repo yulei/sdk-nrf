@@ -7,20 +7,14 @@
 #include <errno.h>
 #include <string.h>
 #include <zephyr/settings/settings.h>
-#include <bluetooth/services/fast_pair.h>
+
+#include "fp_storage.h"
 
 #include "fp_storage_manager.h"
+#include "fp_storage_manager_priv.h"
 
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(fp_storage, CONFIG_FP_STORAGE_LOG_LEVEL);
-
-#define SETTINGS_SM_SUBTREE_NAME "fp_sm"
-#define SETTINGS_RESET_IN_PROGRESS_NAME "reset"
-#define SETTINGS_NAME_SEPARATOR_STR "/"
-#define SETTINGS_RESET_IN_PROGRESS_FULL_NAME \
-	(SETTINGS_SM_SUBTREE_NAME SETTINGS_NAME_SEPARATOR_STR SETTINGS_RESET_IN_PROGRESS_NAME)
-
-BUILD_ASSERT(SETTINGS_NAME_SEPARATOR == '/');
 
 static bool reset_in_progress;
 static int settings_set_err;
@@ -82,8 +76,13 @@ static int reset_in_progress_set(bool in_progress)
 {
 	int err;
 
-	err = settings_save_one(SETTINGS_RESET_IN_PROGRESS_FULL_NAME, &in_progress,
-				sizeof(in_progress));
+	if (in_progress) {
+		err = settings_save_one(SETTINGS_RESET_IN_PROGRESS_FULL_NAME, &in_progress,
+					sizeof(in_progress));
+	} else {
+		err = settings_delete(SETTINGS_RESET_IN_PROGRESS_FULL_NAME);
+	}
+
 	if (err) {
 		return err;
 	}
@@ -136,7 +135,7 @@ static int fp_settings_commit(void)
 SETTINGS_STATIC_HANDLER_DEFINE(fp_storage_manager, SETTINGS_SM_SUBTREE_NAME, NULL,
 			       fp_settings_set, fp_settings_commit, NULL);
 
-int bt_fast_pair_factory_reset(void)
+int fp_storage_factory_reset(void)
 {
 	int err;
 
@@ -159,4 +158,10 @@ int bt_fast_pair_factory_reset(void)
 	}
 
 	return 0;
+}
+
+void fp_storage_manager_ram_clear(void)
+{
+	reset_in_progress = false;
+	settings_set_err = 0;
 }

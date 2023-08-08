@@ -79,7 +79,7 @@ config OPENTHREAD_MANUAL_START
 	default y
 
 choice OPENTHREAD_SECURITY
-	default OPENTHREAD_NRF_SECURITY_CHOICE
+	default OPENTHREAD_NRF_SECURITY_CHOICE if SOC_FAMILY_NRF
 endchoice
 
 config MBEDTLS_SSL_PROTO_DTLS
@@ -140,15 +140,11 @@ config MBEDTLS_CIPHER_MODE_XTS
 
 config MBEDTLS_HEAP_SIZE
 	int
-	default 10240
+	default 12440
 
 config OPENTHREAD_PING_SENDER
 	bool
 	default y
-
-config MBEDTLS_PSA_CRYPTO_EXTERNAL_RNG
-	bool
-	default n
 
 if !OPENTHREAD_THREAD_VERSION_1_1
 
@@ -169,14 +165,10 @@ config NET_PKT_TIMESTAMP
 	bool
 	default y
 
-config OPENTHREAD_MAC_SOFTWARE_TX_SECURITY_ENABLE
-	bool
-	default n
-
 # CSL Transmitter configuration
 config OPENTHREAD_PLATFORM_CSL_UNCERT
 	int
-	default 5
+	default 12
 
 config IEEE802154_NRF5_DELAY_TRX_ACC
 	int
@@ -192,10 +184,17 @@ config OPENTHREAD_CSL_RECEIVE_TIME_AHEAD
 	int
 	default 5000
 
-config OPENTHREAD_CSL_MIN_RECEIVE_ON
+config OPENTHREAD_MIN_RECEIVE_ON_AHEAD
 	int
-	default 350 if BOARD_NRF52840DONGLE_NRF52840
-	default 300
+	default 104
+
+config OPENTHREAD_MIN_RECEIVE_ON_AFTER
+	int
+	default 0
+
+config OPENTHREAD_CSL_TIMEOUT
+	int
+	default 20
 
 endif
 

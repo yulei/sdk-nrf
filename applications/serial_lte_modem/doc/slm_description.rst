@@ -144,23 +144,10 @@ CONFIG_SLM_SMS - SMS support in SLM
 CONFIG_SLM_GNSS - GNSS support in SLM
    This option enables additional AT commands for using the GNSS service.
 
-.. _CONFIG_SLM_AGPS:
+.. _CONFIG_SLM_NRF_CLOUD:
 
-CONFIG_SLM_AGPS - nRF Cloud A-GPS support in SLM
-   This option enables additional AT commands for using the nRF Cloud A-GPS service.
-   It is not selected by default.
-
-.. _CONFIG_SLM_PGPS:
-
-CONFIG_SLM_PGPS - nRF Cloud P-GPS support in SLM
-   This option enables additional AT commands for using the nRF Cloud P-GPS service.
-   It is not selected by default.
-
-.. _CONFIG_SLM_LOCATION:
-
-CONFIG_SLM_LOCATION - nRF Cloud cellular and Wi-Fi location support in SLM
-   This option enables additional AT commands for using the nRF Cloud location service.
-   It is not selected by default.
+CONFIG_SLM_NRF_CLOUD - nRF Cloud support in SLM
+   This option enables additional AT commands for using the nRF Cloud service.
 
 .. _CONFIG_SLM_FTPC:
 
@@ -193,34 +180,23 @@ CONFIG_SLM_HTTPC - HTTP client support in SLM
 CONFIG_SLM_TWI - TWI support in SLM
    This option enables additional AT commands for using the TWI service.
 
-.. _CONFIG_SLM_NRF52_DFU:
+.. _CONFIG_SLM_UART_RX_BUF_COUNT:
 
-CONFIG_SLM_NRF52_DFU - nRF52 DFU support
-   This option enables additional AT commands for nRF52 DFU support.
+CONFIG_SLM_UART_RX_BUF_COUNT - Receive buffers for UART.
+   This option defines the amount of buffers for receiving (RX) UART traffic.
+   The default value is 3.
 
-.. _CONFIG_SLM_NRF52_DFU_LEGACY:
+.. _CONFIG_SLM_UART_RX_BUF_SIZE:
 
-CONFIG_SLM_NRF52_DFU_LEGACY - nRF52 legacy DFU support
-   This option enables support of the serial DFU protocol in legacy nRF52 SDKs.
+CONFIG_SLM_UART_RX_BUF_SIZE - Receive buffer size for UART.
+   This option defines the size of a single buffer for receiving (RX) UART traffic.
+   The default value is 256.
 
-.. _CONFIG_SLM_DFU_SOCKET_RETRIES:
+.. _CONFIG_SLM_UART_TX_BUF_SIZE:
 
-CONFIG_SLM_DFU_SOCKET_RETRIES - Number of download retries
-   This option defines the number of retries for socket-related download issues.
-   The default value is 2.
-
-.. _CONFIG_SLM_DFU_FLASH_BUF_SZ:
-
-CONFIG_SLM_DFU_FLASH_BUF_SZ - Buffer size for flash write operations.
-   This option defines the buffer size for flash write operations.
-   This buffer size must be aligned to the minimal flash write block size.
-   The default value is 512.
-
-.. _CONFIG_SLM_DFU_INIT_PACKET_SZ:
-
-CONFIG_SLM_DFU_INIT_PACKET_SZ - Buffer size for init packet.
-   This option defines the buffer size for receiving the init packet in the legacy serial DFU protocol.
-   The default value is 512.
+CONFIG_SLM_UART_TX_BUF_SIZE - Send buffer size for UART.
+   This option defines the size of the buffer for sending (TX) UART traffic.
+   The default value is 256.
 
 Additional configuration
 ========================
@@ -253,10 +229,6 @@ The following configuration files are provided:
   You can include it by adding ``-DOVERLAY_CONFIG=overlay-native_tls.conf`` to your build command.
   See :ref:`cmake_options`.
 
-* :file:`overlay-secure_bootloader.conf` - This configuration file contains additional configuration options that are required to use :ref:`ug_bootloader`.
-  You can include it by adding ``-DOVERLAY_CONFIG=overlay-secure_bootloader`` to your build command.
-  See :ref:`cmake_options`.
-
 * :file:`overlay-carrier.conf` - Configuration file that adds |NCS| :ref:`liblwm2m_carrier_readme` support.
   See :ref:`slm_carrier_library_support` for more information on how to connect to an operator's device management platform.
 
@@ -273,6 +245,10 @@ They are also placed in the :file:`boards` folder.
 When the DTS overlay filename matches the build target, the overlay is automatically chosen and applied by the build system.
 
 See :ref:`app_build_system`: for more information on the |NCS| configuration system.
+
+.. include:: /libraries/modem/nrf_modem_lib/nrf_modem_lib_trace.rst
+   :start-after: modem_lib_sending_traces_UART_start
+   :end-before: modem_lib_sending_traces_UART_end
 
 .. _slm_native_tls:
 
@@ -298,7 +274,7 @@ The configuration options that are required to enable the native TLS socket are 
 
 .. note::
 
-   The following limitations exist for native TLS sockets:
+   Native TLS sockets have the following limitations:
 
    * PSK, PSK identity, and PSK public key are currently not supported.
    * The DTLS server is currently not supported.

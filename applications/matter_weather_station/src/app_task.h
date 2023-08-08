@@ -12,12 +12,18 @@
 #include <app/clusters/identify-server/identify-server.h>
 #include <platform/CHIPDeviceLayer.h>
 
-#ifdef CONFIG_MCUMGR_SMP_BT
+#ifdef CONFIG_MCUMGR_TRANSPORT_BT
 #include "dfu_over_smp.h"
 #endif
 
 #if CONFIG_CHIP_FACTORY_DATA
 #include <platform/nrfconnect/FactoryDataProvider.h>
+#else
+#include <platform/nrfconnect/DeviceInstanceInfoProviderImpl.h>
+#endif
+
+#ifdef CONFIG_CHIP_ICD_SUBSCRIPTION_HANDLING
+#include "icd_util.h"
 #endif
 
 struct k_timer;

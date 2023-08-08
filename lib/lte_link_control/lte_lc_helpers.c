@@ -120,7 +120,7 @@ void event_handler_list_dispatch(const struct lte_lc_evt *const evt)
 	k_mutex_lock(&list_mtx, K_FOREVER);
 
 	/* Dispatch events to all registered handlers */
-	LOG_DBG("Dispatching events:");
+	LOG_DBG("Dispatching event: type=%d", evt->type);
 	SYS_SLIST_FOR_EACH_CONTAINER_SAFE(&handler_list, curr, tmp, node) {
 		LOG_DBG(" - handler=0x%08X", (uint32_t)curr->handler);
 		curr->handler(evt);
@@ -330,6 +330,32 @@ int parse_edrx(const char *at_response, struct lte_lc_edrx_cfg *cfg)
 		goto clean_exit;
 	}
 
+	err = at_params_int_get(&resp_list, AT_CEDRXP_ACTT_INDEX, &tmp_int);
+	if (err) {
+		LOG_ERR("Failed to get LTE mode, error: %d", err);
+		goto clean_exit;
+	}
+
+	/* The access technology indicators 4 for LTE-M and 5 for NB-IoT are
+	 * specified in 3GPP 27.007 Ch. 7.41.
+	 * 0 indicates that the current cell doesn't use eDRX.
+	 * Any other value is not expected, and we use 0xFFFFFFFF to represent those.
+	 */
+	cfg->mode = tmp_int == 0 ? LTE_LC_LTE_MODE_NONE :
+		    tmp_int == 4 ? LTE_LC_LTE_MODE_LTEM :
+		    tmp_int == 5 ? LTE_LC_LTE_MODE_NBIOT :
+				   0xFFFFFFFF; /* Intentionally illegal value */
+
+	/* Check for the case where the current cell does not use eDRX */
+	if (cfg->mode == LTE_LC_LTE_MODE_NONE) {
+		cfg->edrx = 0;
+		cfg->ptw = 0;
+
+		return 0;
+	} else if (cfg->mode == 0xFFFFFFFF) {
+		return -ENODATA;
+	}
+
 	err = at_params_string_get(&resp_list, AT_CEDRXP_NW_EDRX_INDEX,
 				   tmp_buf, &len);
 	if (err) {
@@ -346,19 +372,6 @@ int parse_edrx(const char *at_response, struct lte_lc_edrx_cfg *cfg)
 	 * note 4 and 5 are taken into account.
 	 */
 	idx = strtoul(tmp_buf, NULL, 2);
-
-	err = at_params_int_get(&resp_list, AT_CEDRXP_ACTT_INDEX, &tmp_int);
-	if (err) {
-		LOG_ERR("Failed to get LTE mode, error: %d", err);
-		goto clean_exit;
-	}
-
-	/* The acces technology indicators 4 for LTE-M and 5 for NB-IoT are
-	 * specified in 3GPP 27.007 Ch. 7.41.
-	 */
-	cfg->mode = tmp_int == 4 ? LTE_LC_LTE_MODE_LTEM :
-		    tmp_int == 5 ? LTE_LC_LTE_MODE_NBIOT :
-				   LTE_LC_LTE_MODE_NONE;
 
 	/* Confirm valid system mode and set Paging Time Window multiplier.
 	 * Multiplier is 1.28 s for LTE-M, and 2.56 s for NB-IoT, derived from
@@ -1380,6 +1393,11 @@ int parse_mdmev(const char *at_response, enum lte_lc_modem_evt *modem_evt)
 		[LTE_LC_MODEM_EVT_RESET_LOOP] = AT_MDMEV_RESET_LOOP,
 		[LTE_LC_MODEM_EVT_BATTERY_LOW] = AT_MDMEV_BATTERY_LOW,
 		[LTE_LC_MODEM_EVT_OVERHEATED] = AT_MDMEV_OVERHEATED,
+		[LTE_LC_MODEM_EVT_NO_IMEI] = AT_MDMEV_NO_IMEI,
+		[LTE_LC_MODEM_EVT_CE_LEVEL_0] = AT_MDMEV_CE_LEVEL_0,
+		[LTE_LC_MODEM_EVT_CE_LEVEL_1] = AT_MDMEV_CE_LEVEL_1,
+		[LTE_LC_MODEM_EVT_CE_LEVEL_2] = AT_MDMEV_CE_LEVEL_2,
+		[LTE_LC_MODEM_EVT_CE_LEVEL_3] = AT_MDMEV_CE_LEVEL_3,
 	};
 
 	if (at_response == NULL || modem_evt == NULL) {

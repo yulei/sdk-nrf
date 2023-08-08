@@ -14,7 +14,7 @@
 
 
 #define RPU_RESP_EVENT_TIMEOUT  5000
-#ifdef CONFIG_WPA_SUPP
+#ifdef CONFIG_NRF700X_STA_MODE
 #include <drivers/driver_zephyr.h>
 
 void *wifi_nrf_wpa_supp_dev_init(void *supp_drv_if_ctx, const char *iface_name,
@@ -117,5 +117,11 @@ void wifi_nrf_wpa_supp_event_mgmt_rx_callbk_fn(void *if_priv,
 int wifi_nrf_supp_get_capa(void *if_priv, struct wpa_driver_capa *capa);
 
 void wifi_nrf_wpa_supp_event_mac_chgd(void *if_priv);
-#endif /* CONFIG_WPA_SUPP */
+int wifi_nrf_supp_get_conn_info(void *if_priv, struct wpa_conn_info *info);
+
+void wifi_nrf_supp_event_proc_get_conn_info(void *os_vif_ctx,
+					    struct nrf_wifi_umac_event_conn_info *info,
+					    unsigned int event_len);
+
+#endif /* CONFIG_NRF700X_STA_MODE */
 #endif /*  __ZEPHYR_WPA_SUPP_IF_H__ */

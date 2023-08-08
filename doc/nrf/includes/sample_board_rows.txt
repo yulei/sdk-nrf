@@ -32,6 +32,10 @@
 
 | :ref:`nRF9160 DK <ug_nrf9160>` | PCA10090 | :ref:`nrf9160dk_nrf52840 <nrf9160dk_nrf52840>` | ``nrf9160dk_nrf52840`` |
 
+.. nrf9161dk_nrf9161_ns
+
+| nRF9161 DK |  | ``nrf9161dk_nrf9161`` | ``nrf9161dk_nrf9161_ns`` |
+
 .. nrf5340dk_nrf5340_cpuapp
 
 | :ref:`nRF5340 DK <ug_nrf5340>` | PCA10095 | :ref:`nrf5340dk_nrf5340 <nrf5340dk_nrf5340>` | ``nrf5340dk_nrf5340_cpuapp`` |
@@ -112,6 +116,10 @@
 |                                |          |                                              |                              |
 |                                |          |                                              | ``nrf5340dk_nrf5340_cpunet`` |
 
+.. nrf5340_audio_dk_nrf5340
+
+| `nRF5340 Audio DK <nRF5340 Audio DK Hardware_>`_    | PCA10121 revision 1.0.0 or above | :ref:`nrf5340_audio_dk_nrf5340 <nrf5340_audio_dk_nrf5340>`  | ``nrf5340_audio_dk_nrf5340_cpuapp`` |
+
 .. nrf21540dk_nrf52840
 
 | :ref:`nRF21540 DK <ug_radio_fem>` | PCA10112 | :ref:`nrf21540dk_nrf52840 <nrf21540dk_nrf52840>` | ``nrf21540dk_nrf52840`` |
@@ -150,6 +158,17 @@
 
 | :ref:`nRF7002 DK <nrf7002dk_nrf5340>` | PCA10143 | :ref:`nrf7002dk_nrf5340 <nrf7002dk_nrf5340>` | ``nrf7002dk_nrf5340_cpunet`` |
 
+.. nrf7002dk_nrf7001_nrf5340_cpuapp
+
+| :ref:`nRF7002 DK (emulating nRF7001) <nrf7002dk_nrf5340>` | PCA10143 | :ref:`nrf7002dk_nrf7001_nrf5340 <nrf7002dk_nrf5340>` | ``nrf7002dk_nrf7001_nrf5340_cpuapp`` |
+
+.. nrf7002dk_nrf7001_nrf5340_cpuapp_ns
+
+| :ref:`nRF7002 DK (emulating nRF7001) <nrf7002dk_nrf5340>` | PCA10143 | :ref:`nrf7002dk_nrf7001_nrf5340 <nrf7002dk_nrf5340>` | ``nrf7002dk_nrf7001_nrf5340_cpuapp_ns`` |
+
+.. nrf7002dk_nrf7001_nrf5340_cpunet
+
+| :ref:`nRF7002 DK (emulating nRF7001) <nrf7002dk_nrf5340>` | PCA10143 | :ref:`nrf7002dk_nrf7001_nrf5340 <nrf7002dk_nrf5340>` | ``nrf7002dk_nrf7001_nrf5340_cpunet`` |
 .. native_posix
 
 | Native Posix | | native_posix | ``native_posix`` |

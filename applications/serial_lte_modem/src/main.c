@@ -5,7 +5,6 @@
  */
 #include <zephyr/logging/log.h>
 #include <zephyr/logging/log_ctrl.h>
-
 #include <zephyr/kernel.h>
 #include <stdio.h>
 #include <zephyr/drivers/uart.h>
@@ -25,6 +24,7 @@
 #include <net/fota_download.h>
 #include "slm_at_host.h"
 #include "slm_at_fota.h"
+#include "slm_settings.h"
 
 LOG_MODULE_REGISTER(slm, CONFIG_SLM_LOG_LEVEL);
 
@@ -39,31 +39,13 @@ static struct k_work_delayable indicate_work;
 /* global variable used across different files */
 struct k_work_q slm_work_q;
 
-/* global variable defined in different files */
-extern uint8_t fota_type;
-extern uint8_t fota_stage;
-extern uint8_t fota_status;
-extern int32_t fota_info;
-
 /* global functions defined in different files */
 int poweron_uart(void);
-int slm_settings_init(void);
-int slm_setting_fota_save(void);
 
 /* Forward declarations */
 static void indicate_wk(struct k_work *work);
 
 BUILD_ASSERT(CONFIG_SLM_WAKEUP_PIN >= 0, "Wake up pin not configured");
-
-NRF_MODEM_LIB_ON_INIT(serial_lte_modem_init_hook, on_modem_lib_init, NULL);
-
-/* Initialized to value different than success (0) */
-static int modem_lib_init_result = -1;
-
-static void on_modem_lib_init(int ret, void *ctx)
-{
-	modem_lib_init_result = ret;
-}
 
 #if defined(CONFIG_NRF_MODEM_LIB_ON_FAULT_APPLICATION_SPECIFIC)
 static void on_modem_failure_shutdown(struct k_work *item);
@@ -91,7 +73,7 @@ static void on_modem_failure_shutdown(struct k_work *work)
 
 static void on_modem_failure_reinit(struct k_work *work)
 {
-	int ret = nrf_modem_lib_init(NORMAL_MODE);
+	int ret = nrf_modem_lib_init();
 
 	ARG_UNUSED(work);
 	rsp_send("\r\n#XMODEM: INIT,%d\r\n", ret);
@@ -225,7 +207,7 @@ void enter_idle(void)
 		LOG_ERR("GPIO_0 add callback error: %d", err);
 		return;
 	}
-	err = gpio_pin_interrupt_configure(gpio_dev, CONFIG_SLM_WAKEUP_PIN, GPIO_INT_LEVEL_LOW);
+	err = gpio_pin_interrupt_configure(gpio_dev, CONFIG_SLM_WAKEUP_PIN, GPIO_INT_EDGE_FALLING);
 	if (err) {
 		LOG_ERR("GPIO_0 enable callback error: %d", err);
 		return;
@@ -262,14 +244,11 @@ void enter_shutdown(void)
 	nrf_regulators_system_off(NRF_REGULATORS_NS);
 }
 
-static void handle_nrf_modem_lib_init_ret(void)
+bool handle_nrf_modem_lib_init_ret(int ret)
 {
-	int ret = modem_lib_init_result;
-
-	/* Handle return values relating to modem firmware update */
 	switch (ret) {
 	case 0:
-		return; /* Initialization successful, no action required. */
+		return false; /* Initialization successful, no action required. */
 	case NRF_MODEM_DFU_RESULT_OK:
 		LOG_INF("MODEM UPDATE OK. Will run new firmware");
 		fota_stage = FOTA_STAGE_COMPLETE;
@@ -291,26 +270,31 @@ static void handle_nrf_modem_lib_init_ret(void)
 	case NRF_MODEM_DFU_RESULT_VOLTAGE_LOW:
 		LOG_ERR("MODEM UPDATE CANCELLED %d.", ret);
 		LOG_ERR("Please reboot once you have sufficient power for the DFU");
+		fota_stage = FOTA_STAGE_ACTIVATE;
 		fota_status = FOTA_STATUS_ERROR;
 		fota_info = ret;
 		break;
 	default:
+		if (ret >= 0) {
+			LOG_WRN("Unhandled nrf_modem_lib_init() return code %d.", ret);
+			break;
+		}
 		/* All non-zero return codes other than DFU result codes are
 		 * considered irrecoverable and a reboot is needed.
 		 */
 		LOG_ERR("nRF modem lib initialization failed, error: %d", ret);
 		fota_status = FOTA_STATUS_ERROR;
 		fota_info = ret;
+		slm_settings_fota_save();
+		LOG_WRN("Rebooting...");
+		LOG_PANIC();
+		sys_reboot(SYS_REBOOT_COLD);
 		break;
 	}
-
-	slm_setting_fota_save();
-	LOG_WRN("Rebooting...");
-	LOG_PANIC();
-	sys_reboot(SYS_REBOOT_COLD);
+	return true;
 }
 
-void handle_mcuboot_swap_ret(void)
+static void handle_mcuboot_swap_ret(void)
 {
 	int err;
 
@@ -324,23 +308,6 @@ void handle_mcuboot_swap_ret(void)
 
 	fota_stage = FOTA_STAGE_COMPLETE;
 	switch (type) {
-	/** Attempt to boot the contents of slot 0. */
-	case BOOT_SWAP_TYPE_NONE:
-	/** MCUBOOT set BOOT_SWAP_TYPE_NONE after swapping B1 image, even TEST flag is set
-	 * by dfu_target_mcuboot library. There is no need to confirm image for B1 update.
-	 * But prompt which slot is activated.
-	 */
-#if defined(CONFIG_SECURE_BOOT)
-		bool s0_active;
-
-		fota_download_s0_active_get(&s0_active);
-		if (fota_type == SLM_DFU_TARGET_IMAGE_TYPE_BL1) {
-			LOG_INF("s0_active %d", s0_active);
-			fota_status = FOTA_STATUS_OK;
-			fota_info = 0;
-			break;
-		}
-#endif
 	/** Swap to slot 1. Absent a confirm command, revert back on next boot. */
 	case BOOT_SWAP_TYPE_TEST:
 	/** Swap to slot 1, and permanently switch to booting its contents. */
@@ -411,29 +378,36 @@ int main(void)
 	if (slm_settings_init() != 0) {
 		LOG_WRN("Failed to init slm settings");
 	}
+
+	const int ret = nrf_modem_lib_init();
+
+	if (ret < 0) {
+		LOG_ERR("Modem library init failed, err: %d", ret);
+		return ret;
+	}
+
 	/* Post-FOTA handling */
 	if (fota_stage != FOTA_STAGE_INIT) {
 		if (fota_type == DFU_TARGET_IMAGE_TYPE_MODEM_DELTA) {
-			handle_nrf_modem_lib_init_ret();
-		} else if (fota_type == DFU_TARGET_IMAGE_TYPE_MCUBOOT ||
-			   fota_type == SLM_DFU_TARGET_IMAGE_TYPE_BL1) {
+			slm_finish_modem_fota(ret);
+		} else if (fota_type == DFU_TARGET_IMAGE_TYPE_MCUBOOT) {
 			handle_mcuboot_swap_ret();
 		} else {
 			LOG_ERR("Unknown DFU type: %d", fota_type);
 			fota_status = FOTA_STATUS_ERROR;
 			fota_info = -EAGAIN;
 		}
-		return start_execute();
 	}
-
 #if defined(CONFIG_SLM_START_SLEEP)
-	if ((rr & NRF_POWER_RESETREAS_OFF_MASK) ||     /* DETECT signal from GPIO*/
-	    (rr & NRF_POWER_RESETREAS_DIF_MASK)) {     /* Entering debug interface mode */
-		return start_execute();
+	else {
+		if ((rr & NRF_POWER_RESETREAS_OFF_MASK) ||  /* DETECT signal from GPIO*/
+			(rr & NRF_POWER_RESETREAS_DIF_MASK)) {  /* Entering debug interface mode */
+			return start_execute();
+		}
+		enter_sleep();
+		return 0;
 	}
-	enter_sleep();
-	return 0;
-#else
-	return start_execute();
 #endif /* CONFIG_SLM_START_SLEEP */
+
+	return start_execute();
 }

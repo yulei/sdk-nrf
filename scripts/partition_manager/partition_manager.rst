@@ -180,7 +180,7 @@ The following example shows a partition that *spans*, or contains, ``partition_1
 
    If the value is a string, it is interpreted as a list with one item:
 
-The following 2 examples are equivalent:
+The following two examples are equivalent:
 
    .. code-block:: yaml
 
@@ -201,7 +201,7 @@ The following 2 examples are equivalent:
       Different versions of the Partition Manager script may produce different partition orders for such configurations, or fail to find a solution even if one is possible.
       The Partition Manager always detects unsatisfiable configurations (no false positives), but it might fail on some valid inputs (false negatives).
 
-   Here are 3 examples of valid and invalid configurations:
+   Here are three examples of valid and invalid configurations:
 
    .. _partition_manager_span_ex1:
 
@@ -311,6 +311,37 @@ region: string
    Specify the region where a partition should be placed.
    See :ref:`pm_regions`.
 
+affiliation: string or list
+   This property groups the partition with other partitions with the specified affiliation.
+   Affiliations are used to generate ``PM_FOREACH_AFFILIATED_TO_<affliation>(fn)`` macros, which let you invoke the macro ``fn`` on all definitions of the partitions with the specified affiliation.
+   The macro passes the partition name from the YAML file to the ``fn`` macro, using the upper-case formatting.
+   Currently, the ``disk`` affiliation is reserved by the flash disk driver in Zephyr to generate disk objects from partitions defined by the Partition Manager.
+
+extra_params: dict
+   This is a dictionary of extra ``<param_name>`` parameters for the partition.
+   The Partition Manager only uses them for generating ``PM_<uppercase_partition_name>_EXTRA_PARAM_<param_name>`` definitions, with the value taken from the YAML file, as assigned to the extra parameter.
+   The Partition Manager does not use or process these parameters in any other way.
+   Extra parameters can be used by other subsystems to add additional information to partitions.
+   Currently, this feature is only used by the flash disk driver in Zephyr to generate disk objects for use with the Disk Access API, with the following extra parameters: ``disk_sector_size``, ``disk_cache_size``, ``disk_name``, and ``disk_read_only``.
+   The following code snippet shows an example of the disk partition configuration using the ``extra_params`` dictionary:
+
+   .. code-block:: yaml
+      :caption: Example of disk partition
+
+      fatfs_storage:
+          affiliation: disk
+          extra_params: {
+              disk_name: "SD",
+              disk_cache_size: 4096,
+              disk_sector_size: 512,
+              disk_read_only: 0
+          }
+          placement:
+              before: [end]
+              align: {start: 4096}
+          inside: [nonsecure_storage]
+          size: 65536
+
 .. _partition_manager_ram_configuration:
 
 RAM partition configuration
@@ -318,7 +349,7 @@ RAM partition configuration
    A RAM partition is specified by having the partition name end with ``_sram``.
    If a partition name is composed of an image name plus the ``_sram`` ending, it is used as a permanent image RAM partition for the image.
 
-The following 2 examples are equivalent:
+The following two examples are equivalent:
 
    .. code-block:: yaml
       :caption: RAM partition configuration, without the ``_sram`` ending
@@ -344,7 +375,7 @@ All occurrences of a partition name can be replaced by a dict with the key ``one
 This dict is resolved to the first existing partition in the ``one_of`` value.
 The value of the ``one_of`` key must be a list of placeholder or image partitions, and it cannot be a span.
 
-See the following 2 examples, they are equivalent:
+See the following two examples, they are equivalent:
 
    .. code-block:: yaml
       :caption: Example of using a ``one_of`` dict
@@ -436,7 +467,7 @@ The information extracted from devicetree is the alignment value for some partit
 
    provision:
      size: CONFIG_PM_PARTITION_SIZE_PROVISION
-   #if defined(CONFIG_SOC_NRF9160) || defined(CONFIG_SOC_NRF5340_CPUAPP)
+   #if defined(CONFIG_SOC_SERIES_NRF91X) || defined(CONFIG_SOC_NRF5340_CPUAPP)
      region: otp
    #else
      placement:
@@ -545,14 +576,14 @@ For external regions, ``DEFAULT_DRIVER_KCONFIG`` within :file:`partition_manager
 Out-of-tree drivers can select this value to attest that they provide support for the external flash.
 This is a hidden option and can be selected only by an external driver or a Kconfig option.
 
-This option is automatically set when :kconfig:option:`CONFIG_NRF_QSPI_NOR` or :kconfig:option:`CONFIG_SPI_NOR` are enabled.
+This option is automatically set when :kconfig:option:`CONFIG_NRF_QSPI_NOR` or :kconfig:option:`CONFIG_SPI_NOR` is enabled.
 If the application provides the driver in an unusual way, this option can be overridden by setting :kconfig:option:`CONFIG_PM_OVERRIDE_EXTERNAL_DRIVER_CHECK` in the application configuration.
 
 As partition manager does not know if partitions are used at runtime, consider the following:
 
   * Enabling Kconfig options that affect ``DEFAULT_DRIVER_KCONFIG`` will add a partition map entry for the partition depending on it, whether it is used at runtime or not.
   * Not enabling the Kconfig options that affect ``DEFAULT_DRIVER_KCONFIG`` will not add partition map entry for partition depending on it, whether it is used at runtime or not.
-  * Enabling Kconfig options that affects ``DEFAULT_DRIVER_KCONFIG`` can cause linker errors when the option has no effect on including a driver into compilation.
+  * Enabling Kconfig options that affect ``DEFAULT_DRIVER_KCONFIG`` can cause linker errors when the option has no effect on including a driver into compilation.
     In this case, partition manager adds a partition map entry that has a pointer to the flash device it is supposed to be placed on, but due to misconfiguration the driver is actually not compiled in.
     This situation can also be caused by setting the :kconfig:option:`CONFIG_PM_OVERRIDE_EXTERNAL_DRIVER_CHECK`, as partition manager will just assume that the driver is provided by the application.
 
@@ -718,10 +749,11 @@ Static configuration
 ********************
 
 By default, the Partition Manager dynamically places the partitions in memory.
-However, if you have a deployed product that consists of multiple images, where only a subset of the included images can be upgraded through a firmware update mechanism, the upgradable images must be statically configured.
+However, there are cases where a deployed product can consist of multiple images, and only a subset of these images can be upgraded through a firmware update mechanism.
+In such cases, the upgradable images must have partitions that are static and are matching the partition map used by the bootloader programmed onto the device.
 For example, if a device includes a non-upgradable first-stage bootloader and an upgradable application, the application image to be upgraded must be linked to the same address as the one that is deployed.
+For this purpose, the Partition Manager provides the static configuration to define static partitions.
 
-For this purpose, the Partition Manager provides static configuration to define static partitions.
 The area used by the static partitions is called the *static area*.
 The static area comes in addition to the *dynamic area*, which consists of the ``app`` partition and all memory adjacent to the ``app`` partition that is not occupied by a static partition.
 Note that there is only one dynamic area.
@@ -742,7 +774,7 @@ You can set ``PM_STATIC_YML_FILE`` to contain exactly the static configuration y
 
 If you do not set ``PM_STATIC_YML_FILE``, the build system will use the following order to look for files in your application source directory to use as a static configuration layout:
 
-* If build type is used, :ref:`gs_modifying_build_types`, the following order applies:
+* If build type is used (see :ref:`modifying_build_types`), the following order applies:
 
   1. If the file :file:`pm_static_<board>_<revision>_<buildtype>.yml` exists, it will be used.
   #. Otherwise, if the file :file:`pm_static_<board>_<buildtype>.yml` exists, it will be used.

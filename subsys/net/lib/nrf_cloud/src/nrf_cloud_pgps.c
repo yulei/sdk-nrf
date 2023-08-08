@@ -15,6 +15,7 @@
 #include <date_time.h>
 #include <net/nrf_cloud_agps.h>
 #include <net/nrf_cloud_pgps.h>
+#include <net/nrf_cloud_codec.h>
 #include <zephyr/logging/log_ctrl.h>
 #include <pm_config.h>
 #include <flash_map_pm.h>
@@ -781,69 +782,22 @@ static int pgps_request(const struct gps_pgps_request *request)
 
 	return 0;
 #elif defined(CONFIG_NRF_CLOUD_PGPS_TRANSPORT_MQTT)
-	int err = 0;
-	cJSON *data_obj;
-	cJSON *pgps_req_obj;
-	cJSON *ret;
+	NRF_CLOUD_OBJ_JSON_DEFINE(pgps_req_obj);
+	int err = nrf_cloud_obj_pgps_request_create(&pgps_req_obj, request);
 
-	LOG_INF("Requesting %u predictions...", request->prediction_count);
-
-	/* Create request JSON containing a data object */
-	pgps_req_obj = json_create_req_obj(NRF_CLOUD_JSON_APPID_VAL_PGPS,
-					   NRF_CLOUD_JSON_MSG_TYPE_VAL_DATA);
-	data_obj = cJSON_AddObjectToObject(pgps_req_obj, NRF_CLOUD_JSON_DATA_KEY);
-
-	if (!pgps_req_obj || !data_obj) {
-		err = -ENOMEM;
-		goto cleanup;
-	}
-
-#if defined(CONFIG_PGPS_INCLUDE_MODEM_INFO)
-	/* Add modem info and P-GPS types to the data object */
-	err = json_add_modem_info(data_obj);
-	if (err) {
-		LOG_ERR("Failed to add modem info to P-GPS request:%d", err);
-		goto cleanup;
-	}
-#endif
-
-	ret = cJSON_AddNumberToObject(data_obj, NRF_CLOUD_JSON_PGPS_PRED_COUNT,
-				      request->prediction_count);
-	if (ret == NULL) {
-		LOG_ERR("Failed to add pred count to P-GPS request:%d", err);
-		err = -ENOMEM;
-		goto cleanup;
-	}
-	ret = cJSON_AddNumberToObject(data_obj, NRF_CLOUD_JSON_PGPS_INT_MIN,
-				      request->prediction_period_min);
-	if (ret == NULL) {
-		LOG_ERR("Failed to add pred int min to P-GPS request:%d", err);
-		err = -ENOMEM;
-		goto cleanup;
-	}
-	ret = cJSON_AddNumberToObject(data_obj, NRF_CLOUD_JSON_PGPS_GPS_DAY,
-				      request->gps_day);
-	if (ret == NULL) {
-		LOG_ERR("Failed to add gps day to P-GPS request:%d", err);
-		err = -ENOMEM;
-		goto cleanup;
-	}
-	ret = cJSON_AddNumberToObject(data_obj, NRF_CLOUD_JSON_PGPS_GPS_TIME,
-				      request->gps_time_of_day);
-	if (ret == NULL) {
-		LOG_ERR("Failed to add gps time to P-GPS request:%d", err);
-		err = -ENOMEM;
-		goto cleanup;
-	}
-
-	/* @TODO: if device is offline, we need to defer this to later */
-	err = json_send_to_cloud(pgps_req_obj);
 	if (!err) {
+		/* @TODO: if device is offline, we need to defer this to later */
+		err = json_send_to_cloud(pgps_req_obj.json);
+	} else {
+		LOG_ERR("Failed to create P-GPS request: %d", err);
+	}
+
+	if (!err) {
+		LOG_INF("Requesting %u predictions...", request->prediction_count);
 		state = PGPS_REQUESTING;
 	}
 
-cleanup:
-	cJSON_Delete(pgps_req_obj);
+	(void)nrf_cloud_obj_free(&pgps_req_obj);
 
 	return err;
 #endif /* defined(CONFIG_NRF_CLOUD_PGPS_TRANSPORT_MQTT) */
@@ -899,10 +853,6 @@ int nrf_cloud_pgps_process(const char *buf, size_t buf_len)
 		.path_sz = sizeof(path)
 	};
 
-	if (state == PGPS_NONE) {
-		LOG_ERR("P-GPS subsystem is not initialized.");
-		return -EINVAL;
-	}
 #if defined(CONFIG_NRF_CLOUD_MQTT)
 	LOG_HEXDUMP_DBG(buf, buf_len, "MQTT packet");
 #endif
@@ -912,15 +862,32 @@ int nrf_cloud_pgps_process(const char *buf, size_t buf_len)
 		return -EINVAL;
 	}
 
-	if (!accept_packets) {
-		LOG_ERR("Ignoring packet; P-GPS response already received.");
-		LOG_HEXDUMP_INF(buf, buf_len, "Unexpected packet");
-		return -EINVAL;
-	}
-
 	err = nrf_cloud_pgps_response_decode(buf, &pgps_dl);
 	if (err) {
 		return err;
+	}
+
+	return nrf_cloud_pgps_update(&pgps_dl);
+}
+
+int nrf_cloud_pgps_update(struct nrf_cloud_pgps_result *file_location)
+{
+	int err;
+
+	if (state == PGPS_NONE) {
+		LOG_ERR("P-GPS subsystem is not initialized.");
+		return -EINVAL;
+	}
+
+	if (!accept_packets) {
+		LOG_ERR("Ignoring packet (%s, %s); P-GPS response already received.",
+			file_location->host, file_location->path);
+		return -EINVAL;
+	}
+
+	if (file_location == NULL) {
+		state = PGPS_NONE;
+		return -EINVAL;
 	}
 
 	err = nrf_cloud_pgps_begin_update();
@@ -930,12 +897,15 @@ int nrf_cloud_pgps_process(const char *buf, size_t buf_len)
 
 	int sec_tag = SEC_TAG;
 
-	if (FORCE_HTTP_DL && (strncmp(pgps_dl.host, "https", 5) == 0)) {
-		memmove(&pgps_dl.host[4], &pgps_dl.host[5], strlen(&pgps_dl.host[4]));
+	if (FORCE_HTTP_DL && (strncmp(file_location->host, "https", 5) == 0)) {
+		memmove(&file_location->host[4],
+			&file_location->host[5],
+			strlen(&file_location->host[4]));
 		sec_tag = -1;
 	}
 
-	err =  npgps_download_start(pgps_dl.host, pgps_dl.path, sec_tag, 0, FRAGMENT_SIZE);
+	err =  npgps_download_start(file_location->host, file_location->path,
+				    sec_tag, 0, FRAGMENT_SIZE);
 	if (err) {
 		state = PGPS_NONE;
 	}
@@ -1062,7 +1032,7 @@ int nrf_cloud_pgps_inject(struct nrf_cloud_pgps_prediction *p,
 			/* send time */
 			err = nrf_cloud_agps_process((const char *)&sys_time,
 						     sizeof(sys_time) -
-						     sizeof(sys_time.time.sv_tow));
+						     sizeof(sys_time.time.sv_tow) + 4);
 			if (err) {
 				LOG_ERR("Error injecting P-GPS sys_time (%u, %u): %d",
 					sys_time.time.date_day, sys_time.time.time_full_s,
@@ -1187,9 +1157,9 @@ static int open_flash(void)
 		name = prediction_flash_area->fa_dev->name;
 	}
 
-	LOG_DBG("Opened flash_area: fa_id:%u, fa_device_id:%u, "
+	LOG_DBG("Opened flash_area: fa_id:%u, "
 		"fa_off:%ld, fa_size:%zu, prediction_flash_area device name:%s",
-		prediction_flash_area->fa_id, prediction_flash_area->fa_device_id,
+		prediction_flash_area->fa_id,
 		prediction_flash_area->fa_off, prediction_flash_area->fa_size, name);
 	return err;
 }
@@ -1670,6 +1640,7 @@ static void end_transfer_handler(int transfer_result)
 
 int nrf_cloud_pgps_init(struct nrf_cloud_pgps_init_param *param)
 {
+	__ASSERT(param != NULL, "param must be provided");
 	int err = 0;
 	struct nrf_cloud_pgps_event evt = {
 		.type = PGPS_EVT_INIT,
@@ -1692,7 +1663,6 @@ int nrf_cloud_pgps_init(struct nrf_cloud_pgps_init_param *param)
 	param->storage_size = PM_MCUBOOT_SECONDARY_SIZE;
 #endif
 
-	__ASSERT(param != NULL, "param must be provided");
 	__ASSERT((param->storage_size >= (NUM_BLOCKS * BLOCK_SIZE)),
 		 "insufficient storage provided; need at least %u bytes",
 		 (NUM_BLOCKS * BLOCK_SIZE));

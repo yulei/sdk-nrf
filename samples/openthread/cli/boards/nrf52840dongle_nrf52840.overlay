@@ -18,4 +18,15 @@
 	chosen {
 		zephyr,entropy = &rng;
 	};
+
+	/*
+	 * nRF52840 dongle has pin P0.19 connected to reset. By setting it
+	 * in output mode with low state reset is pulled to GND, which results in
+	 * device rebooting without skipping the bootloader.
+	 * openthread_config node enables doing so using diag GPIO commands.
+	 */
+	openthread_config: openthread {
+		compatible = "openthread,config";
+		diag-gpios = <&gpio0 19 GPIO_ACTIVE_HIGH>;
+	};
 };

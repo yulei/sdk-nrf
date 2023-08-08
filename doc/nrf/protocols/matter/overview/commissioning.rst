@@ -36,14 +36,16 @@ Onboarding information formats
 
 The data payload can be encoded in one of the following ways, either included on-device or in the packaging for the end products (or both):
 
-* Manual Pairing Code - which provides the onboarding information as a sequence of digits that can be used with most Matter commissioners.
-* QR Code - which you can scan using the appropriate mobile application for your ecosystem.
-* QR Code Payload - which is a alphanumeric code that you can use in command-line tools.
+* Manual Pairing Code, which provides the onboarding information as a sequence of digits that can be used with most Matter commissioners.
+* QR Code, which you can scan using the appropriate mobile application for your ecosystem.
+* QR Code Payload, which is an alphanumeric code that you can use in command-line tools.
   For testing purposes, it can be printed to the UART console or be shared using an NFC tag.
   This code is represented visually by the QR Code.
 
 Manual Pairing Code must always be supported, while the QR Code is recommended.
 Different ecosystems can also define their own methods of providing the discriminator and setup passcode.
+
+.. _ug_matter_overview_commissioning_stages:
 
 Commissioning stages
 ********************
@@ -55,6 +57,8 @@ Each is discussed in the following sections.
    :alt: Matter commissioning overview
 
    Matter commissioning overview
+
+.. _ug_matter_network_topologies_commissioning_stages_discovery:
 
 Device discovery
 ================
@@ -123,6 +127,8 @@ Operational discovery
 
 The commissioner discovers the commissionee node on the operational network using DNS-SD.
 This way, the commissioner learns the IP address of the node.
+
+.. _ug_matter_overview_commissioning_stages_case:
 
 Security setup with CASE
 ========================

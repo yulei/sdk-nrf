@@ -45,9 +45,19 @@ SSED device type
 
 The SSED device type was created for the window covering devices to optimize the power usage of the device and communication pattern with the parent.
 
-.. include:: /protocols/thread/overview/commissioning.rst
-   :start-after: thread_ssed_description_start
-   :end-before: thread_ssed_description_end
+A Thread Synchronized Sleepy End Device (SSED) is synchronized with its parent router and uses the radio only at scheduled intervals, by using the :ref:`thread_ug_supported_features_csl` feature introduced as one of the `Thread 1.2 Base Features`_.
+During those intervals, the device waits for the router to send it any data related to the desired device activity.
+The SSED does require sending packets occasionally to keep synchronization with the router.
+However, unlike a regular SED, an SSED does not actively communicate with the router by polling and goes into the idle mode between the scheduled activity periods.
+If there is no application-related traffic for an extended period of time, the SSED sends a data poll request packet to synchronize with the parent.
+Compared to a standard SED, the SSED features can further reduce energy consumption of the device and generate less data traffic.
+
+.. figure:: ../../../doc/nrf/protocols/thread/overview/images/thread_sed_ssed_comparison.svg
+   :alt: Comparison of Thread SED and Thread SSED radio activity
+
+   Comparison of Thread SED and Thread SSED radio activity
+
+See the :ref:`thread_sed_ssed` page for more information.
 
 Sample testing
 ==============
@@ -159,14 +169,14 @@ Before you start testing the application, you can select one of the `Matter wind
 Selecting a build type in |VSC|
 -------------------------------
 
-.. include:: /getting_started/modifying.rst
+.. include:: /config_and_build/modifying.rst
    :start-after: build_types_selection_vsc_start
    :end-before: build_types_selection_vsc_end
 
 Selecting a build type from command line
 ----------------------------------------
 
-.. include:: /getting_started/modifying.rst
+.. include:: /config_and_build/modifying.rst
    :start-after: build_types_selection_cmd_start
    :end-before: For example, you can replace the
 
@@ -252,6 +262,8 @@ For this sample, you can use one of the following :ref:`onboarding information f
 
        - MT:SAGA442C00KA0648G00
        - 34970112332
+
+|matter_cd_info_note_for_samples|
 
 Upgrading the device firmware
 =============================

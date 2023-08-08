@@ -49,7 +49,7 @@ jobs:
     name: Run license checks on patch series (PR)
     steps:
     - name: Checkout the code
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
       with:
         path: ncs/${{ inputs.path }}
         ref: ${{ github.event.pull_request.head.sha }}
@@ -95,7 +95,7 @@ jobs:
         else
             west init -m ${{ inputs.nrf_repo }} --mr ${{ inputs.nrf_rev }}
         fi
-        west update zephyr
+        west update -n zephyr bsim
         west zephyr-export
         echo "ZEPHYR_BASE=$(pwd)/zephyr" >> $GITHUB_ENV
         # debug
@@ -123,8 +123,8 @@ jobs:
             -c origin/${BASE_REF}..
 
     - name: Upload results
-      uses: actions/upload-artifact@v2
-      continue-on-error: True
+      uses: actions/upload-artifact@v3
+      continue-on-error: true
       if: always() && contains(github.event.pull_request.user.login, 'dependabot[bot]') != true
       with:
         name: licenses.xml
