@@ -175,7 +175,39 @@ int nrf_cloud_coap_init(void)
 	return 0;
 }
 
-int nrf_cloud_coap_connect(void)
+static int update_device_status(const char * const app_ver)
+{
+	int err;
+
+#if defined(CONFIG_NRF_CLOUD_SEND_DEVICE_STATUS)
+	struct nrf_cloud_modem_info mdm_inf = {
+		.device = NRF_CLOUD_INFO_SET,
+		.application_version = app_ver,
+		.mpi = NULL
+	};
+	struct nrf_cloud_device_status dev_status = {
+		.modem = &mdm_inf,
+		.svc = NULL
+	};
+
+	mdm_inf.network = IS_ENABLED(CONFIG_NRF_CLOUD_SEND_DEVICE_STATUS_NETWORK) ?
+					NRF_CLOUD_INFO_SET : NRF_CLOUD_INFO_CLEAR;
+
+	mdm_inf.sim = IS_ENABLED(CONFIG_NRF_CLOUD_SEND_DEVICE_STATUS_SIM) ?
+					NRF_CLOUD_INFO_SET : NRF_CLOUD_INFO_CLEAR;
+
+	dev_status.conn_inf = IS_ENABLED(CONFIG_NRF_CLOUD_SEND_DEVICE_STATUS_CONN_INF) ?
+					NRF_CLOUD_INFO_SET : NRF_CLOUD_INFO_CLEAR;
+
+	err = nrf_cloud_coap_shadow_device_status_update(&dev_status);
+#else
+	ARG_UNUSED(app_ver);
+	err = 0;
+#endif
+	return err;
+}
+
+int nrf_cloud_coap_connect(const char * const app_ver)
 {
 	struct sockaddr_storage server;
 	int err;
@@ -214,7 +246,8 @@ int nrf_cloud_coap_connect(void)
 	if (err < 0) {
 		goto fail;
 	}
-	return 0;
+
+	return update_device_status(app_ver);
 
 fail:
 	(void)nrf_cloud_coap_disconnect();
@@ -347,6 +380,7 @@ static K_SEM_DEFINE(cb_sem, 0, 1);
 struct user_cb {
 	coap_client_response_cb_t cb;
 	void *user_data;
+	int result_code;
 };
 
 static void client_callback(int16_t result_code, size_t offset, const uint8_t *payload, size_t len,
@@ -354,13 +388,21 @@ static void client_callback(int16_t result_code, size_t offset, const uint8_t *p
 {
 	struct user_cb *user_cb = (struct user_cb *)user_data;
 
-	LOG_CB_DBG(result_code, offset, len, last_block);
+	user_cb->result_code = result_code;
+	if (result_code >= 0) {
+		LOG_CB_DBG(result_code, offset, len, last_block);
+	} else {
+		LOG_DBG("Error from CoAP client:%d, offset:0x%X, len:0x%X, last_block:%d",
+			result_code, offset, len, last_block);
+	}
 	if (payload && len) {
 		LOG_HEXDUMP_DBG(payload, MIN(len, 96), "payload received");
 	}
 	if (result_code == COAP_RESPONSE_CODE_UNAUTHORIZED) {
 		LOG_ERR("Device not authenticated; reconnection required.");
 		authenticated = false; /* Lost authorization; need to reconnect. */
+	} else if ((result_code >= COAP_RESPONSE_CODE_BAD_REQUEST) && len) {
+		LOG_ERR("Unexpected response: %*s", len, payload);
 	}
 	if ((user_cb != NULL) && (user_cb->cb != NULL)) {
 		LOG_DBG("Calling user's callback %p", user_cb->cb);
@@ -374,7 +416,7 @@ static void client_callback(int16_t result_code, size_t offset, const uint8_t *p
 
 static int client_transfer(enum coap_method method,
 			   const char *resource, const char *query,
-			   uint8_t *buf, size_t buf_len,
+			   const uint8_t *buf, size_t buf_len,
 			   enum coap_content_format fmt_out,
 			   enum coap_content_format fmt_in,
 			   bool response_expected,
@@ -402,7 +444,7 @@ static int client_transfer(enum coap_method method,
 		.confirmable = reliable,
 		.path = path,
 		.fmt = fmt_out,
-		.payload = buf,
+		.payload = (uint8_t *)buf,
 		.len = buf_len,
 		.cb = client_callback,
 		.user_data = &user_cb
@@ -457,12 +499,19 @@ static int client_transfer(enum coap_method method,
 		(void)k_sem_take(&cb_sem, K_FOREVER); /* Wait for coap_client to exhaust retries */
 	}
 
+	if (!reliable && !err && (user_cb.result_code >= COAP_RESPONSE_CODE_BAD_REQUEST)) {
+		/* NON transfers usually do not use a callback,
+		 * so make sure a bad result is not ignored.
+		 */
+		err = user_cb.result_code;
+	}
+
 	k_sem_give(&serial_sem);
 	return err;
 }
 
 int nrf_cloud_coap_get(const char *resource, const char *query,
-		       uint8_t *buf, size_t len,
+		       const uint8_t *buf, size_t len,
 		       enum coap_content_format fmt_out,
 		       enum coap_content_format fmt_in, bool reliable,
 		       coap_client_response_cb_t cb, void *user)
@@ -472,7 +521,7 @@ int nrf_cloud_coap_get(const char *resource, const char *query,
 }
 
 int nrf_cloud_coap_post(const char *resource, const char *query,
-			uint8_t *buf, size_t len,
+			const uint8_t *buf, size_t len,
 			enum coap_content_format fmt, bool reliable,
 			coap_client_response_cb_t cb, void *user)
 {
@@ -481,7 +530,7 @@ int nrf_cloud_coap_post(const char *resource, const char *query,
 }
 
 int nrf_cloud_coap_put(const char *resource, const char *query,
-		       uint8_t *buf, size_t len,
+		       const uint8_t *buf, size_t len,
 		       enum coap_content_format fmt, bool reliable,
 		       coap_client_response_cb_t cb, void *user)
 {
@@ -490,7 +539,7 @@ int nrf_cloud_coap_put(const char *resource, const char *query,
 }
 
 int nrf_cloud_coap_delete(const char *resource, const char *query,
-			  uint8_t *buf, size_t len,
+			  const uint8_t *buf, size_t len,
 			  enum coap_content_format fmt, bool reliable,
 			  coap_client_response_cb_t cb, void *user)
 {
@@ -499,7 +548,7 @@ int nrf_cloud_coap_delete(const char *resource, const char *query,
 }
 
 int nrf_cloud_coap_fetch(const char *resource, const char *query,
-			 uint8_t *buf, size_t len,
+			 const uint8_t *buf, size_t len,
 			 enum coap_content_format fmt_out,
 			 enum coap_content_format fmt_in, bool reliable,
 			 coap_client_response_cb_t cb, void *user)
@@ -509,7 +558,7 @@ int nrf_cloud_coap_fetch(const char *resource, const char *query,
 }
 
 int nrf_cloud_coap_patch(const char *resource, const char *query,
-			 uint8_t *buf, size_t len,
+			 const uint8_t *buf, size_t len,
 			 enum coap_content_format fmt, bool reliable,
 			 coap_client_response_cb_t cb, void *user)
 {

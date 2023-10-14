@@ -76,11 +76,8 @@ set(CONFIG_MBEDTLS_USE_PSA_CRYPTO                   False)
 # complete build with all libraries and a full mbedcrypto library for linking.
 set(CONFIG_BUILD_WITH_TFM                           False)
 
-if (NOT CONFIG_TFM_PROFILE_TYPE_MINIMAL)
-  set(CONFIG_PSA_CRYPTO_DRIVER_OBERON                 True)
-  set(CONFIG_PSA_CRYPTO_DRIVER_HAS_KDF_SUPPORT_OBERON True)
-  set(CONFIG_PSA_CRYPTO_DRIVER_ALG_HKDF_OBERON        True)
-endif()
+# Enable the MBEDTLS_ENABLE_HEAP configuration since TF-M implements heap in crypto_init.c
+set(CONFIG_MBEDTLS_ENABLE_HEAP                      True)
 
 # TF-M build require that PSA Crypto APIs are compiled
 set(COMPILE_PSA_APIS True)
@@ -94,11 +91,6 @@ endif()
 
 # common.cmake has a function that can compute binary paths
 include(${NRFXLIB_DIR}/common.cmake)
-
-# The TF-M build needs a standard version of memory_buffer_alloc.c
-# This currently doesn't do a mutex on heap access according to cc3xx rtos
-# methods...
-list(APPEND src_crypto ${ARM_MBEDTLS_PATH}/library/memory_buffer_alloc.c)
 
 add_subdirectory(${NRFXLIB_DIR}/crypto ${CMAKE_CURRENT_BINARY_DIR}/nrf_security_crypto)
 

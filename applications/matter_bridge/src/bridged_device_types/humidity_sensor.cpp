@@ -33,20 +33,20 @@ DECLARE_DYNAMIC_CLUSTER(Clusters::RelativeHumidityMeasurement::Id, humiSensorAtt
 DECLARE_DYNAMIC_ENDPOINT(bridgedHumidityEndpoint, bridgedHumidityClusters);
 
 static constexpr EmberAfDeviceType kBridgedHumidityDeviceTypes[] = {
-	{ static_cast<chip::DeviceTypeId>(BridgedDevice::DeviceType::HumiditySensor),
-	  BridgedDevice::kDefaultDynamicEndpointVersion },
-	{ static_cast<chip::DeviceTypeId>(BridgedDevice::DeviceType::BridgedNode),
-	  BridgedDevice::kDefaultDynamicEndpointVersion }
+	{ static_cast<chip::DeviceTypeId>(MatterBridgedDevice::DeviceType::HumiditySensor),
+	  MatterBridgedDevice::kDefaultDynamicEndpointVersion },
+	{ static_cast<chip::DeviceTypeId>(MatterBridgedDevice::DeviceType::BridgedNode),
+	  MatterBridgedDevice::kDefaultDynamicEndpointVersion }
 };
 
 static constexpr uint8_t kHumidityDataVersionSize = ArraySize(bridgedHumidityClusters);
 
-HumiditySensorDevice::HumiditySensorDevice(const char *nodeLabel) : BridgedDevice(nodeLabel)
+HumiditySensorDevice::HumiditySensorDevice(const char *nodeLabel) : MatterBridgedDevice(nodeLabel)
 {
 	mDataVersionSize = kHumidityDataVersionSize;
 	mEp = &bridgedHumidityEndpoint;
 	mDeviceTypeList = kBridgedHumidityDeviceTypes;
-	mDeviceTypeListSize = sizeof(kBridgedHumidityDeviceTypes);
+	mDeviceTypeListSize = ARRAY_SIZE(kBridgedHumidityDeviceTypes);
 	mDataVersion = static_cast<DataVersion *>(chip::Platform::MemoryAlloc(sizeof(DataVersion) * mDataVersionSize));
 }
 
@@ -54,12 +54,6 @@ CHIP_ERROR HumiditySensorDevice::HandleRead(ClusterId clusterId, AttributeId att
 					    uint16_t maxReadLength)
 {
 	switch (clusterId) {
-	case Clusters::BridgedDeviceBasicInformation::Id:
-		return HandleReadBridgedDeviceBasicInformation(attributeId, buffer, maxReadLength);
-		break;
-	case Clusters::Descriptor::Id:
-		return HandleReadDescriptor(attributeId, buffer, maxReadLength);
-		break;
 	case Clusters::RelativeHumidityMeasurement::Id:
 		return HandleReadRelativeHumidityMeasurement(attributeId, buffer, maxReadLength);
 		break;
@@ -100,50 +94,58 @@ CHIP_ERROR HumiditySensorDevice::HandleReadRelativeHumidityMeasurement(Attribute
 CHIP_ERROR HumiditySensorDevice::HandleAttributeChange(chip::ClusterId clusterId, chip::AttributeId attributeId,
 						       void *data, size_t dataSize)
 {
-	if (clusterId != Clusters::RelativeHumidityMeasurement::Id || !data) {
+	CHIP_ERROR err = CHIP_NO_ERROR;
+	if (!data) {
 		return CHIP_ERROR_INVALID_ARGUMENT;
 	}
 
-	CHIP_ERROR err;
+	switch (clusterId) {
+	case Clusters::BridgedDeviceBasicInformation::Id:
+		return HandleWriteDeviceBasicInformation(clusterId, attributeId, data, dataSize);
+	case Clusters::RelativeHumidityMeasurement::Id: {
+		switch (attributeId) {
+		case Clusters::RelativeHumidityMeasurement::Attributes::MeasuredValue::Id: {
+			int16_t value;
 
-	switch (attributeId) {
-	case Clusters::RelativeHumidityMeasurement::Attributes::MeasuredValue::Id: {
-		int16_t value;
+			err = CopyAttribute(data, dataSize, &value, sizeof(value));
 
-		err = CopyAttribute(data, dataSize, &value, sizeof(value));
+			if (err != CHIP_NO_ERROR) {
+				return err;
+			}
 
-		if (err != CHIP_NO_ERROR) {
-			return err;
+			SetMeasuredValue(value);
+
+			break;
 		}
+		case Clusters::RelativeHumidityMeasurement::Attributes::MinMeasuredValue::Id: {
+			int16_t value;
 
-		SetMeasuredValue(value);
+			err = CopyAttribute(data, dataSize, &value, sizeof(value));
 
-		break;
-	}
-	case Clusters::RelativeHumidityMeasurement::Attributes::MinMeasuredValue::Id: {
-		int16_t value;
+			if (err != CHIP_NO_ERROR) {
+				return err;
+			}
 
-		err = CopyAttribute(data, dataSize, &value, sizeof(value));
+			SetMinMeasuredValue(value);
 
-		if (err != CHIP_NO_ERROR) {
-			return err;
+			break;
 		}
+		case Clusters::RelativeHumidityMeasurement::Attributes::MaxMeasuredValue::Id: {
+			int16_t value;
 
-		SetMinMeasuredValue(value);
+			err = CopyAttribute(data, dataSize, &value, sizeof(value));
 
-		break;
-	}
-	case Clusters::RelativeHumidityMeasurement::Attributes::MaxMeasuredValue::Id: {
-		int16_t value;
+			if (err != CHIP_NO_ERROR) {
+				return err;
+			}
 
-		err = CopyAttribute(data, dataSize, &value, sizeof(value));
+			SetMaxMeasuredValue(value);
 
-		if (err != CHIP_NO_ERROR) {
-			return err;
+			break;
 		}
-
-		SetMaxMeasuredValue(value);
-
+		default:
+			return CHIP_ERROR_INVALID_ARGUMENT;
+		}
 		break;
 	}
 	default:

@@ -55,10 +55,6 @@ static char mqtt_password[SLM_MAX_PASSWORD + 1];
 static struct mqtt_publish_param pub_param;
 static uint8_t pub_topic[MQTT_MAX_TOPIC_LEN];
 
-/* global variable defined in different files */
-extern struct at_param_list at_param_list;
-extern uint8_t data_buf[SLM_MAX_MESSAGE_SIZE];
-
 #define THREAD_STACK_SIZE	KB(2)
 #define THREAD_PRIORITY		K_LOWEST_APPLICATION_THREAD_PRIO
 
@@ -86,9 +82,9 @@ static int handle_mqtt_publish_evt(struct mqtt_client *const c, const struct mqt
 		evt->param.publish.message.topic.topic.size);
 	data_send("\r\n", 2);
 	do {
-		ret = mqtt_read_publish_payload_blocking(c, data_buf, sizeof(data_buf));
+		ret = mqtt_read_publish_payload_blocking(c, slm_data_buf, sizeof(slm_data_buf));
 		if (ret > 0) {
-			data_send(data_buf, ret);
+			data_send(slm_data_buf, ret);
 			size_read += ret;
 		}
 	} while (ret >= 0 && size_read < evt->param.publish.message.payload.len);
@@ -221,6 +217,7 @@ static void mqtt_thread_fn(void *arg1, void *arg2, void *arg3)
 	while (true) {
 		if (!ctx.connected) {
 			LOG_WRN("MQTT disconnected");
+			err = 0;
 			break;
 		}
 		err = poll(&fds, 1, mqtt_keepalive_time_left(&client));
@@ -228,33 +225,61 @@ static void mqtt_thread_fn(void *arg1, void *arg2, void *arg3)
 			LOG_ERR("ERROR: poll %d", errno);
 			break;
 		}
-		/* timeout or revent, send KEEPALIVE */
-		(void)mqtt_live(&client);
 
 		if ((fds.revents & POLLIN) == POLLIN) {
 			err = mqtt_input(&client);
 			if (err != 0) {
 				LOG_ERR("ERROR: mqtt_input %d", err);
-				mqtt_abort(&client);
+				break;
+			}
+			/* MQTT v3.1.1: If a Client does not receive a PINGRESP Packet within a
+			 *  reasonable amount of time after it has sent a PINGREQ, it SHOULD close
+			 *  the Network Connection to the Server.
+			 */
+			if (client.unacked_ping > 1) {
+				LOG_ERR("ERROR: mqtt_ping nack %d", client.unacked_ping);
+				err = -ENETRESET;
 				break;
 			}
 		}
+
+		/* MQTT v3.1.1: Note that a Server is permitted to disconnect a Client that it
+		 * determines to be inactive or non-responsive at any time, regardless of the
+		 * Keep Alive value provided by that Client.
+		 */
 		if ((fds.revents & POLLERR) == POLLERR) {
 			LOG_ERR("POLLERR");
-			mqtt_abort(&client);
+			err = -EIO;
 			break;
 		}
 		if ((fds.revents & POLLHUP) == POLLHUP) {
 			LOG_ERR("POLLHUP");
-			mqtt_abort(&client);
+			err = -ECONNRESET;
 			break;
 		}
 		if ((fds.revents & POLLNVAL) == POLLNVAL) {
 			LOG_ERR("POLLNVAL");
-			mqtt_abort(&client);
+			err = -ENOTCONN;
+			break;
+		}
+
+		/* poll timeout or revent, send KEEPALIVE */
+		err = mqtt_live(&client);
+		if (err != 0 && err != -EAGAIN) {
+			LOG_ERR("ERROR: mqtt_live %d", err);
 			break;
 		}
 	}
+
+	if (ctx.connected && err != 0) {
+		LOG_ERR("Abort MQTT connection (error %d)", err);
+		(void)mqtt_abort(&client);
+	}
+
+	memset(&ctx, 0, sizeof(ctx));
+	ctx.connected = false;
+	ctx.sec_tag = INVALID_SEC_TAG;
+	client.broker = NULL;
 
 	LOG_INF("MQTT thread terminated");
 }
@@ -309,7 +334,6 @@ static void client_init(void)
 		client.user_name = NULL;
 		/* ignore password if no user_name */
 	}
-	client.protocol_version = MQTT_VERSION_3_1_1;
 
 	/* MQTT buffers configuration */
 	client.rx_buf = rx_buffer;
@@ -360,12 +384,12 @@ static int do_mqtt_connect(void)
 		return err;
 	}
 
+	ctx.connected = true;
 	k_thread_create(&mqtt_thread, mqtt_thread_stack,
 			K_THREAD_STACK_SIZEOF(mqtt_thread_stack),
 			mqtt_thread_fn, NULL, NULL, NULL,
 			THREAD_PRIORITY, K_USER, K_NO_WAIT);
 
-	ctx.connected = true;
 	return 0;
 }
 
@@ -386,8 +410,6 @@ static int do_mqtt_disconnect(void)
 	if (k_thread_join(&mqtt_thread, K_SECONDS(CONFIG_MQTT_KEEPALIVE)) != 0) {
 		LOG_WRN("Wait for thread terminate failed");
 	}
-
-	slm_at_mqtt_uninit();
 
 	return err;
 }
@@ -437,11 +459,7 @@ static int do_mqtt_subscribe(uint16_t op,
 	return err;
 }
 
-/**@brief handle AT#XMQTTCON commands
- *  AT#XMQTTCON=<op>[,<cid>,<username>,<password>,<url>,<port>[,<sec_tag>]]
- *  AT#XMQTTCON?
- *  AT#XMQTTCON=?
- */
+/* Handles AT#XMQTTCON commands. */
 int handle_at_mqtt_connect(enum at_cmd_type cmd_type)
 {
 	int err = -EINVAL;
@@ -449,7 +467,7 @@ int handle_at_mqtt_connect(enum at_cmd_type cmd_type)
 
 	switch (cmd_type) {
 	case AT_CMD_TYPE_SET_COMMAND:
-		err = at_params_unsigned_short_get(&at_param_list, 1, &op);
+		err = at_params_unsigned_short_get(&slm_at_param_list, 1, &op);
 		if (err) {
 			return err;
 		}
@@ -459,35 +477,37 @@ int handle_at_mqtt_connect(enum at_cmd_type cmd_type)
 			size_t password_sz = sizeof(mqtt_password);
 			size_t url_sz = sizeof(mqtt_broker_url);
 
-			err = util_string_get(&at_param_list, 2, mqtt_clientid, &clientid_sz);
+			err = util_string_get(&slm_at_param_list, 2, mqtt_clientid, &clientid_sz);
 			if (err) {
 				return err;
 			}
-			err = util_string_get(&at_param_list, 3, mqtt_username, &username_sz);
+			err = util_string_get(&slm_at_param_list, 3, mqtt_username, &username_sz);
 			if (err) {
 				return err;
 			} else {
 				ctx.username.utf8 = mqtt_username;
 				ctx.username.size = strlen(mqtt_username);
 			}
-			err = util_string_get(&at_param_list, 4, mqtt_password, &password_sz);
+			err = util_string_get(&slm_at_param_list, 4, mqtt_password, &password_sz);
 			if (err) {
 				return err;
 			} else {
 				ctx.password.utf8 = mqtt_password;
 				ctx.password.size = strlen(mqtt_password);
 			}
-			err = util_string_get(&at_param_list, 5, mqtt_broker_url, &url_sz);
+			err = util_string_get(&slm_at_param_list, 5, mqtt_broker_url, &url_sz);
 			if (err) {
 				return err;
 			}
-			err = at_params_unsigned_short_get(&at_param_list, 6, &mqtt_broker_port);
+			err = at_params_unsigned_short_get(
+				&slm_at_param_list, 6, &mqtt_broker_port);
 			if (err) {
 				return err;
 			}
 			ctx.sec_tag = INVALID_SEC_TAG;
-			if (at_params_valid_count_get(&at_param_list) > 7) {
-				err = at_params_unsigned_int_get(&at_param_list, 7, &ctx.sec_tag);
+			if (at_params_valid_count_get(&slm_at_param_list) > 7) {
+				err = at_params_unsigned_int_get(
+					&slm_at_param_list, 7, &ctx.sec_tag);
 				if (err) {
 					return err;
 				}
@@ -502,20 +522,26 @@ int handle_at_mqtt_connect(enum at_cmd_type cmd_type)
 		break;
 
 	case AT_CMD_TYPE_READ_COMMAND:
-		if (ctx.sec_tag != INVALID_SEC_TAG) {
-			rsp_send("\r\n#XMQTTCON: %d,\"%s\",\"%s\",%d,%d\r\n",
-				ctx.connected, mqtt_clientid, mqtt_broker_url, mqtt_broker_port,
-				ctx.sec_tag);
+		if (ctx.connected) {
+			if (ctx.sec_tag != INVALID_SEC_TAG) {
+				rsp_send("\r\n#XMQTTCON: %d,\"%s\",\"%s\",%d,%d\r\n",
+					 ctx.connected, mqtt_clientid, mqtt_broker_url,
+					 mqtt_broker_port, ctx.sec_tag);
+			} else {
+				rsp_send("\r\n#XMQTTCON: %d,\"%s\",\"%s\",%d\r\n",
+					 ctx.connected, mqtt_clientid, mqtt_broker_url,
+					 mqtt_broker_port);
+			}
 		} else {
-			rsp_send("\r\n#XMQTTCON: %d,\"%s\",\"%s\",%d\r\n",
-				ctx.connected, mqtt_clientid, mqtt_broker_url, mqtt_broker_port);
+			rsp_send("\r\n#XMQTTCON: %d\r\n", ctx.connected);
 		}
 		err = 0;
 		break;
 
 	case AT_CMD_TYPE_TEST_COMMAND:
-		rsp_send("\r\n#XMQTTCON: (0,1,2),<cid>,<username>,"
-			 "<password>,<url>,<port>,<sec_tag>\r\n");
+		rsp_send("\r\n#XMQTTCON: (%d,%d,%d),<client_id>,<username>,"
+			 "<password>,<url>,<port>,<sec_tag>\r\n",
+			 MQTTC_DISCONNECT, MQTTC_CONNECT, MQTTC_CONNECT6);
 		err = 0;
 		break;
 
@@ -545,11 +571,7 @@ static int mqtt_datamode_callback(uint8_t op, const uint8_t *data, int len, uint
 	return ret;
 }
 
-/**@brief handle AT#XMQTTPUB commands
- *  AT#XMQTTPUB=<topic>[,<msg>[,<qos>[,<retain>]]]
- *  AT#XMQTTPUB? READ command not supported
- *  AT#XMQTTPUB=?
- */
+/* Handles AT#XMQTTPUB commands. */
 int handle_at_mqtt_publish(enum at_cmd_type cmd_type)
 {
 	int err = -EINVAL;
@@ -559,29 +581,33 @@ int handle_at_mqtt_publish(enum at_cmd_type cmd_type)
 	size_t topic_sz = MQTT_MAX_TOPIC_LEN;
 	uint8_t pub_msg[SLM_MAX_PAYLOAD_SIZE];
 	size_t msg_sz = sizeof(pub_msg);
-	uint16_t param_count = at_params_valid_count_get(&at_param_list);
+	uint16_t param_count = at_params_valid_count_get(&slm_at_param_list);
+
+	if (!ctx.connected) {
+		return -ENOTCONN;
+	}
 
 	switch (cmd_type) {
 	case AT_CMD_TYPE_SET_COMMAND:
-		err = util_string_get(&at_param_list, 1, pub_topic, &topic_sz);
+		err = util_string_get(&slm_at_param_list, 1, pub_topic, &topic_sz);
 		if (err) {
 			return err;
 		}
 		pub_msg[0] = '\0';
 		if (param_count > 2) {
-			err = util_string_get(&at_param_list, 2, pub_msg, &msg_sz);
+			err = util_string_get(&slm_at_param_list, 2, pub_msg, &msg_sz);
 			if (err) {
 				return err;
 			}
 		}
 		if (param_count > 3) {
-			err = at_params_unsigned_short_get(&at_param_list, 3, &qos);
+			err = at_params_unsigned_short_get(&slm_at_param_list, 3, &qos);
 			if (err) {
 				return err;
 			}
 		}
 		if (param_count > 4) {
-			err = at_params_unsigned_short_get(&at_param_list, 4, &retain);
+			err = at_params_unsigned_short_get(&slm_at_param_list, 4, &retain);
 			if (err) {
 				return err;
 			}
@@ -625,11 +651,7 @@ int handle_at_mqtt_publish(enum at_cmd_type cmd_type)
 	return err;
 }
 
-/**@brief handle AT#XMQTTSUB commands
- *  AT#XMQTTSUB=<topic>,<qos>
- *  AT#XMQTTSUB? READ command not supported
- *  AT#XMQTTSUB=?
- */
+/* Handles AT#XMQTTSUB commands. */
 int handle_at_mqtt_subscribe(enum at_cmd_type cmd_type)
 {
 	int err = -EINVAL;
@@ -637,14 +659,18 @@ int handle_at_mqtt_subscribe(enum at_cmd_type cmd_type)
 	char topic[MQTT_MAX_TOPIC_LEN];
 	int topic_sz = MQTT_MAX_TOPIC_LEN;
 
+	if (!ctx.connected) {
+		return -ENOTCONN;
+	}
+
 	switch (cmd_type) {
 	case AT_CMD_TYPE_SET_COMMAND:
-		if (at_params_valid_count_get(&at_param_list) == 3) {
-			err = util_string_get(&at_param_list, 1, topic, &topic_sz);
+		if (at_params_valid_count_get(&slm_at_param_list) == 3) {
+			err = util_string_get(&slm_at_param_list, 1, topic, &topic_sz);
 			if (err < 0) {
 				return err;
 			}
-			err = at_params_unsigned_short_get(&at_param_list, 2, &qos);
+			err = at_params_unsigned_short_get(&slm_at_param_list, 2, &qos);
 			if (err < 0) {
 				return err;
 			}
@@ -666,21 +692,21 @@ int handle_at_mqtt_subscribe(enum at_cmd_type cmd_type)
 	return err;
 }
 
-/**@brief handle AT#XMQTTUNSUB commands
- *  AT#XMQTTUNSUB=<topic>
- *  AT#XMQTTUNSUB? READ command not supported
- *  AT#XMQTTUNSUB=?
- */
+/* Handles AT#XMQTTUNSUB commands. */
 int handle_at_mqtt_unsubscribe(enum at_cmd_type cmd_type)
 {
 	int err = -EINVAL;
 	char topic[MQTT_MAX_TOPIC_LEN];
 	int topic_sz = MQTT_MAX_TOPIC_LEN;
 
+	if (!ctx.connected) {
+		return -ENOTCONN;
+	}
+
 	switch (cmd_type) {
 	case AT_CMD_TYPE_SET_COMMAND:
-		if (at_params_valid_count_get(&at_param_list) == 2) {
-			err = util_string_get(&at_param_list, 1,
+		if (at_params_valid_count_get(&slm_at_param_list) == 2) {
+			err = util_string_get(&slm_at_param_list, 1,
 							topic, &topic_sz);
 			if (err < 0) {
 				return err;

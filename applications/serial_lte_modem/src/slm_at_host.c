@@ -25,8 +25,6 @@ LOG_MODULE_REGISTER(slm_at_host, CONFIG_SLM_LOG_LEVEL);
 #define CR		'\r'
 #define LF		'\n'
 
-#define HEXDUMP_DATAMODE_MAX    16
-
 const char *slm_quit_str = CONFIG_SLM_DATAMODE_TERMINATOR;
 
 /* Operation mode variables */
@@ -35,15 +33,15 @@ enum slm_operation_mode {
 	SLM_DATA_MODE,			/* Raw data sending */
 	SLM_NULL_MODE			/* Discard incoming until next command */
 };
-static enum slm_operation_mode slm_mode;
+static enum slm_operation_mode at_mode;
 static slm_datamode_handler_t datamode_handler;
 static int datamode_handler_result;
-uint16_t datamode_time_limit;	/* Send trigger by time in data mode */
-K_MUTEX_DEFINE(mutex_mode);  /* Protects the operation mode variables. */
+uint16_t slm_datamode_time_limit; /* Send trigger by time in data mode */
+K_MUTEX_DEFINE(mutex_mode); /* Protects the operation mode variables. */
 
-uint8_t at_buf[SLM_AT_MAX_CMD_LEN];
-static char rsp_buf[SLM_AT_MAX_RSP_LEN];
-uint8_t data_buf[SLM_MAX_MESSAGE_SIZE]; /* For socket data */
+struct at_param_list slm_at_param_list;
+uint8_t slm_at_buf[SLM_AT_MAX_CMD_LEN];
+uint8_t slm_data_buf[SLM_MAX_MESSAGE_SIZE];
 
 RING_BUF_DECLARE(data_rb, CONFIG_SLM_DATAMODE_BUF_SIZE);
 static uint8_t quit_str_partial_match;
@@ -51,24 +49,18 @@ K_MUTEX_DEFINE(mutex_data); /* Protects the data_rb and quit_str_partial_match. 
 
 static struct k_work raw_send_scheduled_work;
 
-/* global variable used across different files */
-struct at_param_list at_param_list;           /* For AT parser */
-
-/* global variable defined in different files */
-extern struct uart_config slm_uart;
 
 /* global functions defined in different files */
 int slm_at_parse(const char *at_cmd);
 int slm_at_init(void);
 void slm_at_uninit(void);
 
-
 static enum slm_operation_mode get_slm_mode(void)
 {
 	enum slm_operation_mode mode;
 
 	k_mutex_lock(&mutex_mode, K_FOREVER);
-	mode = slm_mode;
+	mode = at_mode;
 	k_mutex_unlock(&mutex_mode);
 
 	return mode;
@@ -79,25 +71,25 @@ static bool set_slm_mode(enum slm_operation_mode mode)
 {
 	bool ret = false;
 
-	if (slm_mode == SLM_AT_COMMAND_MODE) {
+	if (at_mode == SLM_AT_COMMAND_MODE) {
 		if (mode == SLM_DATA_MODE) {
 			ret = true;
 		}
-	} else if (slm_mode == SLM_DATA_MODE) {
+	} else if (at_mode == SLM_DATA_MODE) {
 		if (mode == SLM_NULL_MODE || mode == SLM_AT_COMMAND_MODE) {
 			ret = true;
 		}
-	} else if (slm_mode == SLM_NULL_MODE) {
+	} else if (at_mode == SLM_NULL_MODE) {
 		if (mode == SLM_AT_COMMAND_MODE || mode == SLM_NULL_MODE) {
 			ret = true;
 		}
 	}
 
 	if (ret) {
-		LOG_DBG("SLM mode changed: %d -> %d", slm_mode, mode);
-		slm_mode = mode;
+		LOG_DBG("SLM mode changed: %d -> %d", at_mode, mode);
+		at_mode = mode;
 	} else {
-		LOG_ERR("Failed to change SLM mode: %d -> %d", slm_mode, mode);
+		LOG_ERR("Failed to change SLM mode: %d -> %d", at_mode, mode);
 	}
 
 	return ret;
@@ -150,7 +142,7 @@ static void raw_send(uint8_t flags)
 			/* Raw data sending */
 			size_finish = 0;
 
-			LOG_HEXDUMP_DBG(data, MIN(size_send, HEXDUMP_DATAMODE_MAX), "RX-DATA");
+			LOG_HEXDUMP_DBG(data, MIN(size_send, HEXDUMP_LIMIT), "RX");
 			k_mutex_lock(&mutex_mode, K_FOREVER);
 			if (datamode_handler && size_send > 0) {
 				size_sent = datamode_handler(DATAMODE_SEND, data, size_send, flags);
@@ -229,8 +221,8 @@ K_TIMER_DEFINE(inactivity_timer, inactivity_timer_handler, NULL);
 static size_t raw_rx_handler(const uint8_t *buf, const size_t len)
 {
 	size_t processed;
-	bool quit_str_match;
-	bool prev_quit_str_match;
+	bool quit_str_match = false;
+	bool prev_quit_str_match = false;
 	uint8_t quit_str_match_count;
 	uint8_t prev_quit_str_match_count;
 
@@ -238,7 +230,6 @@ static size_t raw_rx_handler(const uint8_t *buf, const size_t len)
 
 	/* Initialize from previous time.*/
 	prev_quit_str_match_count = quit_str_partial_match;
-	quit_str_match = false;
 	quit_str_match_count = prev_quit_str_match_count;
 	if (prev_quit_str_match_count != 0) {
 		prev_quit_str_match = true;
@@ -395,7 +386,6 @@ static char *strrstr(const char *str1, const char *str2)
 	return NULL;
 }
 
-
 static void format_final_result(char *buf, size_t buf_len, size_t buf_max_len)
 {
 	static const char ok_str[] = "OK\r\n";
@@ -403,10 +393,6 @@ static void format_final_result(char *buf, size_t buf_len, size_t buf_max_len)
 	static const char cme_error_str[] = "+CME ERROR:";
 	static const char cms_error_str[] = "+CMS ERROR:";
 	char *result = NULL;
-
-	/* insert <CR><LF> before information response */
-	buf[0] = CR;
-	buf[1] = LF;
 
 	result = strrstr(buf, ok_str);
 	if (result == NULL) {
@@ -444,16 +430,30 @@ static void format_final_result(char *buf, size_t buf_len, size_t buf_max_len)
 static void cmd_send(uint8_t *buf, uint16_t cmd_length, uint16_t buf_size)
 {
 	int err;
+	uint16_t offset = 0;
+	uint8_t *at_cmd = buf;
 
 	LOG_HEXDUMP_DBG(buf, cmd_length, "RX");
 
-	if (cmd_grammar_check(buf, cmd_length) != 0) {
+	/* UART can send additional characters when the device is powered on.
+	 * We ignore everything before the start of the AT-command.
+	 */
+	while (offset + 1 < cmd_length) {
+		if (toupper((int)buf[offset]) == 'A' && toupper((int)buf[offset + 1]) == 'T') {
+			at_cmd += offset;
+			cmd_length -= offset;
+			break;
+		}
+		offset++;
+	}
+
+	if (cmd_grammar_check(at_cmd, cmd_length) != 0) {
 		LOG_ERR("AT command invalid");
 		rsp_send_error();
 		return;
 	}
 
-	err = slm_at_parse((const char *)buf);
+	err = slm_at_parse((const char *)at_cmd);
 	if (err == 0) {
 		rsp_send_ok();
 		return;
@@ -464,7 +464,7 @@ static void cmd_send(uint8_t *buf, uint16_t cmd_length, uint16_t buf_size)
 
 	/* Send to modem, reserve space for CRLF in response buffer */
 	err = nrf_modem_at_cmd((void *)(buf + strlen(CRLF_STR)),
-				buf_size - strlen(CRLF_STR), "%s", buf);
+				buf_size - strlen(CRLF_STR), "%s", at_cmd);
 	if (err < 0) {
 		LOG_ERR("AT command failed: %d", err);
 		rsp_send_error();
@@ -476,9 +476,11 @@ static void cmd_send(uint8_t *buf, uint16_t cmd_length, uint16_t buf_size)
 	/** Format as TS 27.007 command V1 with verbose response format,
 	 *  based on current return of API nrf_modem_at_cmd() and MFWv1.3.x
 	 */
+	buf[0] = CR;
+	buf[1] = LF;
 	if (strlen(buf) > strlen(CRLF_STR)) {
-		format_final_result(at_buf, strlen(at_buf), sizeof(at_buf));
-		err = slm_uart_tx_write(buf, strlen(buf));
+		format_final_result((char *)buf, strlen(buf), buf_size);
+		err = slm_uart_tx_write(buf, strlen(buf), true);
 		if (err) {
 			LOG_ERR("AT command response failed: %d", err);
 		}
@@ -529,8 +531,8 @@ static size_t cmd_rx_handler(const uint8_t *buf, const size_t len)
 
 		if (send == false) {
 			/* Write character to AT buffer, leave space for null */
-			if (at_cmd_len < sizeof(at_buf) - 1) {
-				at_buf[at_cmd_len] = buf[processed];
+			if (at_cmd_len < sizeof(slm_at_buf) - 1) {
+				slm_at_buf[at_cmd_len] = buf[processed];
 			}
 			at_cmd_len++;
 
@@ -541,16 +543,15 @@ static size_t cmd_rx_handler(const uint8_t *buf, const size_t len)
 
 			prev_character = buf[processed];
 		}
-
 	}
 
 	if (send) {
-		if (at_cmd_len > sizeof(at_buf) - 1) {
+		if (at_cmd_len > sizeof(slm_at_buf) - 1) {
 			LOG_ERR("AT command buffer overflow, %d dropped", at_cmd_len);
 			rsp_send_error();
 		} else if (at_cmd_len > 0) {
-			at_buf[at_cmd_len] = '\0';
-			cmd_send(at_buf, at_cmd_len, sizeof(at_buf));
+			slm_at_buf[at_cmd_len] = '\0';
+			cmd_send(slm_at_buf, at_cmd_len, sizeof(slm_at_buf));
 		} else {
 			/* Ignore 0 size command. */
 		}
@@ -619,7 +620,7 @@ static void rx_handler_callback(const uint8_t *buf, size_t len)
 			ret = null_handler(buf, len);
 		} else {
 			LOG_ERR("Internal error: Unknown SLM mode.");
-			(void)slm_uart_tx_write(FATAL_STR, sizeof(FATAL_STR) - 1);
+			(void)slm_uart_tx_write(FATAL_STR, sizeof(FATAL_STR) - 1, true);
 			break;
 		}
 
@@ -628,14 +629,14 @@ static void rx_handler_callback(const uint8_t *buf, size_t len)
 			len -= ret;
 		} else {
 			LOG_ERR("Internal error: Command overflow.");
-			(void)slm_uart_tx_write(FATAL_STR, sizeof(FATAL_STR) - 1);
+			(void)slm_uart_tx_write(FATAL_STR, sizeof(FATAL_STR) - 1, true);
 			break;
 		}
 	}
 
 	/* start inactivity timer in datamode */
 	if (get_slm_mode() == SLM_DATA_MODE) {
-		k_timer_start(&inactivity_timer, K_MSEC(datamode_time_limit), K_NO_WAIT);
+		k_timer_start(&inactivity_timer, K_MSEC(slm_datamode_time_limit), K_NO_WAIT);
 	}
 }
 
@@ -644,38 +645,46 @@ AT_MONITOR(at_notify, ANY, notification_handler);
 static void notification_handler(const char *notification)
 {
 	if (get_slm_mode() == SLM_AT_COMMAND_MODE) {
-		(void)slm_uart_tx_write(CRLF_STR, strlen(CRLF_STR));
-		(void)slm_uart_tx_write(notification, strlen(notification));
+		(void)slm_uart_tx_write(CRLF_STR, strlen(CRLF_STR), true);
+		(void)slm_uart_tx_write(notification, strlen(notification), true);
 	}
 }
 
 void rsp_send_ok(void)
 {
-	(void)slm_uart_tx_write(OK_STR, sizeof(OK_STR) - 1);
+	(void)slm_uart_tx_write(OK_STR, sizeof(OK_STR) - 1, true);
 }
 
 void rsp_send_error(void)
 {
-	(void)slm_uart_tx_write(ERROR_STR, sizeof(ERROR_STR) - 1);
+	(void)slm_uart_tx_write(ERROR_STR, sizeof(ERROR_STR) - 1, true);
 }
 
 void rsp_send(const char *fmt, ...)
 {
+	static K_MUTEX_DEFINE(mutex_rsp_buf);
+	static char rsp_buf[SLM_AT_MAX_RSP_LEN];
+
+	if (!slm_uart_can_context_send(fmt, strlen(fmt))) {
+		return;
+	}
+	k_mutex_lock(&mutex_rsp_buf, K_FOREVER);
+
 	va_list arg_ptr;
 
 	va_start(arg_ptr, fmt);
 	vsnprintf(rsp_buf, sizeof(rsp_buf), fmt, arg_ptr);
 	va_end(arg_ptr);
 
-	(void)slm_uart_tx_write(rsp_buf, strlen(rsp_buf));
+	(void)slm_uart_tx_write(rsp_buf, strlen(rsp_buf), true);
+
+	k_mutex_unlock(&mutex_rsp_buf);
 }
 
 void data_send(const uint8_t *data, size_t len)
 {
-	LOG_HEXDUMP_DBG(data, MIN(len, HEXDUMP_DATAMODE_MAX), "TX-DATA");
-	(void)slm_uart_tx_write(data, len);
+	(void)slm_uart_tx_write(data, len, false);
 }
-
 
 int enter_datamode(slm_datamode_handler_t handler)
 {
@@ -692,14 +701,14 @@ int enter_datamode(slm_datamode_handler_t handler)
 	k_mutex_unlock(&mutex_data);
 
 	datamode_handler = handler;
-	if (datamode_time_limit == 0) {
-		if (slm_uart.baudrate > 0) {
-			datamode_time_limit = CONFIG_SLM_UART_RX_BUF_SIZE * (8 + 1 + 1) * 1000 /
-					      slm_uart.baudrate;
-			datamode_time_limit += UART_RX_MARGIN_MS;
+	if (slm_datamode_time_limit == 0) {
+		if (slm_uart_baudrate > 0) {
+			slm_datamode_time_limit = CONFIG_SLM_UART_RX_BUF_SIZE * (8 + 1 + 1) * 1000 /
+					      slm_uart_baudrate;
+			slm_datamode_time_limit += UART_RX_MARGIN_MS;
 		} else {
 			LOG_WRN("Baudrate not set");
-			datamode_time_limit = 1000;
+			slm_datamode_time_limit = 1000;
 		}
 	}
 	LOG_INF("Enter datamode");
@@ -742,12 +751,12 @@ bool verify_datamode_control(uint16_t time_limit, uint16_t *min_time_limit)
 {
 	int min_time;
 
-	if (slm_uart.baudrate == 0) {
+	if (slm_uart_baudrate == 0) {
 		LOG_ERR("Baudrate not set");
 		return false;
 	}
 
-	min_time = CONFIG_SLM_UART_RX_BUF_SIZE * (8 + 1 + 1) * 1000 / slm_uart.baudrate;
+	min_time = CONFIG_SLM_UART_RX_BUF_SIZE * (8 + 1 + 1) * 1000 / slm_uart_baudrate;
 	min_time += UART_RX_MARGIN_MS;
 
 	if (time_limit > 0 && min_time > time_limit) {
@@ -767,16 +776,16 @@ int slm_at_host_init(void)
 	int err;
 
 	/* Initialize AT Parser */
-	err = at_params_list_init(&at_param_list, CONFIG_SLM_AT_MAX_PARAM);
+	err = at_params_list_init(&slm_at_param_list, CONFIG_SLM_AT_MAX_PARAM);
 	if (err) {
 		LOG_ERR("Failed to init AT Parser: %d", err);
 		return err;
 	}
 
 	k_mutex_lock(&mutex_mode, K_FOREVER);
-	datamode_time_limit = 0;
+	slm_datamode_time_limit = 0;
 	datamode_handler = NULL;
-	slm_mode = SLM_AT_COMMAND_MODE;
+	at_mode = SLM_AT_COMMAND_MODE;
 	k_mutex_unlock(&mutex_mode);
 
 	err = slm_at_init();
@@ -803,7 +812,7 @@ int slm_at_host_init(void)
 void slm_at_host_uninit(void)
 {
 	k_mutex_lock(&mutex_mode, K_FOREVER);
-	if (slm_mode == SLM_DATA_MODE) {
+	if (at_mode == SLM_DATA_MODE) {
 		k_timer_stop(&inactivity_timer);
 	}
 	datamode_handler = NULL;
@@ -815,7 +824,7 @@ void slm_at_host_uninit(void)
 	slm_uart_handler_uninit();
 
 	/* Un-initialize AT Parser */
-	at_params_list_free(&at_param_list);
+	at_params_list_free(&slm_at_param_list);
 
 	LOG_DBG("at_host uninit done");
 }

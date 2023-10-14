@@ -72,7 +72,7 @@ Options that alter the default values of the application's real-time configurati
 
 CONFIG_DATA_DEVICE_MODE_ACTIVE
    This configuration sets the device in active mode.
-   Default mode for the nRF9160 DK.
+   Default mode for nRF91 Series devices.
 
 .. _CONFIG_DATA_DEVICE_MODE_PASSIVE:
 
@@ -174,7 +174,7 @@ Dependencies
 This module uses the following |NCS| libraries and drivers:
 
 * :ref:`app_event_manager`
-* :ref:`lib_nrf_cloud_agps`
+* :ref:`lib_nrf_cloud_agnss`
 * :ref:`lib_nrf_cloud_pgps`
 * :ref:`settings_api`
 

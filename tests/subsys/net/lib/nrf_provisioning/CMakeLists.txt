@@ -17,7 +17,7 @@ set(options
 )
 
 cmock_handle(${ZEPHYR_NRF_MODULE_DIR}/include/date_time.h)
-cmock_handle(${ZEPHYR_NRF_MODULE_DIR}/include/modem/lte_lc.h)
+cmock_handle(${ZEPHYR_NRF_MODULE_DIR}/include/modem/lte_lc.h FUNC_EXCLUDE ".*(lte_lc_rai_req|lte_lc_rai_param_set)")
 cmock_handle(${ZEPHYR_NRF_MODULE_DIR}/include/modem/modem_key_mgmt.h)
 cmock_handle(${ZEPHYR_NRF_MODULE_DIR}/include/modem/modem_info.h)
 cmock_handle(${ZEPHYR_NRF_MODULE_DIR}/include/modem/nrf_modem_lib.h)
@@ -34,6 +34,20 @@ if(CONFIG_NRF_PROVISIONING_JWT)
     -DCONFIG_MODEM_JWT_MAX_LEN=850
   )
   cmock_handle(${ZEPHYR_NRF_MODULE_DIR}/include/modem/modem_jwt.h)
+
+elseif(CONFIG_NRF_PROVISIONING_COAP)
+  test_runner_generate(src/coap.c)
+  list(APPEND app_sources src/coap.c)
+  list (APPEND options
+    -DCONFIG_NRF_PROVISIONING_AT_ATTESTTOKEN_MAX_LEN=256
+    -DCONFIG_COAP_CLIENT_MESSAGE_HEADER_SIZE=48
+    -DCONFIG_COAP_CLIENT_MESSAGE_SIZE=512
+    -DCONFIG_COAP_CLIENT_STACK_SIZE=1024
+    -DCONFIG_NET_SOCKETS_POSIX_NAMES=y
+    -DCONFIG_MODEM_INFO_BUFFER_SIZE=128
+    -DCONFIG_COAP_CLIENT_MAX_REQUESTS=2
+  )
+  cmock_handle(include/coap_client.h)
 
 elseif(CONFIG_NRF_PROVISIONING_ATTESTTOKEN)
   test_runner_generate(src/main.c)

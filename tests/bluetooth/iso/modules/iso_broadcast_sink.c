@@ -3,9 +3,8 @@
  *
  * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
-
-#include <getopt.h>
 #include <stdlib.h>
+#include <getopt.h>
 #include <ctype.h>
 #include <unistd.h>
 
@@ -22,7 +21,7 @@
 LOG_MODULE_REGISTER(broadcast_sink, CONFIG_ISO_TEST_LOG_LEVEL);
 
 #define TIMEOUT_SYNC_CREATE K_SECONDS(10)
-#define NAME_LEN 30
+#define NAME_LEN	    30
 
 #define BT_LE_SCAN_CUSTOM                                                                          \
 	BT_LE_SCAN_PARAM(BT_LE_SCAN_TYPE_ACTIVE, BT_LE_SCAN_OPT_NONE, BT_GAP_SCAN_FAST_INTERVAL,   \
@@ -37,6 +36,7 @@ static const struct gpio_dt_spec led = GPIO_DT_SPEC_GET(DT_ALIAS(led2), gpios);
 
 static bool per_adv_found;
 static bool per_adv_lost;
+static bool running;
 static bt_addr_le_t per_addr;
 static uint8_t per_sid;
 static uint32_t per_interval_us;
@@ -47,7 +47,6 @@ static K_SEM_DEFINE(sem_per_sync_lost, 0, 1);
 static K_SEM_DEFINE(sem_per_big_info, 0, 1);
 static K_SEM_DEFINE(sem_big_sync, 0, CONFIG_BIS_ISO_CHAN_COUNT_MAX);
 static K_SEM_DEFINE(sem_big_sync_lost, 0, CONFIG_BIS_ISO_CHAN_COUNT_MAX);
-static K_SEM_DEFINE(sem_running, 0, 1);
 
 static bool data_cb(struct bt_data *data, void *user_data)
 {
@@ -168,6 +167,7 @@ static void biginfo_cb(struct bt_le_per_adv_sync *sync, const struct bt_iso_bigi
 
 	bt_addr_le_to_str(biginfo->addr, le_addr, sizeof(le_addr));
 
+	/* NOTE: The string below is used by the Nordic CI system */
 	LOG_DBG("BIG INFO[%u]: [DEVICE]: %s, sid 0x%02x, "
 		"num_bis %u, nse %u, interval 0x%04x (%u ms), "
 		"bn %u, pto %u, irc %u, max_pdu %u, "
@@ -198,12 +198,15 @@ static void iso_recv(struct bt_iso_chan *chan, const struct bt_iso_recv_info *in
 	static uint32_t counts_fail;
 	static uint32_t counts_success;
 
-	if (buf->len == sizeof(count)) {
-		count = sys_get_le32(buf->data);
-	}
-
 	if (!(info->flags & BT_ISO_FLAGS_VALID)) {
 		LOG_ERR("bad frame");
+	}
+
+	if (buf->len >= sizeof(count)) {
+		count = sys_get_le32(buf->data);
+	} else {
+		LOG_WRN("Received too few bytes: %d", buf->len);
+		return;
 	}
 
 	/* Wrapping not considered. Overflow will take over a year.*/
@@ -218,6 +221,7 @@ static void iso_recv(struct bt_iso_chan *chan, const struct bt_iso_recv_info *in
 	last_count = count;
 
 	if ((count % CONFIG_PRINT_CONN_INTERVAL) == 0) {
+		/* NOTE: The string below is used by the Nordic CI system */
 		LOG_INF("RX. Count: %d, Failed: %d, Success: %d", count, counts_fail,
 			counts_success);
 
@@ -264,6 +268,7 @@ static struct bt_iso_big_sync_param big_sync_param = {
 	.bis_bitfield = (BIT_MASK(1) << 1),
 	.mse = 1,
 	.sync_timeout = 100, /* in 10 ms units */
+	.encryption = false,
 };
 
 static void broadcaster_sink_trd(void)
@@ -273,8 +278,6 @@ static void broadcaster_sink_trd(void)
 	struct bt_le_per_adv_sync *sync;
 	struct bt_iso_big *big;
 	uint32_t sem_retry_timeout_ms;
-
-	k_sem_take(&sem_running, K_FOREVER);
 
 	bt_le_scan_cb_register(&scan_callbacks);
 	bt_le_per_adv_sync_cb_register(&sync_callbacks);
@@ -419,18 +422,24 @@ int iso_broadcast_sink_start(const struct shell *shell, size_t argc, char **argv
 {
 	int ret;
 
+	k_thread_create(&broadcaster_sink_thread, broadcaster_sink_thread_stack,
+			K_THREAD_STACK_SIZEOF(broadcaster_sink_thread_stack),
+			(k_thread_entry_t)broadcaster_sink_trd, NULL, NULL, NULL, 5, K_USER,
+			K_NO_WAIT);
+
 	ret = gpio_pin_set_dt(&led, 1);
 	if (ret) {
 		return ret;
 	}
 
-	k_sem_give(&sem_running);
+	running = true;
 	return 0;
 }
 
 int iso_broadcast_sink_init(void)
 {
 	int ret;
+	running = false;
 
 	if (!gpio_is_ready_dt(&led)) {
 		return -EBUSY;
@@ -448,11 +457,6 @@ int iso_broadcast_sink_init(void)
 		bis[i] = &bis_iso_chan[i];
 	}
 
-	k_thread_create(&broadcaster_sink_thread, broadcaster_sink_thread_stack,
-			K_THREAD_STACK_SIZEOF(broadcaster_sink_thread_stack),
-			(k_thread_entry_t)broadcaster_sink_trd, NULL, NULL, NULL, 5, K_USER,
-			K_NO_WAIT);
-
 	return 0;
 }
 
@@ -467,20 +471,19 @@ static int argument_check(const struct shell *shell, uint8_t const *const input)
 		return -EINVAL;
 	}
 
-	if (k_sem_count_get(&sem_running) == 0) {
-		shell_error(shell, "Arguments can not be changed while running");
-		return -EACCES;
+	if (running) {
+		shell_error(shell, "Stop sink before changing parameters");
+		return -EPERM;
 	}
 
 	return arg_val;
 }
 
-static struct option long_options[] = { { "num_bis:", required_argument, NULL, 'n' },
-					{ 0, 0, 0, 0 } };
+static struct option long_options[] = {{"num_bis:", required_argument, NULL, 'n'}, {0, 0, 0, 0}};
 
 static const char short_options[] = "n:";
 
-static int set_param(const struct shell *shell, size_t argc, char **argv)
+static int param_set(const struct shell *shell, size_t argc, char **argv)
 {
 	int long_index = 0;
 	int opt;
@@ -490,7 +493,7 @@ static int set_param(const struct shell *shell, size_t argc, char **argv)
 		return result;
 	}
 
-	if (k_sem_count_get(&sem_running) == 0) {
+	if (running) {
 		shell_error(shell, "Change sink parameters before starting");
 		return -EPERM;
 	}
@@ -523,7 +526,7 @@ static int set_param(const struct shell *shell, size_t argc, char **argv)
 SHELL_STATIC_SUBCMD_SET_CREATE(broadcast_sink_cmd,
 			       SHELL_CMD(start, NULL, "Start ISO broadcast sink.",
 					 iso_broadcast_sink_start),
-			       SHELL_CMD_ARG(set, NULL, "set", set_param, 3, 0),
+			       SHELL_CMD_ARG(set, NULL, "set", param_set, 3, 0),
 			       SHELL_SUBCMD_SET_END);
 
 SHELL_CMD_REGISTER(brcast_sink, &broadcast_sink_cmd, "ISO Broadcast sink commands", NULL);

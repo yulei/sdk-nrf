@@ -128,9 +128,9 @@ config MBEDTLS_SSL_EXTENDED_MASTER_SECRET
 	bool
 	default y
 	help
-	  This setting enables support for RFC: 7627: Session Has and Extended Master
-	  Secret Extension.This was introduced as the "proper fix" tot the Triple
-	  Handshake attacks, but is recommended to always be used.
+	  This setting enables support for RFC 7627: Session Hash and Extended
+	  Master Secret Extension. This was introduced as the "proper fix" to
+	  the Triple Handshake attacks, but is recommended to always be used.
 	  Corresponds to MBEDTLS_SSL_EXTENDED_MASTER_SECRET in mbed TLS config file.
 
 config MBEDTLS_SSL_COOKIE_C
@@ -163,6 +163,13 @@ config MBEDTLS_DEBUG_LEVEL
 	  2 State change
 	  3 Information
 	  4 Verbose
+
+config MBEDTLS_MEMORY_DEBUG
+	bool "mbed TLS memory debug activation"
+	help
+	  Enable debugging of buffer allocator memory issues. Automatically
+	  prints (to stderr) all (fatal) messages on memory allocation
+	  issues. Enables function for 'debug output' of allocated memory.
 
 config MBEDTLS_SSL_PROTO_DTLS
 	bool "Enable support for DTLS"
@@ -292,14 +299,14 @@ config MBEDTLS_SSL_OUT_CONTENT_LEN
 	int
 	prompt "Max length for TLS outgoing fragments"
 	range 0 16384
-	default 900 if OPENTHREAD_NRF_SECURITY
+	default 900 if OPENTHREAD_NRF_SECURITY || OPENTHREAD_NRF_SECURITY_PSA
 	default 16380
 
 config MBEDTLS_SSL_IN_CONTENT_LEN
 	prompt "Max length for TLS outgoing fragments"
 	int
 	range 0 16384
-	default 900 if OPENTHREAD_NRF_SECURITY
+	default 900 if OPENTHREAD_NRF_SECURITY || OPENTHREAD_NRF_SECURITY_PSA
 	default 16380
 
 
@@ -354,12 +361,13 @@ config MBEDTLS_HAS_RSA_CIPHERSUITE_REQUIREMENTS
 config MBEDTLS_HAS_ECJPAKE_CIPHERSUITE_REQUIREMENTS
 	bool
 	default y
-	depends on MBEDTLS_ECJPAKE_C && MBEDTLS_SHA256_C
+	depends on ((MBEDTLS_ECJPAKE_C && MBEDTLS_SHA256_C) || \
+		    (PSA_WANT_ALG_JPAKE && PSA_WANT_ALG_SHA_256))
 
 config MBEDTLS_KEY_EXCHANGE_PSK_ENABLED
 	bool
 	prompt "PSK"
-	default y if !NET_L2_OPENTHREAD
+	default y if OPENTHREAD_COAPS || !NET_L2_OPENTHREAD
 	depends on MBEDTLS_HAS_CIPHER_MODE_CIPHERSUITE_REQUIREMENTS
 
 config MBEDTLS_KEY_EXCHANGE_DHE_PSK_ENABLED

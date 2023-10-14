@@ -504,20 +504,20 @@ void location_core_event_cb_timeout(void)
 	location_core_event_cb(NULL);
 }
 
-#if defined(CONFIG_LOCATION_SERVICE_EXTERNAL) && defined(CONFIG_NRF_CLOUD_AGPS)
-void location_core_event_cb_agps_request(const struct nrf_modem_gnss_agps_data_frame *request)
+#if defined(CONFIG_LOCATION_SERVICE_EXTERNAL) && defined(CONFIG_NRF_CLOUD_AGNSS)
+void location_core_event_cb_agnss_request(const struct nrf_modem_gnss_agnss_data_frame *request)
 {
-	struct location_event_data agps_request_event_data;
+	struct location_event_data agnss_request_event_data;
 
-	LOG_DBG("Request A-GPS data from application: ephe 0x%08x, alm 0x%08x, data_flags 0x%02x",
-		request->sv_mask_ephe,
-		request->sv_mask_alm,
+	LOG_DBG("Request A-GNSS data from application: ephe 0x%08x, alm 0x%08x, data_flags 0x%02x",
+		(uint32_t)request->system[0].sv_mask_ephe,
+		(uint32_t)request->system[0].sv_mask_alm,
 		request->data_flags);
 
-	agps_request_event_data.id = LOCATION_EVT_GNSS_ASSISTANCE_REQUEST;
-	agps_request_event_data.method = LOCATION_METHOD_GNSS;
-	agps_request_event_data.agps_request = *request;
-	event_handler(&agps_request_event_data);
+	agnss_request_event_data.id = LOCATION_EVT_GNSS_ASSISTANCE_REQUEST;
+	agnss_request_event_data.method = LOCATION_METHOD_GNSS;
+	agnss_request_event_data.agnss_request = *request;
+	event_handler(&agnss_request_event_data);
 }
 #endif
 
@@ -777,9 +777,15 @@ void location_core_event_cb(const struct location_data *location)
 		loc_req_info.current_event_data.location = *location;
 	}
 
-	k_work_submit_to_queue(
-		location_core_work_queue_get(),
-		&location_event_cb_work);
+	if (k_work_busy_get(&location_event_cb_work) == 0) {
+		/* If work item is idle, schedule it */
+		k_work_submit_to_queue(
+			location_core_work_queue_get(),
+			&location_event_cb_work);
+	} else {
+		LOG_INF("Event is already scheduled so ignoring event %d",
+			loc_req_info.current_event_data.id);
+	}
 }
 
 struct k_work_q *location_core_work_queue_get(void)
@@ -821,9 +827,7 @@ static void location_core_timeout_work_fn(struct k_work *work)
 	loc_req_info.current_event_data.id = LOCATION_EVT_TIMEOUT;
 	loc_req_info.execute_fallback = false;
 
-	k_work_submit_to_queue(
-		location_core_work_queue_get(),
-		&location_event_cb_work);
+	location_core_event_cb(NULL);
 }
 
 void location_core_timer_start(int32_t timeout)

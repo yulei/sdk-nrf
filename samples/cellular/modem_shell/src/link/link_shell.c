@@ -48,6 +48,7 @@ enum link_shell_command {
 	LINK_CMD_RAI,
 	LINK_CMD_DNSADDR,
 	LINK_CMD_REDMOB,
+	LINK_CMD_PROPRIPSM
 };
 
 enum link_shell_common_options {
@@ -168,16 +169,19 @@ static const char link_normal_mode_auto_usage_str[] =
 	"  -d, --disable,         Disable autoconnect\n";
 
 static const char link_edrx_usage_str[] =
-	"Usage: link edrx --enable --ltem|--nbiot [options] | --disable\n"
+	"Usage: link edrx --enable [options] | --disable | --read\n"
 	"Options:\n"
+	"  -r, --read,             Read eDRX parameters currently provided by the network\n"
 	"  -d, --disable,          Disable eDRX\n"
 	"  -e, --enable,           Enable eDRX\n"
-	"  -m, --ltem,             Set for LTE-M (LTE Cat-M1) system mode\n"
-	"  -n, --nbiot,            Set for NB-IoT (LTE Cat-NB1) system mode\n"
-	"  -x, --edrx_value, [str] Sets custom eDRX value to be requested when\n"
+	"      --ltem_edrx, [str]  Sets custom eDRX value for LTE-M to be requested when\n"
 	"                          enabling eDRX with -e option.\n"
-	"  -w, --ptw, [str]        Sets custom Paging Time Window value to be\n"
-	"                          requested when enabling eDRX -e option.\n";
+	"      --ltem_ptw, [str]   Sets custom Paging Time Window value for LTE-M to be\n"
+	"                          requested when enabling eDRX with -e option.\n"
+	"      --nbiot_edrx, [str] Sets custom eDRX value for NB-IoT to be requested when\n"
+	"                          enabling eDRX with -e option.\n"
+	"      --nbiot_ptw, [str]  Sets custom Paging Time Window value for NB-IoT to be\n"
+	"                          requested when enabling eDRX with -e option.\n";
 
 static const char link_psm_usage_str[] =
 	"Usage: link psm --enable [options] | --disable | --read\n"
@@ -323,6 +327,13 @@ static const char link_redmob_usage_str[] =
 	"      --default,      Enable default reduced mobility mode\n"
 	"      --nordic,       Enable Nordic proprietary reduced mobility mode\n";
 
+static const char link_propripsm_usage_str[] =
+	"Usage: link propripsm --read | --disable | --enable\n"
+	"Options:\n"
+	"  -r, --read,         Read proprietary PSM status\n"
+	"  -d, --disable,      Disable proprietary PSM\n"
+	"  -e, --enable,       Enable proprietary PSM\n";
+
 /******************************************************************************/
 
 /* Following are not having short options: */
@@ -362,6 +373,10 @@ enum {
 	LINK_SHELL_OPT_WRITE,
 	LINK_SHELL_OPT_REDMOB_DEFAULT,
 	LINK_SHELL_OPT_REDMOB_NORDIC,
+	LINK_SHELL_OPT_LTEM_EDRX,
+	LINK_SHELL_OPT_LTEM_PTW,
+	LINK_SHELL_OPT_NBIOT_EDRX,
+	LINK_SHELL_OPT_NBIOT_PTW
 };
 
 /* Specifying the expected options (both long and short): */
@@ -392,8 +407,10 @@ static struct option long_options[] = {
 	{ "enable", no_argument, 0, 'e' },
 	{ "enable_no_rel14", no_argument, 0, LINK_SHELL_OPT_NMODE_NO_REL14 },
 	{ "disable", no_argument, 0, 'd' },
-	{ "edrx_value", required_argument, 0, 'x' },
-	{ "ptw", required_argument, 0, 'w' },
+	{ "ltem_edrx", required_argument, 0, LINK_SHELL_OPT_LTEM_EDRX },
+	{ "ltem_ptw", required_argument, 0, LINK_SHELL_OPT_LTEM_PTW },
+	{ "nbiot_edrx", required_argument, 0, LINK_SHELL_OPT_NBIOT_EDRX },
+	{ "nbiot_ptw", required_argument, 0, LINK_SHELL_OPT_NBIOT_PTW },
 	{ "prot", required_argument, 0, 'A' },
 	{ "pword", required_argument, 0, 'P' },
 	{ "uname", required_argument, 0, 'U' },
@@ -431,7 +448,7 @@ static struct option long_options[] = {
 	{ 0, 0, 0, 0 }
 };
 
-static const char short_options[] = "a:I:f:i:x:w:p:t:A:P:U:su014rmngMNed";
+static const char short_options[] = "a:I:f:i:p:t:A:P:U:su014rmngMNed";
 
 /******************************************************************************/
 
@@ -497,6 +514,9 @@ static void link_shell_print_usage(enum link_shell_command command)
 	case LINK_CMD_REDMOB:
 		mosh_print_no_format(link_redmob_usage_str);
 		break;
+	case LINK_CMD_PROPRIPSM:
+		mosh_print_no_format(link_propripsm_usage_str);
+		break;
 	default:
 		break;
 	}
@@ -518,7 +538,7 @@ static void link_shell_print_usage(enum link_shell_command command)
 	 LTE_LC_SYSTEM_MODE_LTEM_NBIOT                   :	   \
 	 IS_ENABLED(CONFIG_LTE_NETWORK_MODE_LTE_M_NBIOT_GPS)     ? \
 	 LTE_LC_SYSTEM_MODE_LTEM_NBIOT_GPS               :	   \
-	 LTE_LC_SYSTEM_MODE_NONE)
+	 LINK_SYSMODE_NONE)
 
 static void link_shell_sysmode_set(int sysmode, int lte_pref)
 {
@@ -984,11 +1004,14 @@ static int link_shell_edrx(const struct shell *shell, size_t argc, char **argv)
 {
 	int ret = 0;
 	enum link_shell_common_options common_option = LINK_COMMON_NONE;
-	enum lte_lc_lte_mode lte_mode = LTE_LC_LTE_MODE_NONE;
-	char edrx_value_str[LINK_SHELL_EDRX_VALUE_STR_LENGTH + 1];
-	bool edrx_value_set = false;
-	char edrx_ptw_bit_str[LINK_SHELL_EDRX_PTW_STR_LENGTH + 1];
-	bool edrx_ptw_set = false;
+	char ltem_edrx_str[LINK_SHELL_EDRX_VALUE_STR_LENGTH + 1];
+	bool ltem_edrx_set = false;
+	char ltem_ptw_str[LINK_SHELL_EDRX_PTW_STR_LENGTH + 1];
+	bool ltem_ptw_set = false;
+	char nbiot_edrx_str[LINK_SHELL_EDRX_VALUE_STR_LENGTH + 1];
+	bool nbiot_edrx_set = false;
+	char nbiot_ptw_str[LINK_SHELL_EDRX_PTW_STR_LENGTH + 1];
+	bool nbiot_ptw_set = false;
 
 	int long_index = 0;
 	int opt;
@@ -999,17 +1022,11 @@ static int link_shell_edrx(const struct shell *shell, size_t argc, char **argv)
 		link_shell_getopt_common_option(opt, &common_option);
 
 		switch (opt) {
-		case 'm':
-			lte_mode = LTE_LC_LTE_MODE_LTEM;
-			break;
-		case 'n':
-			lte_mode = LTE_LC_LTE_MODE_NBIOT;
-			break;
-		case 'x': /* drx_value */
+		case LINK_SHELL_OPT_LTEM_EDRX:
 			if (strlen(optarg) ==
 			    LINK_SHELL_EDRX_VALUE_STR_LENGTH) {
-				strcpy(edrx_value_str, optarg);
-				edrx_value_set = true;
+				strcpy(ltem_edrx_str, optarg);
+				ltem_edrx_set = true;
 			} else {
 				mosh_error(
 					"eDRX value string length must be %d.",
@@ -1017,10 +1034,33 @@ static int link_shell_edrx(const struct shell *shell, size_t argc, char **argv)
 				return -EINVAL;
 			}
 			break;
-		case 'w': /* Paging Time Window */
+		case LINK_SHELL_OPT_LTEM_PTW:
 			if (strlen(optarg) == LINK_SHELL_EDRX_PTW_STR_LENGTH) {
-				strcpy(edrx_ptw_bit_str, optarg);
-				edrx_ptw_set = true;
+				strcpy(ltem_ptw_str, optarg);
+				ltem_ptw_set = true;
+			} else {
+				mosh_error(
+					"PTW string length must be %d.",
+					LINK_SHELL_EDRX_PTW_STR_LENGTH);
+				return -EINVAL;
+			}
+			break;
+		case LINK_SHELL_OPT_NBIOT_EDRX:
+			if (strlen(optarg) ==
+			    LINK_SHELL_EDRX_VALUE_STR_LENGTH) {
+				strcpy(nbiot_edrx_str, optarg);
+				nbiot_edrx_set = true;
+			} else {
+				mosh_error(
+					"eDRX value string length must be %d.",
+					LINK_SHELL_EDRX_VALUE_STR_LENGTH);
+				return -EINVAL;
+			}
+			break;
+		case LINK_SHELL_OPT_NBIOT_PTW:
+			if (strlen(optarg) == LINK_SHELL_EDRX_PTW_STR_LENGTH) {
+				strcpy(nbiot_ptw_str, optarg);
+				nbiot_ptw_set = true;
 			} else {
 				mosh_error(
 					"PTW string length must be %d.",
@@ -1036,33 +1076,56 @@ static int link_shell_edrx(const struct shell *shell, size_t argc, char **argv)
 	if (common_option == LINK_COMMON_ENABLE) {
 		char *value = NULL; /* Set with the defaults if not given */
 
-		if (lte_mode == LTE_LC_LTE_MODE_NONE) {
-			mosh_error("LTE mode is mandatory to be given. See usage:");
-			link_shell_print_usage(LINK_CMD_EDRX);
-			return -EINVAL;
+		if (ltem_edrx_set) {
+			value = ltem_edrx_str;
 		}
 
-		if (edrx_value_set) {
-			value = edrx_value_str;
-		}
-
-		ret = lte_lc_edrx_param_set(lte_mode, value);
+		ret = lte_lc_edrx_param_set(LTE_LC_LTE_MODE_LTEM, value);
 		if (ret < 0) {
 			mosh_error(
-				"Cannot set eDRX value %s, error: %d",
+				"Cannot set LTE-M eDRX value %s, error: %d",
 				((value == NULL) ? "NULL" : value),
 				ret);
 			return -EINVAL;
 		}
+
 		value = NULL; /* Set with the defaults if not given */
-		if (edrx_ptw_set) {
-			value = edrx_ptw_bit_str;
+		if (ltem_ptw_set) {
+			value = ltem_ptw_str;
 		}
 
-		ret = lte_lc_ptw_set(lte_mode, value);
+		ret = lte_lc_ptw_set(LTE_LC_LTE_MODE_LTEM, value);
 		if (ret < 0) {
 			mosh_error(
-				"Cannot set PTW value %s, error: %d",
+				"Cannot set LTE-M PTW value %s, error: %d",
+				((value == NULL) ? "NULL" : value),
+				ret);
+			return -EINVAL;
+		}
+
+		value = NULL; /* Set with the defaults if not given */
+		if (nbiot_edrx_set) {
+			value = nbiot_edrx_str;
+		}
+
+		ret = lte_lc_edrx_param_set(LTE_LC_LTE_MODE_NBIOT, value);
+		if (ret < 0) {
+			mosh_error(
+				"Cannot set NB-IoT eDRX value %s, error: %d",
+				((value == NULL) ? "NULL" : value),
+				ret);
+			return -EINVAL;
+		}
+
+		value = NULL; /* Set with the defaults if not given */
+		if (nbiot_ptw_set) {
+			value = nbiot_ptw_str;
+		}
+
+		ret = lte_lc_ptw_set(LTE_LC_LTE_MODE_NBIOT, value);
+		if (ret < 0) {
+			mosh_error(
+				"Cannot set NB-IoT PTW value %s, error: %d",
 				((value == NULL) ? "NULL" : value),
 				ret);
 			return -EINVAL;
@@ -1080,6 +1143,22 @@ static int link_shell_edrx(const struct shell *shell, size_t argc, char **argv)
 			mosh_error("Cannot disable eDRX: %d", ret);
 		} else {
 			mosh_print("eDRX disabled");
+		}
+	} else if (common_option == LINK_COMMON_READ) {
+		struct lte_lc_edrx_cfg edrx_cfg;
+
+		ret = lte_lc_edrx_get(&edrx_cfg);
+		if (ret < 0) {
+			mosh_error("Cannot read eDRX parameters: %d", ret);
+		} else {
+			if (edrx_cfg.mode == LTE_LC_LTE_MODE_NONE) {
+				mosh_print("eDRX not in use");
+			} else {
+				mosh_print("eDRX LTE mode: %s, eDRX interval: %.2f s, PTW: %.2f s",
+					   edrx_cfg.mode == LTE_LC_LTE_MODE_LTEM ?
+						"LTE-M" : "NB-IoT",
+					   edrx_cfg.edrx, edrx_cfg.ptw);
+			}
 		}
 	} else {
 		link_shell_print_usage(LINK_CMD_EDRX);
@@ -1372,6 +1451,36 @@ static int link_shell_nmodeauto(const struct shell *shell, size_t argc, char **a
 		link_sett_save_normal_mode_autoconn_enabled(false, nmode_use_rel14);
 	} else {
 		link_shell_print_usage(LINK_CMD_NORMAL_MODE_AUTO);
+	}
+
+	return 0;
+}
+
+static int link_shell_propripsm(const struct shell *shell, size_t argc, char **argv)
+{
+	int err;
+	enum link_shell_common_options common_option = LINK_COMMON_NONE;
+
+	common_option = link_shell_getopt_common(argc, argv);
+
+	if (common_option == LINK_COMMON_READ) {
+		link_propripsm_read();
+	} else if (common_option == LINK_COMMON_ENABLE) {
+		err = lte_lc_proprietary_psm_req(true);
+		if (!err) {
+			mosh_print("Proprietary PSM enabled");
+		} else {
+			mosh_error("Cannot enable proprietary PSM: %d", err);
+		}
+	} else if (common_option == LINK_COMMON_DISABLE) {
+		err = lte_lc_proprietary_psm_req(false);
+		if (!err) {
+			mosh_print("Proprietary PSM disabled");
+		} else {
+			mosh_error("Cannot disable proprietary PSM: %d", err);
+		}
+	} else {
+		link_shell_print_usage(LINK_CMD_PROPRIPSM);
 	}
 
 	return 0;
@@ -1814,7 +1923,10 @@ static int link_shell_settings(const struct shell *shell, size_t argc, char **ar
 		   mreset_type != LTE_LC_FACTORY_RESET_INVALID) {
 		if (common_option == LINK_COMMON_RESET) {
 			link_sett_defaults_set();
-			link_shell_sysmode_set(SYS_MODE_PREFERRED, CONFIG_LTE_MODE_PREFERENCE);
+			if (SYS_MODE_PREFERRED != LINK_SYSMODE_NONE) {
+				link_shell_sysmode_set(SYS_MODE_PREFERRED,
+						       CONFIG_LTE_MODE_PREFERENCE_VALUE);
+			}
 		}
 		if (mreset_type == LTE_LC_FACTORY_RESET_ALL) {
 			link_sett_modem_factory_reset(LTE_LC_FACTORY_RESET_ALL);
@@ -1850,9 +1962,8 @@ static int link_shell_status(const struct shell *shell, size_t argc, char **argv
 	} else {
 		mosh_error("Cannot get current registration status (%d)", ret);
 	}
-	if (current_reg_status == LTE_LC_NW_REG_REGISTERED_EMERGENCY ||
-		current_reg_status == LTE_LC_NW_REG_REGISTERED_HOME ||
-		current_reg_status == LTE_LC_NW_REG_REGISTERED_ROAMING) {
+	if (current_reg_status == LTE_LC_NW_REG_REGISTERED_HOME ||
+	    current_reg_status == LTE_LC_NW_REG_REGISTERED_ROAMING) {
 		connected = true;
 	}
 
@@ -1863,7 +1974,7 @@ static int link_shell_status(const struct shell *shell, size_t argc, char **argv
 static int link_shell_sysmode(const struct shell *shell, size_t argc, char **argv)
 {
 	int ret = 0;
-	enum lte_lc_system_mode sysmode_option = LTE_LC_SYSTEM_MODE_NONE;
+	enum lte_lc_system_mode sysmode_option = LINK_SYSMODE_NONE;
 	enum lte_lc_system_mode_preference sysmode_lte_pref_option = LTE_LC_SYSTEM_MODE_PREFER_AUTO;
 	enum link_shell_common_options common_option = LINK_COMMON_NONE;
 
@@ -1934,7 +2045,7 @@ static int link_shell_sysmode(const struct shell *shell, size_t argc, char **arg
 			link_sett_sysmode_print();
 			sett_sys_mode = link_sett_sysmode_get();
 			sett_lte_pref = link_sett_sysmode_lte_preference_get();
-			if (sett_sys_mode != LTE_LC_SYSTEM_MODE_NONE &&
+			if (sett_sys_mode != LINK_SYSMODE_NONE &&
 				sett_sys_mode != sys_mode_current &&
 				sett_lte_pref != sys_mode_pref_current) {
 				mosh_warn(
@@ -1945,14 +2056,17 @@ static int link_shell_sysmode(const struct shell *shell, size_t argc, char **arg
 					"next time when going to normal mode");
 			}
 		}
-	} else if (sysmode_option != LTE_LC_SYSTEM_MODE_NONE) {
+	} else if (sysmode_option != LINK_SYSMODE_NONE) {
 		link_shell_sysmode_set(sysmode_option, sysmode_lte_pref_option);
 
 		/* Save system modem to link settings: */
 		(void)link_sett_sysmode_save(sysmode_option, sysmode_lte_pref_option);
 
 	} else if (common_option == LINK_COMMON_RESET) {
-		link_shell_sysmode_set(SYS_MODE_PREFERRED, CONFIG_LTE_MODE_PREFERENCE);
+		if (SYS_MODE_PREFERRED != LINK_SYSMODE_NONE) {
+			link_shell_sysmode_set(SYS_MODE_PREFERRED,
+					       CONFIG_LTE_MODE_PREFERENCE_VALUE);
+		}
 
 		(void)link_sett_sysmode_default_set();
 	} else {
@@ -2064,6 +2178,10 @@ SHELL_STATIC_SUBCMD_SET_CREATE(
 		"Enabling/disabling of automatic connecting and going to normal mode after "
 		"the bootup. Persistent between the sessions. Has impact after the bootup.",
 		link_shell_nmodeauto, 0, 10),
+	SHELL_CMD_ARG(
+		propripsm, NULL,
+		"Enable/disable proprietary Power Saving Mode (PSM).",
+		link_shell_propripsm, 0, 10),
 	SHELL_CMD_ARG(
 		psm, NULL,
 		"Enable/disable Power Saving Mode (PSM) with default or with custom parameters.",

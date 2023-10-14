@@ -6,9 +6,9 @@
 
 #pragma once
 
-#include "bridged_device.h"
+#include "matter_bridged_device.h"
 
-class TemperatureSensorDevice : public BridgedDevice {
+class TemperatureSensorDevice : public MatterBridgedDevice {
 public:
 	static constexpr uint16_t kTemperatureMeasurementClusterRevision = 1;
 	static constexpr uint32_t kTemperatureMeasurementFeatureMap = 0;
@@ -21,6 +21,10 @@ public:
 	uint16_t GetTemperatureMeasurementClusterRevision() { return kTemperatureMeasurementClusterRevision; }
 	uint32_t GetTemperatureMeasurementFeatureMap() { return kTemperatureMeasurementFeatureMap; }
 
+	MatterBridgedDevice::DeviceType GetDeviceType() const override
+	{
+		return MatterBridgedDevice::DeviceType::TemperatureSensor;
+	}
 	CHIP_ERROR HandleRead(chip::ClusterId clusterId, chip::AttributeId attributeId, uint8_t *buffer,
 			      uint16_t maxReadLength) override;
 	CHIP_ERROR HandleReadTemperatureMeasurement(chip::AttributeId attributeId, uint8_t *buffer,

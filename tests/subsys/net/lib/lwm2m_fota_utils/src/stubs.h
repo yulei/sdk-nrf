@@ -38,8 +38,6 @@ DECLARE_FAKE_VALUE_FUNC(int, lte_lc_func_mode_get, enum lte_lc_func_mode *);
 DECLARE_FAKE_VALUE_FUNC(int, lte_lc_ptw_set, enum lte_lc_lte_mode, const char *);
 DECLARE_FAKE_VALUE_FUNC(int, lte_lc_psm_param_set, const char *, const char *);
 DECLARE_FAKE_VALUE_FUNC(int, lte_lc_psm_req, bool);
-DECLARE_FAKE_VALUE_FUNC(int, lte_lc_rai_param_set, const char *);
-DECLARE_FAKE_VALUE_FUNC(int, lte_lc_rai_req, bool);
 DECLARE_FAKE_VALUE_FUNC(int, lte_lc_edrx_param_set, enum lte_lc_lte_mode, const char *);
 DECLARE_FAKE_VALUE_FUNC(int, lte_lc_edrx_req, bool);
 DECLARE_FAKE_VALUE_FUNC(int, lte_lc_neighbor_cell_measurement, struct lte_lc_ncellmeas_params *);
@@ -87,6 +85,14 @@ DECLARE_FAKE_VOID_FUNC(clear_attrs, void *);
 DECLARE_FAKE_VALUE_FUNC(int, lwm2m_notify_observer_path, const struct lwm2m_obj_path *);
 DECLARE_FAKE_VOID_FUNC(engine_remove_observer_by_id, uint16_t, int32_t);
 DECLARE_FAKE_VALUE_FUNC(int, lwm2m_firmware_start_transfer, uint16_t, char *);
+DECLARE_FAKE_VALUE_FUNC(int, fota_download_util_stream_init);
+DECLARE_FAKE_VALUE_FUNC(int, fota_download_util_dfu_target_init, enum dfu_target_image_type);
+DECLARE_FAKE_VALUE_FUNC(int, fota_download_util_download_start, const char *,
+		       enum dfu_target_image_type, int, fota_download_callback_t);
+DECLARE_FAKE_VALUE_FUNC(int, fota_download_util_download_cancel);
+DECLARE_FAKE_VALUE_FUNC(int, fota_download_util_image_schedule, enum dfu_target_image_type);
+DECLARE_FAKE_VALUE_FUNC(int, fota_download_util_image_reset, enum dfu_target_image_type);
+DECLARE_FAKE_VALUE_FUNC(int, fota_download_util_apply_update, enum dfu_target_image_type);
 
 /* List of fakes used by this unit tester */
 #define DO_FOREACH_FAKE(FUNC)                                                                      \
@@ -110,8 +116,6 @@ DECLARE_FAKE_VALUE_FUNC(int, lwm2m_firmware_start_transfer, uint16_t, char *);
 		FUNC(lte_lc_ptw_set)                                                               \
 		FUNC(lte_lc_psm_param_set)                                                         \
 		FUNC(lte_lc_psm_req)                                                               \
-		FUNC(lte_lc_rai_param_set)                                                         \
-		FUNC(lte_lc_rai_req)                                                               \
 		FUNC(lte_lc_edrx_param_set)                                                        \
 		FUNC(lte_lc_edrx_req)                                                              \
 		FUNC(lte_lc_neighbor_cell_measurement)                                             \
@@ -153,6 +157,13 @@ DECLARE_FAKE_VALUE_FUNC(int, lwm2m_firmware_start_transfer, uint16_t, char *);
 		FUNC(lwm2m_notify_observer_path)                                                   \
 		FUNC(engine_remove_observer_by_id)                                                 \
 		FUNC(lwm2m_firmware_start_transfer)                                                \
+		FUNC(fota_download_util_stream_init)                                             \
+		FUNC(fota_download_util_dfu_target_init)                                         \
+		FUNC(fota_download_util_download_start)                                          \
+		FUNC(fota_download_util_download_cancel)                                         \
+		FUNC(fota_download_util_image_schedule)                                          \
+		FUNC(fota_download_util_image_reset)                                             \
+		FUNC(fota_download_util_apply_update)                                            \
 	} while (0)
 
 #endif

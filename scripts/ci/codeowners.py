@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
 
 # Copyright (c) 2018,2020 Intel Corporation
 # Copyright (c) 2022 Nordic Semiconductor ASA
-# SPDX-License-Identifier: Apache-2.0
 
 import argparse
 import collections
@@ -217,6 +217,7 @@ def init_logs(cli_arg):
 def parse_args():
     default_range = 'HEAD~1..HEAD'
     parser = argparse.ArgumentParser(
+        allow_abbrev=False,
         description="Check for CODEOWNERS file ownership.")
     parser.add_argument('-c', '--commits', default=default_range,
                         help=f'''Commit range in the form: a..[b], default is

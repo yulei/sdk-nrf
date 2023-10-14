@@ -17,7 +17,7 @@ FOTA can be used to update the device application, bootloader, and modem.
 The modem can be incrementally updated with a modem delta image.
 If the device has sufficiently large external flash storage, the modem can be entirely updated with a full modem image.
 
-nRF Cloud also helps your devices determine their location using assisted GPS (A-GPS) and predicted GPS (P-GPS).
+nRF Cloud also helps your devices determine their location using assisted GNSS (A-GNSS) and predicted GPS (P-GPS).
 It can determine device location from cellular and Wi-Fi network information sent by the device.
 
 Additionally, nRF Cloud allows devices to report data to the cloud for collection and analysis later.
@@ -102,7 +102,7 @@ A device can successfully connect to `nRF Cloud`_ using MQTT if the following re
 
      Alternatively, use the nRF Cloud REST API to do this.
 
-  #. Program the credentials in the JSON file into the device using LTE Link Monitor.
+  #. Program the credentials in the JSON file into the device using the `Cellular Monitor`_ app.
 
   The private key is exposed during these steps, and therefore, this is the less secure option.
   See :ref:`nrf9160_ug_updating_cloud_certificate` for details.
@@ -133,13 +133,13 @@ The |NCS| provides the :ref:`lib_nrf_cloud` library, which if enabled, allows yo
 
 For more information on the various services, see the following documentation:
 
-1. :ref:`lib_nrf_cloud_agps`
-#. :ref:`lib_nrf_cloud_location`
-#. :ref:`lib_nrf_cloud_fota`
-#. :ref:`lib_nrf_cloud_pgps`
-#. :ref:`lib_nrf_cloud_alert`
-#. :ref:`lib_nrf_cloud_log`
-#. :ref:`lib_nrf_cloud_coap`
+* :ref:`lib_nrf_cloud_agnss`
+* :ref:`lib_nrf_cloud_location`
+* :ref:`lib_nrf_cloud_fota`
+* :ref:`lib_nrf_cloud_pgps`
+* :ref:`lib_nrf_cloud_alert`
+* :ref:`lib_nrf_cloud_log`
+* :ref:`lib_nrf_cloud_coap`
 
 Applications and samples
 ************************
@@ -150,11 +150,12 @@ The following application uses the :ref:`lib_nrf_cloud` for services in |NCS|:
 
 The following sample demonstrates nRF Cloud-specific functionality using CoAP:
 
+* :ref:`nrf_cloud_multi_service`
 * :ref:`modem_shell_application`
 
 The following sample demonstrates nRF Cloud-specific functionality using MQTT:
 
-* :ref:`nrf_cloud_mqtt_multi_service`
+* :ref:`nrf_cloud_multi_service`
 
 The following samples demonstrate nRF Cloud-specific functionality using REST:
 

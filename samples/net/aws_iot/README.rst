@@ -11,7 +11,7 @@ The Amazon Web Services Internet-of-Things (AWS IoT) sample demonstrates how to 
 This sample showcases the use of the :ref:`lib_aws_iot` library, which includes support for FOTA using the :ref:`lib_aws_fota` library.
 
 Before this sample can be used, an AWS IoT server instance needs to be setup in order for the device to connect to it.
-Refer to :ref:`aws_iot_sample_server_setup` to complete the nessecary steps.
+Refer to :ref:`aws_iot_sample_server_setup` to complete the necessary steps.
 
 Requirements
 ************
@@ -80,16 +80,21 @@ Configuration
 Setup
 =====
 
-To run this sample and connect to AWS IoT, complete the steps described in the :ref:`lib_aws_iot` documentation.
-This documentation retrieves the AWS IoT broker *hostname*, *security tag*, and *client ID*.
+To run this sample and connect to AWS IoT, complete the steps described in the :ref:`aws_setup_and_configuration` section of the AWS IoT library documentation.
+This is to obtain the AWS IoT broker *hostname* and the *client ID* of the device and provision a device certificate to a *security tag*.
+
 The corresponding options that must be set for each of these values are:
 
 * :kconfig:option:`CONFIG_AWS_IOT_BROKER_HOST_NAME`
 * :kconfig:option:`CONFIG_AWS_IOT_SEC_TAG`
 * :kconfig:option:`CONFIG_AWS_IOT_CLIENT_ID_STATIC`
 
-Set these options in the project configuration file located at :file:`samples/nrf9160/aws_iot/prj.conf`.
+Set these options in the project configuration file located at :file:`samples/net/aws_iot/prj.conf`.
 For documentation related to FOTA DFU, see :ref:`lib_aws_fota`.
+
+.. note::
+   For nRF70 Series devices, certificates must be provisioned at runtime.
+   This is achieved by pasting the PEM content into the respective files in the :file:`certs/` subdirectory and ensuring the :kconfig:option:`CONFIG_AWS_IOT_PROVISION_CERTIFICATES` Kconfig option is enabled.
 
 Configuration options
 =====================
@@ -100,7 +105,7 @@ General options
 ---------------
 
 The following lists the application-specific configurations used in the sample.
-They are located in :file:`samples/nrf9160/aws_iot/Kconfig`.
+They are located in :file:`samples/net/aws_iot/Kconfig`.
 
 .. _CONFIG_AWS_IOT_SAMPLE_APP_VERSION:
 
@@ -201,7 +206,7 @@ The *modem_version* parameter in messages published to AWS IoT will not be prese
 .. note::
    For nRF91 Series devices, the output differs from the above example output.
    This is because the sample enables the :ref:`lib_at_host` library using the :kconfig:option:`CONFIG_AT_HOST_LIBRARY` option.
-   This library makes it possible to send AT commands to the cellular modem and receive responses using the `LTE Link Monitor`_ or Cellular Monitor app from nRF Connect for Desktop.
+   This library makes it possible to send AT commands to the cellular modem and receive responses using the `Cellular Monitor`_ app from nRF Connect for Desktop.
    The additional logs are AT command responses that the modem sends to the application core that are forwarded over UART to be displayed on any of these nRF Connect for Desktop apps.
 
 To observe incoming messages in the AWS IoT console, follow the steps documented in :ref:`aws_iot_testing_and_debugging`.
@@ -224,8 +229,8 @@ Troubleshooting
 
 To enable more verbose logging from the AWS IoT library, enable the :kconfig:option:`CONFIG_AWS_IOT_LOG_LEVEL_DBG` option.
 
-* If you are having issues with connectivity on nRF91 Series devices, see the `Trace Collector`_ documentation to learn how to capture modem traces in order to debug network traffic in Wireshark.
-  The sample enables modem traces by default, as set by the :kconfig:option:`CONFIG_NRF_MODEM_LIB_TRACE` option.
+* If you have issues with connectivity on nRF91 Series devices, see the `Cellular Monitor`_ documentation to learn how to capture modem traces in order to debug network traffic in Wireshark.
+  The sample enables modem traces by default.
 * If you have issues with the sample, refer to :ref:`testing`.
 * For issues related to connection towards AWS IoT, refer to :ref:`AWS IoT library troubleshooting <aws_iot_troubleshooting>`.
 

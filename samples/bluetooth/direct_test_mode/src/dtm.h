@@ -15,358 +15,350 @@
 extern "C" {
 #endif
 
-/* DTM command parameter: Upper bits mask. */
-#define LE_UPPER_BITS_MASK 0x0C
+#define NRF_IQ_SAMPLE_INVALID -32768
 
-/* DTM command parameter: Upper bits position. */
-#define LE_UPPER_BITS_POS 0x04
+/** @brief DTM PHY mode */
+enum dtm_phy {
+	/** Bluetooth Low Energy 1 Mbps PHY. */
+	DTM_PHY_1M,
 
-/* Mask of the CTE type in the CTEInfo. */
-#define LE_CTE_TYPE_MASK 0x03
+	/** Bluetooth Low Energy 2 Mbps PHY. */
+	DTM_PHY_2M,
 
-/* Position of the CTE type in the CTEInfo. */
-#define LE_CTE_TYPE_POS 0x06
+	/** Bluetooth Low Energy Coded S=8 PHY. */
+	DTM_PHY_CODED_S8,
 
-/* Mask of the CTE Time in the CTEInfo. */
-#define LE_CTE_CTETIME_MASK 0x1F
+	/** Bluetooth Low Energy Coded S=2 PHY. */
+	DTM_PHY_CODED_S2
+};
 
-/* DTM command parameter: Mask of the Antenna Number. */
-#define LE_ANTENNA_NUMBER_MASK 0x3F
+/** @brief DTM modulation index. */
+enum dtm_modulation {
+	/** Standard modulation index. */
+	DTM_MODULATION_STANDARD,
 
-/* DTM command parameter: Mask of the Antenna switch pattern. */
-#define LE_ANTENNA_SWITCH_PATTERN_MASK 0x80
+	/** Stable modulation index. */
+	DTM_MODULATION_STABLE
+};
 
-/* Position of power level in the DTM power level set response. */
-#define LE_TRANSMIT_POWER_RESPONSE_LVL_POS (0x01)
+/** @brief DTM maximum supported values. */
+enum dtm_max_supported {
+	/** Maximum supported TX octets. */
+	DTM_MAX_SUPPORTED_TX_OCTETS,
 
-/* Mask of the power level in the DTM power level set respose. */
-#define LE_TRANSMIT_POWER_RESPONSE_LVL_MASK (0x1FE)
+	/** Maximum supported TX time. */
+	DTM_MAX_SUPPORTED_TX_TIME,
 
-/* Maximum power level bit in the power level set response. */
-#define LE_TRANSMIT_POWER_MAX_LVL_BIT BIT(0x0A)
+	/** Maximum supported RX octets. */
+	DTM_MAX_SUPPORTED_RX_OCTETS,
 
-/* Minimum power level bit in the power level set response. */
-#define LE_TRANSMIT_POWER_MIN_LVL_BIT BIT(0x09)
+	/** Maximum supported RX time. */
+	DTM_MAX_SUPPORTED_RX_TIME,
 
-/* DTM command codes */
-enum dtm_cmd_code {
-	/* Test Setup Command: Set PHY or modulation, configure upper two bits
-	 * of length, request matrix of supported features or request max
-	 * values of parameters.
+	/** Maximum supported Constant Tone Extension length. */
+	DTM_MAX_SUPPORTED_CTE_LENGTH
+};
+
+/** @brief Constant Tone Extension type. */
+enum dtm_cte_type {
+	/** Do not use Constant Tone Extension. */
+	DTM_CTE_TYPE_NONE,
+
+	/** Angle of Arrival. */
+	DTM_CTE_TYPE_AOA,
+
+	/** Angle of Departure 1 us slots. */
+	DTM_CTE_TYPE_AOD_1US,
+
+	/** Angle of Departure 2 us slots. */
+	DTM_CTE_TYPE_AOD_2US
+};
+
+/** @brief DTM Constant Tone Extension slot duration. */
+enum dtm_cte_slot_duration {
+	/** CTE 1 us slots duration. */
+	DTM_CTE_SLOT_DURATION_1US,
+
+	/** CTE 2 us slots duration. */
+	DTM_CTE_SLOT_DURATION_2US
+};
+
+/** @brief DTM transmit power request. */
+enum dtm_tx_power_request {
+	/** Request minimum power. */
+	DTM_TX_POWER_REQUEST_MIN,
+
+	/** Request maximum power. */
+	DTM_TX_POWER_REQUEST_MAX,
+
+	/** Request power by value. */
+	DTM_TX_POWER_REQUEST_VAL
+};
+
+/** @brief DTM packet type. */
+enum dtm_packet {
+	/** Packet filled with PRBS9 stream as payload. */
+	DTM_PACKET_PRBS9,
+
+	/** Packet with 0x0F bytes as payload. */
+	DTM_PACKET_0F,
+
+	/** Packet with 0x55 bytes as payload. */
+	DTM_PACKET_55,
+
+	/** Packet filled with PRBS15 stream as payload. */
+	DTM_PACKET_PRBS15,
+
+	/** Packet with 0xFF bytes as payload or vendor specific packet. */
+	DTM_PACKET_FF_OR_VENDOR,
+
+	/** Packet with 0xFF bytes as payload. */
+	DTM_PACKET_FF,
+
+	/** Packet with 0x00 bytes as payload. */
+	DTM_PACKET_00,
+
+	/** Packet with 0xF0 bytes as payload. */
+	DTM_PACKET_F0,
+
+	/** Packet with 0xAA bytes as payload. */
+	DTM_PACKET_AA,
+
+	/** Vendor-specific packet. */
+	DTM_PACKET_VENDOR
+};
+
+/** @brief DTM supported features. */
+struct dtm_supp_features {
+	/** Support for Data Packet Length Extension. */
+	bool data_len_ext;
+
+	/** Support for Bluetooth Low Energy 2 Mbps PHY. */
+	bool phy_2m;
+
+	/** Support for Stable Modulation Index. */
+	bool stable_mod;
+
+	/** Support for Bluetooth Low Energy Coded PHY. */
+	bool coded_phy;
+
+	/** Support for Constant Tone Extension. */
+	bool cte;
+
+	/** Support for Antenna switching. */
+	bool ant_switching;
+
+	/** Support for AoD transmission 1 us switching. */
+	bool aod_1us_tx;
+
+	/** Support for AoD reception 1 us switching. */
+	bool aod_1us_rx;
+
+	/** Support for AoA reception 1 us switching and sampling. */
+	bool aoa_1us_rx;
+};
+
+/** @brief DTM transmit power. */
+struct dtm_tx_power {
+	/** Actual power in dBm. */
+	int8_t power;
+
+	/** Power at minimum level. */
+	bool min;
+
+	/** Power at maximum level. */
+	bool max;
+};
+
+/** @brief DTM Packet status for IQ Sample report. */
+enum dtm_packet_status {
+	/** Packet received with proper CRC. */
+	DTM_PACKET_STATUS_CRC_OK,
+
+	/** Packet received with invalid CRC.
+	 *  The Length and CTEInfo was used to calculate sampling points.
 	 */
-	LE_TEST_SETUP = 0x0,
+	DTM_PACKET_STATUS_CRC_ERR_TIME,
 
-	/* Receive Command: Start receive test. */
-	LE_RECEIVER_TEST = 0x1,
-
-	/* Transmit Command: Start transmission test. */
-	LE_TRANSMITTER_TEST = 0x2,
-
-	/* Test End Command: End test and send packet report. */
-	LE_TEST_END  = 0x3,
-};
-
-/* DTM Test Setup Control codes */
-enum dtm_ctrl_code {
-	/* Reset the packet length upper bits and set the PHY to 1Mbit. */
-	LE_TEST_SETUP_RESET = 0x00,
-
-	/* Set the upper two bits of the length field. */
-	LE_TEST_SETUP_SET_UPPER = 0x01,
-
-	/* Select the PHY to be used for packets. */
-	LE_TEST_SETUP_SET_PHY = 0x02,
-
-	/* Select standard or stable modulation index. Stable modulation index
-	 * is not supported.
+	/** Packet received with invalid CRC.
+	 *  The sampling points were calculated in another way.
 	 */
-	LE_TEST_SETUP_SELECT_MODULATION = 0x03,
+	DTM_PACKET_STATUS_CRC_ERR_OTHER,
 
-	/* Read the supported test case features. */
-	LE_TEST_SETUP_READ_SUPPORTED = 0x04,
-
-	/* Read the max supported time and length for packets. */
-	LE_TEST_SETUP_READ_MAX = 0x05,
-
-	/* Set the Constant Tone Extension info. */
-	LE_TEST_SETUP_CONSTANT_TONE_EXTENSION = 0x06,
-
-	/* Set the Constant Tone Extension slot. */
-	LE_TEST_SETUP_CONSTANT_TONE_EXTENSION_SLOT = 0x07,
-
-	/* Set the Antenna number and switch pattern. */
-	LE_TEST_SETUP_ANTENNA_ARRAY = 0x08,
-
-	/* Set the Transmit power. */
-	LE_TEST_SETUP_TRANSMIT_POWER = 0x09
-};
-
-/* DTM Test Setup PHY codes */
-enum dtm_phy_code {
-	/* Set PHY for future packets to use 1MBit PHY.
-	 * Minimum parameter value.
+	/** Packet received with invalid CRC.
+	 *  Insufficient resources to sample.
 	 */
-	LE_PHY_1M_MIN_RANGE = 0x04,
-
-	/* Set PHY for future packets to use 1MBit PHY.
-	 * Maximum parameter value.
-	 */
-	LE_PHY_1M_MAX_RANGE = 0x07,
-
-	/* Set PHY for future packets to use 2MBit PHY.
-	 * Minimum parameter value.
-	 */
-	LE_PHY_2M_MIN_RANGE = 0x08,
-
-	/* Set PHY for future packets to use 2MBit PHY.
-	 * Maximum parameter value.
-	 */
-	LE_PHY_2M_MAX_RANGE = 0x0B,
-
-	/* Set PHY for future packets to use coded PHY with S=8.
-	 * Minimum parameter value.
-	 */
-	LE_PHY_LE_CODED_S8_MIN_RANGE = 0x0C,
-
-	/* Set PHY for future packets to use coded PHY with S=8.
-	 * Maximum parameter value.
-	 */
-	LE_PHY_LE_CODED_S8_MAX_RANGE = 0x0F,
-
-	/* Set PHY for future packets to use coded PHY with S=2.
-	 * Minimum parameter value.
-	 */
-	LE_PHY_LE_CODED_S2_MIN_RANGE = 0x10,
-
-	/* Set PHY for future packets to use coded PHY with S=2.
-	 * Maximum parameter value.
-	 */
-	LE_PHY_LE_CODED_S2_MAX_RANGE = 0x13
+	DTM_PACKET_STATUS_CRC_ERR_INSUFFICIENT
 };
 
-/* DTM Test Setup Read supported parameters codes. */
-enum dtm_read_supported_code {
-	/* Read maximum supported Tx Octets. Minimum parameter value. */
-	LE_TEST_SUPPORTED_TX_OCTETS_MIN_RANGE = 0x00,
+/** @brief IQ sample format. */
+struct dtm_iq_sample {
+	/** I sample value. */
+	int16_t i;
 
-	/* Read maximum supported Tx Octets. Maximum parameter value. */
-	LE_TEST_SUPPORTED_TX_OCTETS_MAX_RANGE = 0x03,
-
-	/* Read maximum supported Tx Time. Minimum parameter value. */
-	LE_TEST_SUPPORTED_TX_TIME_MIN_RANGE = 0x04,
-
-	/* Read maximum supported Tx Time. Maximum parameter value. */
-	LE_TEST_SUPPORTED_TX_TIME_MAX_RANGE = 0x07,
-
-	/* Read maximum supported Rx Octets. Minimum parameter value. */
-	LE_TEST_SUPPORTED_RX_OCTETS_MIN_RANGE = 0x08,
-
-	/* Read maximum supported Rx Octets. Maximum parameter value. */
-	LE_TEST_SUPPORTED_RX_OCTETS_MAX_RANGE = 0x0B,
-
-	/* Read maximum supported Rx Time. Minimum parameter value. */
-	LE_TEST_SUPPORTED_RX_TIME_MIN_RANGE = 0x0C,
-
-	/* Read maximum supported Rx Time. Maximum parameter value. */
-	LE_TEST_SUPPORTED_RX_TIME_MAX_RANGE = 0x0F,
-
-	/* Read maximum length of the Constant Tone Extension supported. */
-	LE_TEST_SUPPORTED_CTE_LENGTH = 0x10
+	/** Q sample value. */
+	int16_t q;
 };
 
-/* DTM Test Setup reset code. */
-enum dtm_reset_code {
-	/* Reset. Minimum parameter value. */
-	LE_RESET_MIN_RANGE = 0x00,
+/** @brief DTM IQ sampling data with additional information. */
+struct dtm_iq_data {
+	/** Channel number. */
+	uint8_t channel;
 
-	/* Reset. Maximum parameter value. */
-	LE_RESET_MAX_RANGE = 0x03
+	/** RSSI value of received packet. */
+	int16_t rssi;
+
+	/** Antenna number used to measure RSSI. */
+	uint8_t rssi_ant;
+
+	/** CTE type. */
+	enum dtm_cte_type type;
+
+	/** CTE slot duration. */
+	enum dtm_cte_slot_duration slot;
+
+	/** Packet status. */
+	enum dtm_packet_status status;
+
+	/** IQ sample count. */
+	uint8_t sample_cnt;
+
+	/** IQ samples. */
+	struct dtm_iq_sample *samples;
 };
 
-/* DTM Test Setup upper bits code. */
-enum dtm_set_upper_bits_code {
-	/* Set upper bits. Minimum parameter value. */
-	LE_SET_UPPER_BITS_MIN_RANGE = 0x00,
-
-	/* Set upper bits. Maximum parameter value. */
-	LE_SET_UPPER_BITS_MAX_RANGE = 0x0F
-};
-
-/* DTM Test Setup modulation code. */
-enum dtm_modulation_code {
-	/* Set Modulation index to standard. Minimum parameter value. */
-	LE_MODULATION_INDEX_STANDARD_MIN_RANGE = 0x00,
-
-	/* Set Modulation index to standard. Maximum parameter value. */
-	LE_MODULATION_INDEX_STANDARD_MAX_RANGE = 0x03
-};
-
-/* DTM Test Setup feature read code. */
-enum dtm_feature_read_code {
-	/* Read test case supported feature. Minimum parameter value. */
-	LE_TEST_FEATURE_READ_MIN_RANGE = 0x00,
-
-	/* Read test case supported feature. Maximum parameter value. */
-	LE_TEST_FEATURE_READ_MAX_RANGE = 0x03
-};
-
-/* DTM Test Setup CTE type code */
-enum dtm_cte_type_code {
-	/* CTE Type Angle of Arrival. */
-	LE_CTE_TYPE_AOA = 0x00,
-
-	/* CTE Type Angle of Departure with 1 us slot. */
-	LE_CTE_TYPE_AOD_1US = 0x01,
-
-	/* CTE Type Angle of Departure with 2 us slot.*/
-	LE_CTE_TYPE_AOD_2US = 0x02
-};
-
-/* DTM Test Setup transmit power code. */
-enum dtm_transmit_power_code {
-	/* Minimum supported transmit power level. */
-	LE_TRANSMIT_POWER_LVL_MIN = -127,
-
-	/* Maximum supported transmit power level. */
-	LE_TRANSMIT_POWER_LVL_MAX = 20,
-
-	/* Set minimum transmit power level. */
-	LE_TRANSMIT_POWER_LVL_SET_MIN = 0x7E,
-
-	/* Set maximum transmit power level. */
-	LE_TRANSMIT_POWER_LVL_SET_MAX = 0x7F
-};
-
-/* DTM Test Setup antenna number max values. */
-enum dtm_antenna_number {
-	/* Minimum antenna number. */
-	LE_TEST_ANTENNA_NUMBER_MIN = 0x01,
-
-	/* Maximum antenna number. */
-	LE_TEST_ANTENNA_NUMBER_MAX = 0x4B
-};
-
-/* DTM Test Setup CTE Time max values. */
-enum dtm_cte_time {
-	/* Minimum supported CTE length in 8 us units. */
-	LE_CTE_LENGTH_MIN = 0x02,
-
-	/* Maximum supported CTE length in 8 us units. */
-	LE_CTE_LENGTH_MAX = 0x14
-};
-
-/* Vendor Specific DTM subcommand for Transmitter Test command.
- * It replaces Frequency field and must be combined with DTM_PKT_0XFF_OR_VS
- * packet type.
- */
-enum dtm_vs_subcmd {
-	/* Length=0 indicates a constant, unmodulated carrier until LE_TEST_END
-	 * or LE_RESET
-	 */
-	CARRIER_TEST = 0,
-
-	/* nRFgo Studio uses value 1 in length field, to indicate a constant,
-	 * unmodulated carrier until LE_TEST_END or LE_RESET
-	 */
-	CARRIER_TEST_STUDIO = 1,
-
-	/* Set transmission power, value -40..+4 dBm in steps of 4 */
-	SET_TX_POWER = 2,
-
-	/* Switch front-end module (FEM) antenna. */
-	FEM_ANTENNA_SELECT = 3,
-
-	/* Set front-end module (FEM) gain value. */
-	FEM_GAIN_SET = 4,
-
-	/* Set radio ramp-up time. */
-	FEM_RAMP_UP_SET = 5,
-
-	/* Restore front-end module (FEM) default parameters (antenna, gain, delay). */
-	FEM_DEFAULT_PARAMS_SET = 6
-};
-
-/* DTM Packet Type field */
-enum dtm_pkt_type {
-	/* PRBS9 bit pattern */
-	DTM_PKT_PRBS9 = 0x00,
-
-	/* 11110000 bit pattern (LSB is the leftmost bit). */
-	DTM_PKT_0X0F = 0x01,
-
-	/* 10101010 bit pattern (LSB is the leftmost bit). */
-	DTM_PKT_0X55 = 0x02,
-
-	/* 11111111 bit pattern for Coded PHY.
-	 * Vendor specific command for Non-Coded PHY.
-	 */
-	DTM_PKT_0XFF_OR_VS = 0x03,
-};
-
-/* DTM events */
-enum dtm_evt {
-	/* Status event, indicating success. */
-	LE_TEST_STATUS_EVENT_SUCCESS = 0x0000,
-
-	/* Status event, indicating an error. */
-	LE_TEST_STATUS_EVENT_ERROR = 0x0001,
-
-	/* Packet reporting event, returned by the device to the tester. */
-	LE_PACKET_REPORTING_EVENT = 0x8000,
-};
-
-/* DTM error codes */
-enum dtm_err_code {
-	/* Indicate that the DTM function completed with success. */
-	DTM_SUCCESS,
-
-	/* Physical channel number must be in the range 0..39. */
-	DTM_ERROR_ILLEGAL_CHANNEL,
-
-	/* Sequencing error: Command is not valid now. */
-	DTM_ERROR_INVALID_STATE,
-
-	/* Payload size must be in the range 0..37. */
-	DTM_ERROR_ILLEGAL_LENGTH,
-
-	/* Parameter out of range (legal range is function dependent). */
-	DTM_ERROR_ILLEGAL_CONFIGURATION,
-
-	/* DTM module has not been initialized by the application. */
-	DTM_ERROR_UNINITIALIZED,
-};
-
-/* The DTM maximum wait time for the UART command second byte. */
-#define DTM_UART_SECOND_BYTE_MAX_DELAY 5
-
-/**@brief Function for initializing DTM module.
+/** @brief Callback to report received IQ samples.
  *
- *  @return 0 in case of success or negative value in case of error
- */
-int dtm_init(void);
-
-/**@brief Function for waiting between the UART poll cycles.
- */
-void dtm_wait(void);
-
-/**@brief Function for calling when a complete command has been prepared by the
- *        Tester.
+ * @note The callback is used only with direction finding.
  *
- * @param[in] cmd  2-byte DTM command
- *
- * @return DTM_SUCCESS or one of the DTM_ERROR_ values
+ * @param[in] data Pointer to dtm_iq_data structure.
  */
-enum dtm_err_code dtm_cmd_put(uint16_t cmd);
+typedef void (*dtm_iq_report_callback_t)(struct dtm_iq_data *data);
 
-/**@brief Function for reading the result of a DTM command.
+/** @brief Initialize the DTM module.
  *
- * @param[out] dtm_event 16 bit event code according to DTM standard.
+ * This function initializes the DTM module and registers the IQ sampling callback.
+ * If the callback is not needed, the pointer can be NULL.
  *
- * @return true: new event
- *         false: no event since last call
+ * @param[in] iq_callback Function pointer to the IQ report callback, can be NULL.
+ *
+ * @return 0 in case of success or negative value in case of error.
  */
-bool dtm_event_get(uint16_t *dtm_event);
+int dtm_init(dtm_iq_report_callback_t callback);
 
+/** @brief Prepare DTM for setup.
+ *
+ * @note This function should be called before setup functions.
+ * The function can be called once before a block of setup functions.
+ */
+void dtm_setup_prepare(void);
+
+/** @brief Reset the DTM state.
+ *
+ * The PHY is set to Bluetooth Low Energy 1M mode.
+ * The modulation index is set to standard.
+ * The CTE is turned off.
+ *
+ * @return 0 in case of success or negative value in case of error.
+ */
+int dtm_setup_reset(void);
+
+/** @brief Set the PHY for DTM.
+ *
+ * @param[in] phy The PHY to be used.
+ *
+ * @return 0 in case of success or negative value in case of error.
+ */
+int dtm_setup_set_phy(enum dtm_phy phy);
+
+/** @brief Set the modulation for DTM.
+ *
+ * @param[in] modulation The modulation to be used.
+ *
+ * @return 0 in case of success or negative value in case of error.
+ */
+int dtm_setup_set_modulation(enum dtm_modulation modulation);
+
+/** @brief Read supported BLE features.
+ *
+ * @return Features supported by the device.
+ */
+struct dtm_supp_features dtm_setup_read_features(void);
+
+/** @brief Read the maximum supported parameter value by DTM.
+ *
+ * @param[in] parameter Value to be read.
+ * @param[out] max_val  The pointer to the maximum value.
+ *
+ * @return 0 in case of success or negative value in case of error.
+ */
+int dtm_setup_read_max_supported_value(enum dtm_max_supported parameter, uint16_t *max_val);
+
+/** @brief Setup the CTE for DTM.
+ *
+ * @param[in] type The CTE type to be used.
+ * @param[in] time The time of CTE in 8 us units.
+ *
+ * @return 0 in case of success or negative value in case of error.
+ */
+int dtm_setup_set_cte_mode(enum dtm_cte_type type, uint8_t time);
+
+/** @brief Set the CTE slots duration for DTM.
+ *
+ * @param[in] slot The CTE slots duration.
+ *
+ * @return 0 in case of success or negative value in case of error.
+ */
+int dtm_setup_set_cte_slot(enum dtm_cte_slot_duration slot);
+
+/** @brief Set the antenna parameters for DTM.
+ *
+ * @param[in] count       The antenna count.
+ * @param[in] pattern     The antenna switching pattern.
+ * @param[in] pattern_len The length of the pattern.
+ *
+ * @return 0 in case of success or negative value in case of error.
+ */
+int dtm_setup_set_antenna_params(uint8_t count, uint8_t *pattern, uint8_t pattern_len);
+
+/** @brief Set the transmit power for DTM.
+ *
+ * @param[in] power   The transmit power request.
+ * @param[in] val     TX power value (in dBm) in case of DTM_TX_POWER_REQUEST_VAL request.
+ * @param[in] channel The channel to adjust power (set to 0 if unknown).
+ *
+ * @return The actual TX power set by the function.
+ */
+struct dtm_tx_power dtm_setup_set_transmit_power(enum dtm_tx_power_request power, int8_t val,
+						 uint8_t channel);
+
+/** @brief Start the DTM reception test.
+ *
+ * @param[in] channel The reception channel.
+ *
+ * @return 0 in case of success or negative value in case of error.
+ */
+int dtm_test_receive(uint8_t channel);
+
+/** @brief Start the DTM transmission test.
+ *
+ * @param[in] channel The transmission channel.
+ * @param[in] length  The packet length.
+ * @param[in] pkt     The packet type.
+ *
+ * @return 0 in case of success or negative value in case of error.
+ */
+int dtm_test_transmit(uint8_t channel, uint8_t length, enum dtm_packet pkt);
+
+/** @brief Stop the DTM test.
+ *
+ * Stop current DTM test and return the number of received packets.
+ *
+ * @param[out] pack_cnt The pointer to the received packet count.
+ *
+ * @return 0 in case of success or negative value in case of error.
+ */
+int dtm_test_end(uint16_t *pack_cnt);
 
 #ifdef __cplusplus
 }

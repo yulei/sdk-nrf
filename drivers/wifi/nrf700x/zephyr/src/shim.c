@@ -17,6 +17,7 @@
 #include <zephyr/sys/printk.h>
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/logging/log.h>
+#include <zephyr/sys/__assert.h>
 
 #include "rpu_hw_if.h"
 #include "shim.h"
@@ -49,6 +50,13 @@ static void *zep_shim_mem_cpy(void *dest, const void *src, size_t count)
 static void *zep_shim_mem_set(void *start, int val, size_t size)
 {
 	return memset(start, val, size);
+}
+
+static int zep_shim_mem_cmp(const void *addr1,
+			    const void *addr2,
+			    size_t size)
+{
+	return memcmp(addr1, addr2, size);
 }
 
 static unsigned int zep_shim_qspi_read_reg32(void *priv, unsigned long addr)
@@ -199,6 +207,7 @@ struct nwb {
 	int hostbuffer;
 	void *cleanup_ctx;
 	void (*cleanup_cb)();
+	unsigned char priority;
 };
 
 static void *zep_shim_nbuf_alloc(unsigned int size)
@@ -294,6 +303,13 @@ static void *zep_shim_nbuf_data_pull(void *nbuf, unsigned int size)
 	return nwb->data;
 }
 
+static unsigned char zep_shim_nbuf_get_priority(void *nbuf)
+{
+	struct nwb *nwb = (struct nwb *)nbuf;
+
+	return nwb->priority;
+}
+
 #include <zephyr/net/ethernet.h>
 #include <zephyr/net/net_core.h>
 
@@ -316,6 +332,8 @@ void *net_pkt_to_nbuf(struct net_pkt *pkt)
 	data = zep_shim_nbuf_data_put(nwb, len);
 
 	net_pkt_read(pkt, data, len);
+
+	nwb->priority = net_pkt_priority(pkt);
 
 	return nwb;
 }
@@ -431,6 +449,19 @@ static void zep_shim_llist_add_node_tail(void *llist, void *llist_node)
 	zep_llist->len += 1;
 }
 
+static void zep_shim_llist_add_node_head(void *llist, void *llist_node)
+{
+	struct zep_shim_llist *zep_llist = NULL;
+	struct zep_shim_llist_node *zep_node = NULL;
+
+	zep_llist = (struct zep_shim_llist *)llist;
+	zep_node = (struct zep_shim_llist_node *)llist_node;
+
+	sys_dlist_prepend(&zep_llist->head, &zep_node->head);
+
+	zep_llist->len += 1;
+}
+
 static void *zep_shim_llist_get_node_head(void *llist)
 {
 	struct zep_shim_llist_node *zep_head_node = NULL;
@@ -524,14 +555,14 @@ static unsigned int zep_shim_time_elapsed_us(unsigned long start_time_us)
 	return curr_time_us - start_time_us;
 }
 
-static enum wifi_nrf_status zep_shim_bus_qspi_dev_init(void *os_qspi_dev_ctx)
+static enum nrf_wifi_status zep_shim_bus_qspi_dev_init(void *os_qspi_dev_ctx)
 {
-	enum wifi_nrf_status status = WIFI_NRF_STATUS_FAIL;
+	enum nrf_wifi_status status = NRF_WIFI_STATUS_FAIL;
 	struct qspi_dev *dev = NULL;
 
 	dev = os_qspi_dev_ctx;
 
-	status = WIFI_NRF_STATUS_SUCCESS;
+	status = NRF_WIFI_STATUS_SUCCESS;
 
 	return status;
 }
@@ -617,7 +648,7 @@ static int zep_shim_bus_qspi_ps_status(void *os_qspi_priv)
 #endif /* CONFIG_NRF_WIFI_LOW_POWER */
 
 static void zep_shim_bus_qspi_dev_host_map_get(void *os_qspi_dev_ctx,
-					       struct wifi_nrf_osal_host_map *host_map)
+					       struct nrf_wifi_osal_host_map *host_map)
 {
 	if (!os_qspi_dev_ctx || !host_map) {
 		LOG_ERR("%s: Invalid parameters\n", __func__);
@@ -649,10 +680,10 @@ static void zep_shim_irq_handler(const struct device *dev, struct gpio_callback 
 	k_work_schedule_for_queue(&zep_wifi_intr_q, &intr_priv->work, K_NO_WAIT);
 }
 
-static enum wifi_nrf_status zep_shim_bus_qspi_intr_reg(void *os_dev_ctx, void *callbk_data,
+static enum nrf_wifi_status zep_shim_bus_qspi_intr_reg(void *os_dev_ctx, void *callbk_data,
 						       int (*callbk_fn)(void *callbk_data))
 {
-	enum wifi_nrf_status status = WIFI_NRF_STATUS_FAIL;
+	enum nrf_wifi_status status = NRF_WIFI_STATUS_FAIL;
 	int ret = -1;
 
 	ARG_UNUSED(os_dev_ctx);
@@ -678,7 +709,7 @@ static enum wifi_nrf_status zep_shim_bus_qspi_intr_reg(void *os_dev_ctx, void *c
 		goto out;
 	}
 
-	status = WIFI_NRF_STATUS_SUCCESS;
+	status = NRF_WIFI_STATUS_SUCCESS;
 
 out:
 	return status;
@@ -733,12 +764,44 @@ static void zep_shim_timer_kill(void *timer)
 }
 #endif /* CONFIG_NRF_WIFI_LOW_POWER */
 
-static const struct wifi_nrf_osal_ops wifi_nrf_os_zep_ops = {
+static void zep_shim_assert(int test_val, int val, enum nrf_wifi_assert_op_type op, char *msg)
+{
+	switch (op) {
+	case NRF_WIFI_ASSERT_EQUAL_TO:
+		NET_ASSERT(test_val == val, "%s", msg);
+	break;
+	case NRF_WIFI_ASSERT_NOT_EQUAL_TO:
+		NET_ASSERT(test_val != val, "%s", msg);
+	break;
+	case NRF_WIFI_ASSERT_LESS_THAN:
+		NET_ASSERT(test_val < val, "%s", msg);
+	break;
+	case NRF_WIFI_ASSERT_LESS_THAN_EQUAL_TO:
+		NET_ASSERT(test_val <= val, "%s", msg);
+	break;
+	case NRF_WIFI_ASSERT_GREATER_THAN:
+		NET_ASSERT(test_val > val, "%s", msg);
+	break;
+	case NRF_WIFI_ASSERT_GREATER_THAN_EQUAL_TO:
+		NET_ASSERT(test_val >= val, "%s", msg);
+	break;
+	default:
+		LOG_ERR("%s: Invalid assertion operation\n", __func__);
+	}
+}
+
+static unsigned int zep_shim_strlen(const void *str)
+{
+	return strlen(str);
+}
+
+static const struct nrf_wifi_osal_ops nrf_wifi_os_zep_ops = {
 	.mem_alloc = zep_shim_mem_alloc,
 	.mem_zalloc = zep_shim_mem_zalloc,
 	.mem_free = k_free,
 	.mem_cpy = zep_shim_mem_cpy,
 	.mem_set = zep_shim_mem_set,
+	.mem_cmp = zep_shim_mem_cmp,
 
 	.qspi_read_reg32 = zep_shim_qspi_read_reg32,
 	.qspi_write_reg32 = zep_shim_qspi_write_reg32,
@@ -767,6 +830,7 @@ static const struct wifi_nrf_osal_ops wifi_nrf_os_zep_ops = {
 	.llist_free = zep_shim_llist_free,
 	.llist_init = zep_shim_llist_init,
 	.llist_add_node_tail = zep_shim_llist_add_node_tail,
+	.llist_add_node_head = zep_shim_llist_add_node_head,
 	.llist_get_node_head = zep_shim_llist_get_node_head,
 	.llist_get_node_nxt = zep_shim_llist_get_node_nxt,
 	.llist_del_node = zep_shim_llist_del_node,
@@ -781,6 +845,7 @@ static const struct wifi_nrf_osal_ops wifi_nrf_os_zep_ops = {
 	.nbuf_data_put = zep_shim_nbuf_data_put,
 	.nbuf_data_push = zep_shim_nbuf_data_push,
 	.nbuf_data_pull = zep_shim_nbuf_data_pull,
+	.nbuf_get_priority = zep_shim_nbuf_get_priority,
 
 	.tasklet_alloc = zep_shim_work_alloc,
 	.tasklet_free = zep_shim_work_free,
@@ -814,9 +879,12 @@ static const struct wifi_nrf_osal_ops wifi_nrf_os_zep_ops = {
 	.bus_qspi_ps_wake = zep_shim_bus_qspi_ps_wake,
 	.bus_qspi_ps_status = zep_shim_bus_qspi_ps_status,
 #endif /* CONFIG_NRF_WIFI_LOW_POWER */
+
+	.assert = zep_shim_assert,
+	.strlen = zep_shim_strlen,
 };
 
-const struct wifi_nrf_osal_ops *get_os_ops(void)
+const struct nrf_wifi_osal_ops *get_os_ops(void)
 {
-	return &wifi_nrf_os_zep_ops;
+	return &nrf_wifi_os_zep_ops;
 }

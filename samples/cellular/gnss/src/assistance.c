@@ -10,9 +10,9 @@
 #include <modem/modem_info.h>
 #include <modem/modem_jwt.h>
 #include <net/nrf_cloud_rest.h>
-#if defined(CONFIG_NRF_CLOUD_AGPS)
-#include <net/nrf_cloud_agps.h>
-#endif /* CONFIG_NRF_CLOUD_AGPS */
+#if defined(CONFIG_NRF_CLOUD_AGNSS)
+#include <net/nrf_cloud_agnss.h>
+#endif /* CONFIG_NRF_CLOUD_AGNSS */
 #if defined(CONFIG_NRF_CLOUD_PGPS)
 #include <net/nrf_cloud_pgps.h>
 #endif /* CONFIG_NRF_CLOUD_PGPS */
@@ -24,12 +24,12 @@ LOG_MODULE_DECLARE(gnss_sample, CONFIG_GNSS_SAMPLE_LOG_LEVEL);
 static char jwt_buf[600];
 static char rx_buf[2048];
 
-#if defined(CONFIG_NRF_CLOUD_AGPS)
-static char agps_data_buf[3500];
-#endif /* CONFIG_NRF_CLOUD_AGPS */
+#if defined(CONFIG_NRF_CLOUD_AGNSS)
+static char agnss_data_buf[3500];
+#endif /* CONFIG_NRF_CLOUD_AGNSS */
 
 #if defined(CONFIG_NRF_CLOUD_PGPS)
-static struct nrf_modem_gnss_agps_data_frame agps_need;
+static struct nrf_modem_gnss_agnss_data_frame agnss_need;
 static struct gps_pgps_request pgps_request;
 static struct nrf_cloud_pgps_prediction *prediction;
 static struct k_work get_pgps_data_work;
@@ -39,7 +39,7 @@ static struct k_work inject_pgps_data_work;
 static struct k_work_q *work_q;
 static volatile bool assistance_active;
 
-#if defined(CONFIG_NRF_CLOUD_AGPS)
+#if defined(CONFIG_NRF_CLOUD_AGNSS)
 static int serving_cell_info_get(struct lte_lc_cell *serving_cell)
 {
 	int err;
@@ -84,7 +84,7 @@ static int serving_cell_info_get(struct lte_lc_cell *serving_cell)
 
 	return 0;
 }
-#endif /* CONFIG_NRF_CLOUD_AGPS */
+#endif /* CONFIG_NRF_CLOUD_AGNSS */
 
 #if defined(CONFIG_NRF_CLOUD_PGPS)
 static void get_pgps_data_work_fn(struct k_work *work)
@@ -158,7 +158,7 @@ static void inject_pgps_data_work_fn(struct k_work *work)
 
 	LOG_INF("Injecting P-GPS ephemerides");
 
-	err = nrf_cloud_pgps_inject(prediction, &agps_need);
+	err = nrf_cloud_pgps_inject(prediction, &agnss_need);
 	if (err) {
 		LOG_ERR("Failed to inject P-GPS ephemerides");
 	}
@@ -203,6 +203,25 @@ static void pgps_event_handler(struct nrf_cloud_pgps_event *event)
 }
 #endif /* CONFIG_NRF_CLOUD_PGPS */
 
+#if defined(CONFIG_NRF_CLOUD_AGNSS)
+static const char *get_system_string(uint8_t system_id)
+{
+	switch (system_id) {
+	case NRF_MODEM_GNSS_SYSTEM_INVALID:
+		return "invalid";
+
+	case NRF_MODEM_GNSS_SYSTEM_GPS:
+		return "GPS";
+
+	case NRF_MODEM_GNSS_SYSTEM_QZSS:
+		return "QZSS";
+
+	default:
+		return "unknown";
+	}
+}
+#endif /* CONFIG_NRF_CLOUD_AGNSS */
+
 int assistance_init(struct k_work_q *assistance_work_q)
 {
 	work_q = assistance_work_q;
@@ -227,34 +246,34 @@ int assistance_init(struct k_work_q *assistance_work_q)
 	return 0;
 }
 
-int assistance_request(struct nrf_modem_gnss_agps_data_frame *agps_request)
+int assistance_request(struct nrf_modem_gnss_agnss_data_frame *agnss_request)
 {
 	int err = 0;
 
 #if defined(CONFIG_NRF_CLOUD_PGPS)
-	/* Store the A-GPS data request for P-GPS use. */
-	memcpy(&agps_need, agps_request, sizeof(agps_need));
+	/* Store the A-GNSS data request for P-GPS use. */
+	memcpy(&agnss_need, agnss_request, sizeof(agnss_need));
 
-#if defined(CONFIG_NRF_CLOUD_AGPS)
-	if (!agps_request->data_flags) {
-		/* No assistance needed from A-GPS, skip directly to P-GPS. */
+#if defined(CONFIG_NRF_CLOUD_AGNSS)
+	if (!agnss_request->data_flags) {
+		/* No assistance needed from A-GNSS, skip directly to P-GPS. */
 		nrf_cloud_pgps_notify_prediction();
 		return 0;
 	}
 
-	/* P-GPS will handle ephemerides, so skip those. */
-	agps_request->sv_mask_ephe = 0;
-	/* Almanacs are not needed with P-GPS, so skip those. */
-	agps_request->sv_mask_alm = 0;
-#endif /* CONFIG_NRF_CLOUD_AGPS */
+	/* P-GPS will handle GPS ephemerides, so skip those. */
+	agnss_request->system[0].sv_mask_ephe = 0;
+	/* GPS almanacs are not needed with P-GPS, so skip those. */
+	agnss_request->system[0].sv_mask_alm = 0;
+#endif /* CONFIG_NRF_CLOUD_AGNSS */
 #endif /* CONFIG_NRF_CLOUD_PGPS */
-#if defined(CONFIG_NRF_CLOUD_AGPS)
+#if defined(CONFIG_NRF_CLOUD_AGNSS)
 	assistance_active = true;
 
 	err = nrf_cloud_jwt_generate(0, jwt_buf, sizeof(jwt_buf));
 	if (err) {
 		LOG_ERR("Failed to generate JWT, error: %d", err);
-		goto agps_exit;
+		goto agnss_exit;
 	}
 
 	struct nrf_cloud_rest_context rest_ctx = {
@@ -271,30 +290,30 @@ int assistance_request(struct nrf_modem_gnss_agps_data_frame *agps_request)
 		.total_response_len = 0
 	};
 
-	struct nrf_cloud_rest_agps_request request = {
-		.type = NRF_CLOUD_REST_AGPS_REQ_CUSTOM,
-		.agps_req = agps_request,
+	struct nrf_cloud_rest_agnss_request request = {
+		.type = NRF_CLOUD_REST_AGNSS_REQ_CUSTOM,
+		.agnss_req = agnss_request,
 		.net_info = NULL,
-#if defined(CONFIG_NRF_CLOUD_AGPS_FILTERED_RUNTIME)
+#if defined(CONFIG_NRF_CLOUD_AGNSS_FILTERED_RUNTIME)
 		.filtered = true,
 		/* Note: if you change the mask angle here, you may want to
 		 * also change it to match in gnss_init_and_start() in main.c.
 		 */
-		.mask_angle = CONFIG_NRF_CLOUD_AGPS_ELEVATION_MASK
-		/* Note: if CONFIG_NRF_CLOUD_AGPS_FILTERED is enabled but
-		 * CONFIG_NRF_CLOUD_AGPS_FILTERED_RUNTIME is not,
+		.mask_angle = CONFIG_NRF_CLOUD_AGNSS_ELEVATION_MASK
+		/* Note: if CONFIG_NRF_CLOUD_AGNSS_FILTERED is enabled but
+		 * CONFIG_NRF_CLOUD_AGNSS_FILTERED_RUNTIME is not,
 		 * the nrf_cloud_rest library will set the above fields to
-		 * true and CONFIG_NRF_CLOUD_AGPS_ELEVATION_MASK respectively.
-		 * When CONFIG_NRF_CLOUD_AGPS_FILTERED is disabled, it will
+		 * true and CONFIG_NRF_CLOUD_AGNSS_ELEVATION_MASK respectively.
+		 * When CONFIG_NRF_CLOUD_AGNSS_FILTERED is disabled, it will
 		 * set them to false and 0.
 		 */
 #endif
 	};
 
-	struct nrf_cloud_rest_agps_result result = {
-		.buf = agps_data_buf,
-		.buf_sz = sizeof(agps_data_buf),
-		.agps_sz = 0
+	struct nrf_cloud_rest_agnss_result result = {
+		.buf = agnss_data_buf,
+		.buf_sz = sizeof(agnss_data_buf),
+		.agnss_sz = 0
 	};
 
 	struct lte_lc_cells_info net_info = { 0 };
@@ -307,30 +326,33 @@ int assistance_request(struct nrf_modem_gnss_agps_data_frame *agps_request)
 		request.net_info = &net_info;
 	}
 
-	LOG_INF("Requesting A-GPS data, ephe 0x%08x, alm 0x%08x, flags 0x%02x",
-		agps_request->sv_mask_ephe,
-		agps_request->sv_mask_alm,
-		agps_request->data_flags);
-
-	err = nrf_cloud_rest_agps_data_get(&rest_ctx, &request, &result);
-	if (err) {
-		LOG_ERR("Failed to get A-GPS data, error: %d", err);
-		goto agps_exit;
+	LOG_INF("Requesting A-GNSS data: data_flags: 0x%02x", agnss_request->data_flags);
+	for (int i = 0; i < agnss_request->system_count; i++) {
+		LOG_INF("Requesting A-GNSS data: %s ephe: 0x%llx, alm: 0x%llx",
+			get_system_string(agnss_request->system[i].system_id),
+			agnss_request->system[i].sv_mask_ephe,
+			agnss_request->system[i].sv_mask_alm);
 	}
 
-	LOG_INF("Processing A-GPS data");
-
-	err = nrf_cloud_agps_process(result.buf, result.agps_sz);
+	err = nrf_cloud_rest_agnss_data_get(&rest_ctx, &request, &result);
 	if (err) {
-		LOG_ERR("Failed to process A-GPS data, error: %d", err);
-		goto agps_exit;
+		LOG_ERR("Failed to get A-GNSS data, error: %d", err);
+		goto agnss_exit;
 	}
 
-	LOG_INF("A-GPS data processed");
+	LOG_INF("Processing A-GNSS data");
 
-agps_exit:
+	err = nrf_cloud_agnss_process(result.buf, result.agnss_sz);
+	if (err) {
+		LOG_ERR("Failed to process A-GNSS data, error: %d", err);
+		goto agnss_exit;
+	}
+
+	LOG_INF("A-GNSS data processed");
+
+agnss_exit:
 	assistance_active = false;
-#endif /* CONFIG_NRF_CLOUD_AGPS */
+#endif /* CONFIG_NRF_CLOUD_AGNSS */
 
 #if defined(CONFIG_NRF_CLOUD_PGPS)
 	nrf_cloud_pgps_notify_prediction();

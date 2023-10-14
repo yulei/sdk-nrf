@@ -17,6 +17,7 @@
 #else
 #include <zephyr/net/socket.h>
 #endif
+#include <zephyr/net/socket_ncs.h>
 #include <zephyr/net/tls_credentials.h>
 #include <net/download_client.h>
 #include <zephyr/logging/log.h>
@@ -42,6 +43,7 @@ int coap_parse(struct download_client *client, size_t len);
 int coap_request_send(struct download_client *client);
 
 static int handle_disconnect(struct download_client *client);
+static int error_evt_send(const struct download_client *dl, int error);
 
 static bool is_idle(struct download_client *client)
 {
@@ -219,15 +221,12 @@ static int socket_tls_hostname_set(int fd, const char * const hostname)
 	return 0;
 }
 
-static int socket_pdn_id_set(int fd, uint8_t pdn_id)
+static int socket_pdn_id_set(int fd, int pdn_id)
 {
 	int err;
-	char buf[8] = {0};
 
-	(void) snprintf(buf, sizeof(buf), "pdn%d", pdn_id);
-
-	LOG_INF("Binding to PDN ID: %s", buf);
-	err = setsockopt(fd, SOL_SOCKET, SO_BINDTODEVICE, &buf, strlen(buf));
+	LOG_INF("Binding to PDN ID: %d", pdn_id);
+	err = setsockopt(fd, SOL_SOCKET, SO_BINDTOPDN, &pdn_id, sizeof(pdn_id));
 	if (err) {
 		LOG_ERR("Failed to bind socket to PDN ID %d, err %d",
 			pdn_id, errno);
@@ -269,7 +268,7 @@ static int host_lookup(const char *host, int family, uint8_t pdn_id,
 		return -EHOSTUNREACH;
 	}
 
-	*sa = *(ai->ai_addr);
+	memcpy(sa, ai->ai_addr, ai->ai_addrlen);
 	freeaddrinfo(ai);
 
 	return 0;
@@ -290,7 +289,7 @@ static int client_connect(struct download_client *dl)
 		err = host_lookup(dl->host, AF_INET, dl->config.pdn_id, &dl->remote_addr);
 	}
 	if (err) {
-		return err;
+		goto cleanup;
 	}
 
 	err = url_parse_proto(dl->host, &dl->proto, &type);
@@ -306,21 +305,24 @@ static int client_connect(struct download_client *dl)
 
 	if (dl->proto == IPPROTO_UDP || dl->proto == IPPROTO_DTLS_1_2) {
 		if (!IS_ENABLED(CONFIG_COAP)) {
-			return -EPROTONOSUPPORT;
+			err = -EPROTONOSUPPORT;
+			goto cleanup;
 		}
 	}
 
 	if (dl->proto == IPPROTO_TLS_1_2 || dl->proto == IPPROTO_DTLS_1_2) {
 		if (dl->config.sec_tag_list == NULL || dl->config.sec_tag_count == 0) {
 			LOG_WRN("No security tag provided for TLS/DTLS");
-			return -EINVAL;
+			err = -EINVAL;
+			goto cleanup;
 		}
 	}
 
 	if ((dl->config.sec_tag_list == NULL || dl->config.sec_tag_count == 0) &&
 	    dl->config.set_tls_hostname) {
 		LOG_WRN("set_tls_hostname flag is set for non-TLS connection");
-		return -EINVAL;
+		err = -EINVAL;
+		goto cleanup;
 	}
 
 	err = url_parse_port(dl->host, &port);
@@ -352,7 +354,8 @@ static int client_connect(struct download_client *dl)
 		addrlen = sizeof(struct sockaddr_in);
 		break;
 	default:
-		return -EAFNOSUPPORT;
+		err = -EAFNOSUPPORT;
+		goto cleanup;
 	}
 
 	if (dl->set_native_tls) {
@@ -366,7 +369,8 @@ static int client_connect(struct download_client *dl)
 	dl->fd = socket(dl->remote_addr.sa_family, type, dl->proto);
 	if (dl->fd < 0) {
 		LOG_ERR("Failed to create socket, err %d", errno);
-		return -errno;
+		err = -errno;
+		goto cleanup;
 	}
 
 	if (dl->config.pdn_id) {
@@ -386,7 +390,21 @@ static int client_connect(struct download_client *dl)
 		if (dl->config.set_tls_hostname) {
 			err = socket_tls_hostname_set(dl->fd, dl->host);
 			if (err) {
+				err = -errno;
 				goto cleanup;
+			}
+		}
+
+		if (dl->proto == IPPROTO_DTLS_1_2 && IS_ENABLED(CONFIG_DOWNLOAD_CLIENT_CID)) {
+			/* Enable connection ID */
+			uint32_t dtls_cid = TLS_DTLS_CID_ENABLED;
+
+			err = setsockopt(dl->fd, SOL_TLS, TLS_DTLS_CID, &dtls_cid,
+					 sizeof(dtls_cid));
+			if (err) {
+				err = -errno;
+				LOG_ERR("Failed to enable TLS_DTLS_CID: %d", err);
+				/* Not fatal, so continue */
 			}
 		}
 	}
@@ -397,12 +415,14 @@ static int client_connect(struct download_client *dl)
 
 	err = connect(dl->fd, &dl->remote_addr, addrlen);
 	if (err) {
+		LOG_ERR("Unable to connect, errno %d", errno);
 		err = -errno;
-		LOG_ERR("Unable to connect, errno %d", -err);
 	}
 
 cleanup:
 	if (err) {
+		error_evt_send(dl, -err);
+
 		/* Unable to connect, close socket */
 		handle_disconnect(dl);
 	}
@@ -618,7 +638,6 @@ static int handle_socket_error(struct download_client *dl, ssize_t len)
 	rc = reconnect(dl);
 	k_mutex_unlock(&dl->mutex);
 	if (rc) {
-		error_evt_send(dl, EHOSTDOWN);
 		return -1;
 	}
 
@@ -719,8 +738,8 @@ static int handle_disconnect(struct download_client *client)
 	if (client->fd != -1) {
 		err = close(client->fd);
 		if (err) {
-			err = errno;
-			LOG_ERR("Failed to close socket, errno %d", err);
+			LOG_ERR("Failed to close socket, errno %d", errno);
+			err = -errno;
 		}
 	}
 
@@ -757,10 +776,6 @@ void download_thread(void *client, void *a, void *b)
 			rc = client_connect(dl);
 
 			if (rc) {
-				error_evt_send(dl, -rc);
-				if (dl->close_when_done) {
-					handle_disconnect(dl);
-				}
 				continue;
 			}
 
@@ -792,7 +807,6 @@ void download_thread(void *client, void *a, void *b)
 
 					rc = reconnect(dl);
 					if (rc) {
-						error_evt_send(dl, EHOSTDOWN);
 						break;
 					}
 					/* Send request again */

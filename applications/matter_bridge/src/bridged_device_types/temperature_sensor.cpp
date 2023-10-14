@@ -31,20 +31,20 @@ DECLARE_DYNAMIC_CLUSTER(Clusters::TemperatureMeasurement::Id, tempSensorAttrs, n
 DECLARE_DYNAMIC_ENDPOINT(bridgedTemperatureEndpoint, bridgedTemperatureClusters);
 
 static constexpr EmberAfDeviceType kBridgedTemperatureDeviceTypes[] = {
-	{ static_cast<chip::DeviceTypeId>(BridgedDevice::DeviceType::TemperatureSensor),
-	  BridgedDevice::kDefaultDynamicEndpointVersion },
-	{ static_cast<chip::DeviceTypeId>(BridgedDevice::DeviceType::BridgedNode),
-	  BridgedDevice::kDefaultDynamicEndpointVersion }
+	{ static_cast<chip::DeviceTypeId>(MatterBridgedDevice::DeviceType::TemperatureSensor),
+	  MatterBridgedDevice::kDefaultDynamicEndpointVersion },
+	{ static_cast<chip::DeviceTypeId>(MatterBridgedDevice::DeviceType::BridgedNode),
+	  MatterBridgedDevice::kDefaultDynamicEndpointVersion }
 };
 
 static constexpr uint8_t kTemperatureDataVersionSize = ArraySize(bridgedTemperatureClusters);
 
-TemperatureSensorDevice::TemperatureSensorDevice(const char *nodeLabel) : BridgedDevice(nodeLabel)
+TemperatureSensorDevice::TemperatureSensorDevice(const char *nodeLabel) : MatterBridgedDevice(nodeLabel)
 {
 	mDataVersionSize = kTemperatureDataVersionSize;
 	mEp = &bridgedTemperatureEndpoint;
 	mDeviceTypeList = kBridgedTemperatureDeviceTypes;
-	mDeviceTypeListSize = sizeof(kBridgedTemperatureDeviceTypes);
+	mDeviceTypeListSize = ARRAY_SIZE(kBridgedTemperatureDeviceTypes);
 	mDataVersion = static_cast<DataVersion *>(chip::Platform::MemoryAlloc(sizeof(DataVersion) * mDataVersionSize));
 }
 
@@ -52,12 +52,6 @@ CHIP_ERROR TemperatureSensorDevice::HandleRead(ClusterId clusterId, AttributeId 
 					       uint16_t maxReadLength)
 {
 	switch (clusterId) {
-	case Clusters::BridgedDeviceBasicInformation::Id:
-		return HandleReadBridgedDeviceBasicInformation(attributeId, buffer, maxReadLength);
-		break;
-	case Clusters::Descriptor::Id:
-		return HandleReadDescriptor(attributeId, buffer, maxReadLength);
-		break;
 	case Clusters::TemperatureMeasurement::Id:
 		return HandleReadTemperatureMeasurement(attributeId, buffer, maxReadLength);
 		break;
@@ -98,50 +92,58 @@ CHIP_ERROR TemperatureSensorDevice::HandleReadTemperatureMeasurement(AttributeId
 CHIP_ERROR TemperatureSensorDevice::HandleAttributeChange(chip::ClusterId clusterId, chip::AttributeId attributeId,
 							  void *data, size_t dataSize)
 {
-	if (clusterId != Clusters::TemperatureMeasurement::Id || !data) {
+	CHIP_ERROR err = CHIP_NO_ERROR;
+	if (!data) {
 		return CHIP_ERROR_INVALID_ARGUMENT;
 	}
 
-	CHIP_ERROR err;
+	switch (clusterId) {
+	case Clusters::BridgedDeviceBasicInformation::Id:
+		return HandleWriteDeviceBasicInformation(clusterId, attributeId, data, dataSize);
+	case Clusters::TemperatureMeasurement::Id: {
+		switch (attributeId) {
+		case Clusters::TemperatureMeasurement::Attributes::MeasuredValue::Id: {
+			int16_t value;
 
-	switch (attributeId) {
-	case Clusters::TemperatureMeasurement::Attributes::MeasuredValue::Id: {
-		int16_t value;
+			err = CopyAttribute(data, dataSize, &value, sizeof(value));
 
-		err = CopyAttribute(data, dataSize, &value, sizeof(value));
+			if (err != CHIP_NO_ERROR) {
+				return err;
+			}
 
-		if (err != CHIP_NO_ERROR) {
-			return err;
+			SetMeasuredValue(value);
+
+			break;
 		}
+		case Clusters::TemperatureMeasurement::Attributes::MinMeasuredValue::Id: {
+			int16_t value;
 
-		SetMeasuredValue(value);
+			err = CopyAttribute(data, dataSize, &value, sizeof(value));
 
-		break;
-	}
-	case Clusters::TemperatureMeasurement::Attributes::MinMeasuredValue::Id: {
-		int16_t value;
+			if (err != CHIP_NO_ERROR) {
+				return err;
+			}
 
-		err = CopyAttribute(data, dataSize, &value, sizeof(value));
+			SetMinMeasuredValue(value);
 
-		if (err != CHIP_NO_ERROR) {
-			return err;
+			break;
 		}
+		case Clusters::TemperatureMeasurement::Attributes::MaxMeasuredValue::Id: {
+			int16_t value;
 
-		SetMinMeasuredValue(value);
+			err = CopyAttribute(data, dataSize, &value, sizeof(value));
 
-		break;
-	}
-	case Clusters::TemperatureMeasurement::Attributes::MaxMeasuredValue::Id: {
-		int16_t value;
+			if (err != CHIP_NO_ERROR) {
+				return err;
+			}
 
-		err = CopyAttribute(data, dataSize, &value, sizeof(value));
+			SetMaxMeasuredValue(value);
 
-		if (err != CHIP_NO_ERROR) {
-			return err;
+			break;
 		}
-
-		SetMaxMeasuredValue(value);
-
+		default:
+			return CHIP_ERROR_INVALID_ARGUMENT;
+		}
 		break;
 	}
 	default:

@@ -13,11 +13,11 @@ menuconfig BT_FAST_PAIR
 
 if BT_FAST_PAIR
 
-config BT_FAST_PAIR_EXT_PN
+config BT_FAST_PAIR_PN
 	bool "Fast Pair Personalized Name extension"
 	default y
 	select BT_FAST_PAIR_GATT_SERVICE_ADDITIONAL_DATA
-	select BT_FAST_PAIR_STORAGE_EXT_PN
+	select BT_FAST_PAIR_STORAGE_PN
 	help
 	  Enable Fast Pair Personalized Name extension.
 
@@ -34,7 +34,7 @@ config BT_DIS_FW_REV
 	  by default if Fast Pair Service is enabled to simplify configuration.
 
 config BT_DIS_FW_REV_STR
-	default MCUBOOT_IMAGE_VERSION if BOOTLOADER_MCUBOOT
+	default MCUBOOT_IMGTOOL_SIGN_VERSION if BOOTLOADER_MCUBOOT
 	default "0.0.0+0"
 
 config BT_FAST_PAIR_KEYS

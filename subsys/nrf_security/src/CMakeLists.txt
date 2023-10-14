@@ -64,6 +64,17 @@ if(CONFIG_GENERATE_MBEDTLS_CFG_FILE)
 )
 endif()
 
+if(CONFIG_MBEDTLS_ENABLE_HEAP)
+  if (CONFIG_BUILD_WITH_TFM)
+    # Add replacement for memory_buffer_alloc.c for NS build
+    list(APPEND src_crypto ${NRF_SECURITY_ROOT}/src/legacy/memory_buffer_alloc.c)
+  else()
+    # Both secure only builds and TF-M builds use the implementation from MbedTLS.
+    # This currently doesn't do a mutex on heap access.
+    list(APPEND src_crypto ${ARM_MBEDTLS_PATH}/library/memory_buffer_alloc.c)
+  endif()
+endif()
+
 if (COMPILE_PSA_APIS)
   # Add the local version of psa_crypto_driver_wrappers.c
   list(APPEND src_crypto
@@ -229,19 +240,9 @@ if (CONFIG_MBEDTLS_TLS_LIBRARY)
     PUBLIC
       mbedcrypto_common
   )
-
-  if (CONFIG_MBEDTLS_DEBUG)
-    # Add Zephyr's mbedlts module include path because we need rely on their headers for debug logs.
-    target_include_directories(mbedcrypto_common
-        INTERFACE
-          ${ZEPHYR_BASE}/modules/mbedtls/include
-    )
-    zephyr_library_sources(${ZEPHYR_BASE}/modules/mbedtls/debug.c)
-    zephyr_library_sources(debug_init.c)
-  endif()
 endif()
 
-if(CONFIG_PSA_EITS_BACKEND_ZEPHYR)
+if(CONFIG_PSA_NATIVE_ITS_BACKEND_ZEPHYR)
   # Include EITS in Zephyr build
   add_subdirectory(psa)
 endif()

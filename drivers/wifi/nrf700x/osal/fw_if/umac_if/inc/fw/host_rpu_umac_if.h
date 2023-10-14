@@ -252,6 +252,8 @@ enum nrf_wifi_band {
 	NRF_WIFI_BAND_5GHZ,
 	/** Unused */
 	NRF_WIFI_BAND_60GHZ,
+	/** Invalid */
+	NRF_WIFI_BAND_INVALID
 };
 
 /**
@@ -645,68 +647,42 @@ struct nrf_wifi_channel {
 	signed char nrf_wifi_beacon_found;
 } __NRF_WIFI_PKD;
 
-#define NRF_WIFI_SCAN_PARAMS_2GHZ_BAND_VALID (1 << 0)
-#define NRF_WIFI_SCAN_PARAMS_5GHZ_BAND_VALID (1 << 1)
-#define NRF_WIFI_SCAN_PARAMS_60GHZ_BAND_VALID (1 << 2)
-#define NRF_WIFI_SCAN_PARAMS_MAC_ADDR_VALID (1 << 3)
-#define NRF_WIFI_SCAN_PARAMS_MAC_ADDR_MASK_VALID (1 << 4)
-#define NRF_WIFI_SCAN_PARAMS_SCAN_FLAGS_VALID (1 << 5)
-#define NRF_WIFI_SCAN_PARAMS_SUPPORTED_RATES_VALID (1 << 6)
+
 
 #define NRF_WIFI_SCAN_MAX_NUM_SSIDS 2
 #define NRF_WIFI_SCAN_MAX_NUM_FREQUENCIES 64
-#define MAX_NUM_CHANNELS 42
 
-#define NRF_WIFI_SCAN_FLAG_LOW_PRIORITY (1 << 0)
-#define NRF_WIFI_SCAN_FLAG_FLUSH (1 << 1)
-#define NRF_WIFI_SCAN_FLAG_AP (1 << 2)
-#define NRF_WIFI_SCAN_FLAG_RANDOM_ADDR (1 << 3)
-#define NRF_WIFI_SCAN_FLAG_FILS_MAX_CHANNEL_TIME (1 << 4)
-#define NRF_WIFI_SCAN_FLAG_ACCEPT_BCAST_PROBE_RESP (1 << 5)
-#define NRF_WIFI_SCAN_FLAG_OCE_PROBE_REQ_HIGH_TX_RATE (1 << 6)
-#define NRF_WIFI_SCAN_FLAG_OCE_PROBE_REQ_DEFERRAL_SUPPRESSION (1 << 7)
-#define NRF_WIFI_SCAN_FLAG_LOW_SPAN (1 << 8)
-#define NRF_WIFI_SCAN_FLAG_LOW_POWER (1 << 9)
-#define NRF_WIFI_SCAN_FLAG_HIGH_ACCURACY (1 << 10)
-#define NRF_WIFI_SCAN_FLAG_RANDOM_SN (1 << 11)
-#define NRF_WIFI_SCAN_FLAG_MIN_PREQ_CONTENT (1 << 12)
+#define NRF_WIFI_SCAN_BAND_2GHZ	(1 << 0)
+#define NRF_WIFI_SCAN_BAND_5GHZ	(1 << 1)
+#define NRF_WIFI_SCAN_BAND_6GHZ	(1 << 2)
 
 /**
  * @brief This structure provides details about the parameters required for a scan request.
  *
  */
-
 struct nrf_wifi_scan_params {
-	/** Indicate which of the following parameters are valid */
-	unsigned int valid_fields;
-	/** Number of ssids valid in scan_ssids parameter */
+	/** If 0x1, RPU force passive scan on all channels */
+	unsigned short passive_scan;
+	/** Number of ssid's in scan_ssids parameter */
 	unsigned char num_scan_ssids;
-	/** Number of channels to be scanned */
-	unsigned char num_scan_channels;
-	/** Scan request control flags (u32). Bit values
-	 *  (NRF_WIFI_SCAN_FLAG_LOW_PRIORITY/NRF_WIFI_SCAN_FLAG_RANDOM_ADDR...)
-	 */
-	unsigned int scan_flags;
-	/** ssid info @ref nrf_wifi_ssid */
+	/** Specific SSID's to scan for */
 	struct nrf_wifi_ssid scan_ssids[NRF_WIFI_SCAN_MAX_NUM_SSIDS];
-	/** Information element(s) data @ref nrf_wifi_ie*/
-	struct nrf_wifi_ie ie;
-	/** Supported rates @ref nrf_wifi_supp_rates */
-	struct nrf_wifi_supp_rates supp_rates;
-	/** MAC address */
-	unsigned char mac_addr[NRF_WIFI_ETH_ADDR_LEN];
-	/** MAC address mask */
-	unsigned char mac_addr_mask[NRF_WIFI_ETH_ADDR_LEN];
 	/** used to send probe requests at non CCK rate in 2GHz band */
 	unsigned char no_cck;
-	/** Operating channel duration when STA is connected to AP */
-	unsigned short oper_ch_duration;
-	/** Max scan duration in TU */
-	unsigned short scan_duration[MAX_NUM_CHANNELS];
-	/** Max probe count in channels */
-	unsigned char probe_cnt[MAX_NUM_CHANNELS];
-	/** channels to be scanned @ref nrf_wifi_channel */
-	struct nrf_wifi_channel channels[0];
+	/**  Bitmap of bands to be scanned. Value Zero will scan both 2.4 and 5 GHZ */
+	unsigned char bands;
+	/** Information element(s) data @ref nrf_wifi_ie*/
+	struct nrf_wifi_ie ie;
+	/** MAC address */
+	unsigned char mac_addr[NRF_WIFI_ETH_ADDR_LEN];
+	/** Max scan duration in active scan. If zero rpu programs 50msec */
+	unsigned short dwell_time_active;
+	/** Max scan duration in passive scan. If zero rpu programs 150msec */
+	unsigned short dwell_time_passive;
+	/** Number of channels to be scanned */
+	unsigned short num_scan_channels;
+	/** specific channels to be scanned */
+	unsigned int center_frequency[0];
 } __NRF_WIFI_PKD;
 
 #define NRF_WIFI_HT_CAPABILITY_VALID (1 << 0)
@@ -1116,16 +1092,7 @@ struct nrf_wifi_umac_key_info {
 	unsigned char key_idx;
 } __NRF_WIFI_PKD;
 
-/**
- * @brief This enum represents the various types of scanning operations.
- *
- */
-enum scan_mode {
-	/** auto or legacy scan operation */
-	AUTO_SCAN = 0,
-	/** Mapped scan. Host will control channels */
-	CHANNEL_MAPPING_SCAN
-};
+
 
 /**
  * @brief This enum describes the different types of scan.
@@ -1142,10 +1109,7 @@ enum scan_reason {
  * @brief This structure contains details about scan request information.
  *
  */
-
 struct nrf_wifi_umac_scan_info {
-	/** scan mode @ref scan_mode */
-	signed int scan_mode;
 	/** scan type see &enum scan_reason */
 	signed int scan_reason;
 	/** scan parameters @ref nrf_wifi_scan_params */
@@ -2362,6 +2326,7 @@ enum nrf_wifi_twt_setup_cmd_type {
 
 #define NRF_WIFI_TWT_RESP_RECEIVED 0
 #define NRF_WIFI_TWT_RESP_NOT_RECEIVED 1
+#define NRF_WIFI_INVALID_TWT_WAKE_INTERVAL 3
 
 /**
  * @brief This structure describes the TWT information.
@@ -2939,7 +2904,7 @@ struct nrf_wifi_umac_event_power_save_info {
 	/** Is TWT responder */
 	unsigned char twt_responder;
 	/** Power save timed out value */
-	signed int ps_timeout;
+	unsigned int ps_timeout;
 	/** Listen interval value */
 	unsigned short listen_interval;
 	/** Number TWT flows */
@@ -3428,6 +3393,24 @@ struct nrf_wifi_reg_rules {
 
 } __NRF_WIFI_PKD;
 
+/**
+ * @brief This structure represents channels information like maximum power,
+ *  center frequency, channel supported and active or passive scan.
+ *
+ */
+struct nrf_wifi_get_reg_chn_info {
+	/** center frequency in MHz */
+	unsigned int center_frequency;
+	/** maximum transmission power (in dBm) */
+	unsigned int max_power;
+	/** Particular channel is supported or not */
+	char supported;
+	/** Particular channel is supports passive scanning or not */
+	char passive_channel;
+	/** Particular channel is dfs or not */
+	char dfs;
+} __NRF_WIFI_PKD;
+
 #define NRF_WIFI_CMD_SET_REG_ALPHA2_VALID (1 << 0)
 #define NRF_WIFI_CMD_SET_REG_RULES_VALID (1 << 1)
 #define NRF_WIFI_CMD_SET_REG_DFS_REGION_VALID (1 << 2)
@@ -3442,16 +3425,12 @@ struct nrf_wifi_reg_rules {
 struct nrf_wifi_reg {
 	/** Header @ref nrf_wifi_umac_hdr */
 	struct nrf_wifi_umac_hdr umac_hdr;
-	/** Indicate which of the following parameters are valid */
-	unsigned int valid_fields;
-	/** region for regulatory */
-	unsigned int dfs_region;
-	/** No.of regulatory rules */
-	unsigned int num_reg_rules;
-	/** rules info. @ref nrf_wifi_reg_rules */
-	struct nrf_wifi_reg_rules nrf_wifi_reg_rules[MAX_NUM_REG_RULES];
 	/** Country code */
 	unsigned char nrf_wifi_alpha2[NRF_WIFI_COUNTRY_CODE_LEN];
+	/** Number of channel list information */
+	unsigned int num_channels;
+	/** channels list information */
+	struct nrf_wifi_get_reg_chn_info chn_info[0];
 } __NRF_WIFI_PKD;
 
 #define NRF_WIFI_CMD_REQ_SET_REG_ALPHA2_VALID (1 << 0)

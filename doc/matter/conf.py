@@ -20,7 +20,7 @@ ZEPHYR_BASE = utils.get_projdir("zephyr")
 
 # General configuration --------------------------------------------------------
 
-project = "Matter"
+project = "Matter SDK"
 copyright = "2020-2023, Matter Contributors"
 author = "Matter Contributors"
 version = "1.1.0"
@@ -42,7 +42,7 @@ html_static_path = [str(NRF_BASE / "doc" / "_static")]
 html_last_updated_fmt = "%b %d, %Y"
 html_show_sourcelink = True
 html_show_sphinx = False
-html_title = "Matter documentation (nRF Connect SDK)"
+html_title = "Matter SDK documentation (nRF Connect SDK)"
 
 html_theme_options = {
     "docset": "matter",
@@ -71,3 +71,4 @@ def setup(app):
     app.add_css_file("css/matter.css")
 
     utils.add_google_analytics(app, html_theme_options)
+    utils.add_announcement_banner(html_theme_options)

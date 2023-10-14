@@ -34,7 +34,13 @@ LOG_MODULE_REGISTER(nrf_provisioning_coap, CONFIG_NRF_PROVISIONING_LOG_LEVEL);
 #define AUTH_MVER "mver=%s"
 #define AUTH_CVER "cver=%s"
 #define AUTH_PATH "p/auth"
+#define AUTH_PATH_JWT "p/auth-jwt"
+
+#if defined(CONFIG_NRF_PROVISIONING_ATTESTTOKEN)
 #define AUTH_API_TEMPLATE (AUTH_PATH "?" AUTH_MVER "&" AUTH_CVER)
+#else
+#define AUTH_API_TEMPLATE (AUTH_PATH_JWT "?" AUTH_MVER "&" AUTH_CVER)
+#endif
 
 #define CMDS_PATH "p/cmd"
 #define CMDS_AFTER "after=%s"
@@ -92,7 +98,7 @@ static int dtls_setup(int fd)
 		TLS_SEC_TAG,
 	};
 
-	LOG_INF("TLS setup");
+	LOG_INF("DTLS setup");
 
 	/* Set up TLS peer verification */
 	verify = TLS_PEER_VERIFY_REQUIRED;
@@ -112,7 +118,7 @@ static int dtls_setup(int fd)
 		return err;
 	}
 
-	if (IS_ENABLED(CONFIG_NRF_PROVISIONING_COAP_TLS_SESSION_CACHE)) {
+	if (IS_ENABLED(CONFIG_NRF_PROVISIONING_COAP_DTLS_SESSION_CACHE)) {
 		session_cache = TLS_SESSION_CACHE_ENABLED;
 	} else {
 		session_cache = TLS_SESSION_CACHE_DISABLED;
@@ -284,6 +290,7 @@ static int send_coap_request(struct coap_client *client, uint8_t method, const c
 			     struct nrf_provisioning_coap_context *const coap_ctx)
 {
 	int retries = 0;
+
 	struct coap_client_request client_request = {
 		.method = method,
 		.confirmable = true,
@@ -468,15 +475,15 @@ static int request_commands(struct coap_client *client,
 {
 	int ret;
 	char after[NRF_PROVISIONING_CORRELATION_ID_SIZE];
-	char *rx_buf_sz = STRINGIFY(CONFIG_NRF_PROVISIONING_COAP_RX_BUF_SZ);
-	char *tx_buf_sz = STRINGIFY(CONFIG_NRF_PROVISIONING_COAP_TX_BUF_SZ);
+	char *rx_buf_sz = STRINGIFY(CONFIG_NRF_PROVISIONING_RX_BUF_SZ);
+	char *tx_buf_sz = STRINGIFY(CONFIG_NRF_PROVISIONING_TX_BUF_SZ);
 	char cmd[sizeof(CMDS_API_TEMPLATE) + NRF_PROVISIONING_CORRELATION_ID_SIZE +
 		 strlen(rx_buf_sz) + strlen(tx_buf_sz)];
 
 	LOG_DBG("Get commands");
 
 	memcpy(after, nrf_provisioning_codec_get_latest_cmd_id(),
-	NRF_PROVISIONING_CORRELATION_ID_SIZE);
+	       NRF_PROVISIONING_CORRELATION_ID_SIZE);
 
 	ret = snprintk(cmd, sizeof(cmd), CMDS_API_TEMPLATE, after, rx_buf_sz, tx_buf_sz);
 
@@ -532,10 +539,10 @@ int nrf_provisioning_coap_req(struct nrf_provisioning_coap_context *const coap_c
 
 	/* Only one provisioning ongoing at a time*/
 	static union {
-		char coap[CONFIG_NRF_PROVISIONING_COAP_TX_BUF_SZ];
+		char coap[CONFIG_NRF_PROVISIONING_TX_BUF_SZ];
 		char at[CONFIG_NRF_PROVISIONING_CODEC_AT_CMD_LEN];
 	} tx_buf;
-	static char rx_buf[CONFIG_NRF_PROVISIONING_COAP_RX_BUF_SZ];
+	static char rx_buf[CONFIG_NRF_PROVISIONING_RX_BUF_SZ];
 
 	int ret;
 	char *auth_token = NULL;
@@ -563,6 +570,7 @@ int nrf_provisioning_coap_req(struct nrf_provisioning_coap_context *const coap_c
 			break;
 		}
 
+		LOG_INF("Requesting commands");
 		ret = request_commands(&client, coap_ctx);
 		if (ret < 0) {
 			break;
@@ -585,6 +593,7 @@ int nrf_provisioning_coap_req(struct nrf_provisioning_coap_context *const coap_c
 			cdc_ctx.opkt = tx_buf.coap;
 			cdc_ctx.opkt_sz = sizeof(tx_buf);
 
+			LOG_INF("Processing commands");
 			ret = nrf_provisioning_codec_process_commands();
 			if (ret < 0) {
 				LOG_ERR("ret %d", ret);
@@ -606,6 +615,7 @@ int nrf_provisioning_coap_req(struct nrf_provisioning_coap_context *const coap_c
 				break;
 			}
 
+			LOG_INF("Sending response to server");
 			ret = send_response(&client, coap_ctx, &cdc_ctx);
 			if (ret < 0) {
 				break;

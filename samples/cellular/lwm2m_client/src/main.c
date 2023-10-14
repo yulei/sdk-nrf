@@ -28,6 +28,10 @@ LOG_MODULE_REGISTER(app_lwm2m_client, CONFIG_APP_LOG_LEVEL);
 #include "gnss_module.h"
 #include "location_events.h"
 
+#include <zephyr/device.h>
+#include <zephyr/devicetree.h>
+#include "fota_app_external.h"
+
 #if defined(CONFIG_LWM2M_CLIENT_UTILS_LOCATION_ASSISTANCE)
 #include "ui_input.h"
 #include "ui_input_event.h"
@@ -58,6 +62,7 @@ static enum client_state {
 	CONNECTED,	/* LwM2M Client connection establisment to server */
 	LTE_OFFLINE,	/* LTE offline and LwM2M engine should be suspended */
 	UPDATE_FIRMWARE, /* Prepare app ready for firmware update */
+	RECONNECT_AFTER_UPDATE, /* Reconnect client after modem update */
 	NETWORK_ERROR	/* Client network error handling. Client stop and modem reset */
 } client_state = START;
 
@@ -73,6 +78,7 @@ static bool update_session_lifetime = true;
 static bool ready_for_firmware_update;
 
 static void rd_client_event(struct lwm2m_ctx *client, enum lwm2m_rd_client_event client_event);
+static void state_trigger_and_unlock(enum client_state new_state);
 
 void client_acknowledge(void)
 {
@@ -111,12 +117,12 @@ static bool button_callback(const struct app_event_header *aeh)
 
 		switch (event->device_number) {
 		case 1:
-#if defined(CONFIG_LWM2M_CLIENT_UTILS_LOCATION_ASSIST_AGPS) || \
+#if defined(CONFIG_LWM2M_CLIENT_UTILS_LOCATION_ASSIST_AGNSS) || \
 defined(CONFIG_LWM2M_CLIENT_UTILS_LOCATION_ASSIST_PGPS)
 			LOG_INF("Starting GNSS");
 			start_gnss();
 #else
-			LOG_INF("A-GPS not enabled");
+			LOG_INF("A-GNSS not enabled");
 #endif
 			break;
 		case 2:
@@ -218,6 +224,7 @@ static int lwm2m_firmware_event_cb(struct lwm2m_fota_event *event)
 	k_mutex_lock(&lte_mutex, K_FOREVER);
 	switch (event->id) {
 	case LWM2M_FOTA_DOWNLOAD_START:
+		ready_for_firmware_update = false;
 		LOG_INF("FOTA download started for instance %d", event->download_start.obj_inst_id);
 		break;
 	/** FOTA download process finished */
@@ -227,7 +234,7 @@ static int lwm2m_firmware_event_cb(struct lwm2m_fota_event *event)
 		break;
 	/** FOTA update new image */
 	case LWM2M_FOTA_UPDATE_IMAGE_REQ:
-		if (!ready_for_firmware_update) {
+		if (!ready_for_firmware_update && event->update_req.obj_inst_id < 2) {
 			state_trigger_and_unlock(UPDATE_FIRMWARE);
 			/* Postpone request by 2 seconds */
 			return 2;
@@ -235,8 +242,14 @@ static int lwm2m_firmware_event_cb(struct lwm2m_fota_event *event)
 		LOG_INF("FOTA Update request for instance %d", event->update_req.obj_inst_id);
 
 		break;
+	case LWM2M_FOTA_UPDATE_MODEM_RECONNECT_REQ:
+		ready_for_firmware_update = false;
+		state_trigger_and_unlock(RECONNECT_AFTER_UPDATE);
+		/* Indicate that app can support Modem Reconnect */
+		return 0;
 	/** Fota process fail or cancelled  */
 	case LWM2M_FOTA_UPDATE_ERROR:
+		ready_for_firmware_update = false;
 		LOG_INF("FOTA failure %d by status %d", event->failure.obj_inst_id,
 			event->failure.update_failure);
 		break;
@@ -380,18 +393,16 @@ static void rd_client_event(struct lwm2m_ctx *client, enum lwm2m_rd_client_event
 {
 	k_mutex_lock(&lte_mutex, K_FOREVER);
 
-	if (IS_ENABLED(CONFIG_LWM2M_CLIENT_UTILS_LTE_CONNEVAL)) {
-		lwm2m_utils_conneval(client, &client_event);
-	}
-
-	if (client_state == LTE_OFFLINE &&
-	    client_event != LWM2M_RD_CLIENT_EVENT_ENGINE_SUSPENDED) {
+	if (client_state == LTE_OFFLINE && client_event != LWM2M_RD_CLIENT_EVENT_ENGINE_SUSPENDED) {
 		LOG_DBG("Drop network event %d at LTE offline state", client_event);
 		k_mutex_unlock(&lte_mutex);
 		return;
 	}
 
+	lwm2m_utils_connection_manage(client, &client_event);
+
 	switch (client_event) {
+	case LWM2M_RD_CLIENT_EVENT_DEREGISTER:
 	case LWM2M_RD_CLIENT_EVENT_NONE:
 		/* do nothing */
 		k_mutex_unlock(&lte_mutex);
@@ -440,22 +451,24 @@ static void rd_client_event(struct lwm2m_ctx *client, enum lwm2m_rd_client_event
 
 	case LWM2M_RD_CLIENT_EVENT_DEREGISTER_FAILURE:
 		LOG_DBG("Deregister failure!");
-		reconnect = true;
-		state_trigger_and_unlock(NETWORK_ERROR);
+		if (client_state != UPDATE_FIRMWARE) {
+			state_set_and_unlock(START);
+		} else {
+			k_mutex_unlock(&lte_mutex);
+		}
 		break;
 
 	case LWM2M_RD_CLIENT_EVENT_DISCONNECT:
 		LOG_DBG("Disconnected");
-		if (client_state != UPDATE_FIRMWARE) {
+		if (client_state != UPDATE_FIRMWARE && client_state != RECONNECT_AFTER_UPDATE) {
 			state_set_and_unlock(START);
+		} else {
+			k_mutex_unlock(&lte_mutex);
 		}
 		break;
 
 	case LWM2M_RD_CLIENT_EVENT_QUEUE_MODE_RX_OFF:
 		LOG_DBG("Queue mode RX window closed");
-		if (IS_ENABLED(CONFIG_LWM2M_CLIENT_UTILS_RAI)) {
-			lwm2m_rai_last();
-		}
 		k_mutex_unlock(&lte_mutex);
 		break;
 
@@ -475,22 +488,6 @@ static void rd_client_event(struct lwm2m_ctx *client, enum lwm2m_rd_client_event
 static void modem_connect(void)
 {
 	int ret;
-
-#if defined(CONFIG_LWM2M_QUEUE_MODE_ENABLED)
-	if (!IS_ENABLED(CONFIG_LTE_EDRX_REQ)) {
-		ret = lte_lc_edrx_req(false);
-		if (ret < 0) {
-			LOG_ERR("EDRX request error %d", ret);
-		}
-	}
-
-	ret = lte_lc_psm_req(true);
-	if (ret < 0) {
-		LOG_ERR("lte_lc_psm_req, error: (%d)", ret);
-	} else {
-		LOG_INF("PSM mode requested");
-	}
-#endif
 
 	do {
 
@@ -548,12 +545,29 @@ static void lwm2m_lte_reg_handler_notify(enum lte_lc_nw_reg_status nw_reg_status
 	if (lte_registered != modem_connected_to_network) {
 		modem_connected_to_network = lte_registered;
 		if (client_state != START && client_state != BOOTSTRAP &&
-		    client_state != UPDATE_FIRMWARE) {
+		    client_state != UPDATE_FIRMWARE && client_state != RECONNECT_AFTER_UPDATE) {
 			k_sem_give(&state_mutex);
 		}
 	}
 	k_mutex_unlock(&lte_mutex);
 }
+
+#ifdef CONFIG_LTE_LC_MODEM_SLEEP_NOTIFICATIONS
+static void lte_modem_enter_sleep(const struct lte_lc_modem_sleep *event)
+{
+	switch (event->type) {
+	case LTE_LC_MODEM_SLEEP_PSM:
+	case LTE_LC_MODEM_SLEEP_PROPRIETARY_PSM:
+		LOG_INF("Modem Enter PSM, time %lld", event->time);
+		break;
+	case LTE_LC_MODEM_SLEEP_RF_INACTIVITY:
+		LOG_INF("Modem Enter eDRX state, time %lld", event->time);
+		break;
+	default:
+		break;
+	}
+}
+#endif
 
 static void lte_notify_handler(const struct lte_lc_evt *const evt)
 {
@@ -561,6 +575,11 @@ static void lte_notify_handler(const struct lte_lc_evt *const evt)
 	case LTE_LC_EVT_NW_REG_STATUS:
 		lwm2m_lte_reg_handler_notify(evt->nw_reg_status);
 		break;
+#ifdef CONFIG_LTE_LC_MODEM_SLEEP_NOTIFICATIONS
+	case LTE_LC_EVT_MODEM_SLEEP_ENTER:
+		lte_modem_enter_sleep(&evt->modem_sleep);
+		break;
+#endif
 	default:
 		break;
 	}
@@ -591,6 +610,14 @@ int main(void)
 	if (ret < 0) {
 		LOG_ERR("Unable to init modem library (%d)", ret);
 		return 0;
+	}
+
+	if (IS_ENABLED(CONFIG_APP_SMP_CLIENT_FOTA_EXTERNAL)) {
+		ret = fota_external_init();
+		if (ret < 0) {
+			LOG_ERR("Unable to init Fota external client (%d)", ret);
+			return 0;
+		}
 	}
 
 	ret = app_event_manager_init();
@@ -681,9 +708,13 @@ int main(void)
 		switch (client_state) {
 		case START:
 			LOG_INF("Client connect to server");
-			state_set_and_unlock(CONNECTING);
-			lwm2m_rd_client_start(&client, endpoint_name, bootstrap_flags,
-					      rd_client_event, NULL);
+			ret = lwm2m_rd_client_start(&client, endpoint_name, bootstrap_flags,
+						    rd_client_event, NULL);
+			if (ret) {
+				state_trigger_and_unlock(NETWORK_ERROR);
+			} else {
+				state_trigger_and_unlock(CONNECTING);
+			}
 			break;
 
 		case BOOTSTRAP:
@@ -729,16 +760,22 @@ int main(void)
 				k_mutex_unlock(&lte_mutex);
 			}
 			break;
+
 		case UPDATE_FIRMWARE:
 			LOG_INF("Prepare for Firmware update: Stop client and disbale Modem");
 			k_mutex_unlock(&lte_mutex);
 			lwm2m_rd_client_stop(&client, NULL, false);
-			ret = lte_lc_offline();
-			if (ret < 0) {
-				LOG_ERR("Failed to put LTE link in offline state (%d)", ret);
-			}
 			ready_for_firmware_update = true;
 			LOG_INF("App ready for firmware update");
+			break;
+
+		case RECONNECT_AFTER_UPDATE:
+			/* Enable client reconnect */
+			LOG_INF("Restart modem and client after an update");
+			state_trigger_and_unlock(START);
+			/* Initialize & connect modem */
+			lte_lc_init();
+			modem_connect();
 			break;
 
 		case NETWORK_ERROR:

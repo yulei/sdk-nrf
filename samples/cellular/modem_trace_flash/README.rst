@@ -12,9 +12,11 @@ This sample demonstrates how to add a modem trace backend that stores the trace 
 Requirements
 ************
 
-The sample supports the following development kit, version 0.14.0 or higher:
+The sample supports the following development kits:
 
 .. table-from-sample-yaml::
+
+For the nRF9160 DK, version 0.14.0 or higher is supported by the sample.
 
 .. include:: /includes/tfm.txt
 
@@ -24,7 +26,7 @@ Overview
 ********
 
 You can use this sample to implement storing and reading of modem traces on an external flash device.
-The sample contains an implementation of a custom trace backend that writes modem traces on the external flash chip of the nRF9160 DK.
+The sample contains an implementation of a custom trace backend that writes modem traces on the external flash chip of the nRF91 Series DK.
 In addition, it reads out the traces from the external flash and writes them out to UART1 on a button press.
 
 You can use the sample for creating a trace backend for your own flash device.
@@ -38,7 +40,8 @@ Write performance
 
 A modem trace backend must be able to handle the trace data as fast as they are produced to avoid dropping traces.
 It is recommended to handle the trace data at approximately 1 Mbps.
-The Macronix MX25R6435 Ultra Low Power Flash on the nRF9160DK is optimized for low power consumption rather than write speed, but it features a high performance mode.
+
+The Macronix MX25R6435 Ultra Low Power Flash on the nRF9160 DK is optimized for low power consumption rather than write speed, but it features a high performance mode.
 The high-performance mode consumes more power but is able to erase and write at roughly double the speed.
 Use the device tree property ``mxicy,mx25r-power-mode`` to configure MX25R6435 in either high-performance or low-power mode.
 In this sample, the MX25R6435 is configured in high-performance mode.
@@ -81,9 +84,17 @@ After programming the sample and board controller firmware (as mentioned in Requ
 
 #. |connect_kit|
 #. |connect_terminal|
-#. Open the `Trace Collector`_ desktop application and connect it the DK.
-#. When the console output  ``Flushed modem traces to flash`` is received, press Button 1 on the development kit.
-#. Observe modem traces received on the Trace Collector desktop application.
+#. Open the `Cellular Monitor`_ desktop application and connect the DK.
+#. Select :guilabel:`Autoselect` from the **Modem trace database** drop-down menu, or a modem firmware version that is programmed on the DK.
+#. Select :guilabel:`Reset device on start`.
+#. Deselect :guilabel:`Refresh dashboard on start`.
+#. Make sure that either :guilabel:`Open in Wireshark` or :guilabel:`Save trace file to disk` is selected.
+#. Click :guilabel:`Open Serial Terminal` and keep the terminal window open (optional).
+#. Click :guilabel:`Start` to begin the modem trace.
+   The button changes to :guilabel:`Stop` and is greyed out.
+#. When the console output  ``Flushed modem traces to flash`` is received in Serial Terminal, press **Button 1** on the development kit.
+   If you are not using a serial terminal, you can approximately wait for one minute after clicking the :guilabel:`Start` button, and then press **Button 1**.
+#. Observe modem traces received on the Cellular Monitor desktop application.
 
 .. note::
    Since the external flash is erased at startup, there will be a few seconds of delay before the first console output is received from the sample.

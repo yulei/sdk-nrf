@@ -62,7 +62,8 @@ config NRF_MODEM_LIB_SHMEM_TX_SIZE
 
 config NRF_MODEM_LIB_SHMEM_RX_SIZE
 	int "RX region size"
-	range 2488 32768
+	range 2488 32768 if SOC_NRF9160
+	range 2616 32768 if SOC_NRF9120
 	default 8192
 	help
 	  Size of the shared memory region owned by the modem.
@@ -177,6 +178,10 @@ config NRF_MODEM_LIB_TRACE_THREAD_PRIO
 	int "Priority of the trace processing thread"
 	depends on NRF_MODEM_LIB_TRACE_THREAD_PRIO_OVERRIDE
 	default 0
+
+config NRF_MODEM_LIB_TRACE_BACKEND_SUSPEND_DELAY_MS
+	int "Time to wait before suspending trace backend"
+	default 5000
 
 config NRF_MODEM_LIB_TRACE_BITRATE_LOG
 	depends on NRF_MODEM_LIB_LOG_LEVEL_INF || NRF_MODEM_LIB_LOG_LEVEL_DBG

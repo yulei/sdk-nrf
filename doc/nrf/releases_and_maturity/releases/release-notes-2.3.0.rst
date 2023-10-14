@@ -525,7 +525,7 @@ nRF9160 samples
 
   * Added support for the :ref:`liblwm2m_carrier_readme` library.
 
-* :ref:`nrf_cloud_mqtt_multi_service` sample:
+* :ref:`nrf_cloud_multi_service` sample:
 
   * Added:
 
@@ -554,7 +554,7 @@ nRF9160 samples
     * Removed user prompt and button press handling for FOTA enablement.
     * The sample now uses a partition in external flash for full modem FOTA updates.
 
-* :ref:`azure_fota_sample` sample:
+* nRF9160: Azure FOTA sample:
 
   * Updated the sample to use the logging subsystem for console output.
 
@@ -636,7 +636,7 @@ Wi-Fi samples
 Other samples
 -------------
 
-* :ref:`esb_prx_ptx` sample:
+* Enhanced ShockBurst: Transmitter/Receiver sample:
 
   * Added support for front-end modules and :ref:`zephyr:nrf21540dk_nrf52840`.
 

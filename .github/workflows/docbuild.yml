@@ -13,7 +13,7 @@ on:
       - '**/sample.yaml'
       - 'doc/**'
       - 'include/**'
-      - 'scripts/requirements-doc.txt'
+      - 'doc/requirements.txt'
       - 'scripts/tools-versions-*.yml'
       - 'west.yml'
   push:
@@ -34,7 +34,7 @@ jobs:
           path: ncs/nrf
           fetch-depth: 0
       - name: cache-pip
-        uses: actions/cache@v1
+        uses: actions/cache@v3
         with:
           path: ~/.cache/pip
           key: ${{ runner.os }}-doc-pip
@@ -48,11 +48,11 @@ jobs:
           tar xf doxygen-${DOXYGEN_VERSION}.linux.bin.tar.gz
           echo "${PWD}/doxygen-${DOXYGEN_VERSION}/bin" >> $GITHUB_PATH
 
-      - name: Install base dependencies
+      - name: Install Python dependencies
         working-directory: ncs
         run: |
           sudo pip3 install -U setuptools wheel pip
-          pip3 install -r nrf/scripts/requirements-base.txt
+          pip3 install -r nrf/doc/requirements.txt
 
       - name: West init and update
         working-directory: ncs
@@ -61,15 +61,10 @@ jobs:
           west update
           west zephyr-export
 
-      - name: Install documentation dependencies
-        working-directory: ncs
-        run: |
-          pip3 install -r zephyr/scripts/requirements-doc.txt -r nrf/scripts/requirements-doc.txt
-
       - name: Build documentation
         working-directory: ncs/nrf
         run: |
-          cmake -GNinja -Bdoc/_build -Sdoc -DSPHINXOPTS_EXTRA="-W"
+          cmake -GNinja -Bdoc/_build -Sdoc
           ninja -C doc/_build
 
       - name: Prepare archive

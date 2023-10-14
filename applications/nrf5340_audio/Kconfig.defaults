@@ -11,7 +11,7 @@ config MAIN_THREAD_PRIORITY
 	default 10
 
 config MAIN_STACK_SIZE
-	default 1400
+	default 1600
 
 config SYSTEM_WORKQUEUE_STACK_SIZE
 	default 1200
@@ -50,8 +50,8 @@ config NFCT_PINS_AS_GPIOS
 config ZBUS
 	default y
 
-config ZBUS_RUNTIME_OBSERVERS_POOL_SIZE
-	default 6
+config ZBUS_RUNTIME_OBSERVERS
+	default y
 
 config SENSOR
 	default y

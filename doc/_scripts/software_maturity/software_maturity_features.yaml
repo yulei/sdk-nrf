@@ -1,5 +1,7 @@
 top_table:
+  Sidewalk: SIDEWALK
   Bluetooth: BT_CTLR
+  Bluetooth mesh: BT_MESH
   Zigbee: ZIGBEE
   Thread: NET_L2_OPENTHREAD
   LTE: LTE_LINK_CONTROL
@@ -15,11 +17,15 @@ top_table:
       - BOARD_NRF7002DK_NRF5340_CPUAPP
       - BOARD_NRF7002DK_NRF7001_NRF5340_CPUAPP
 features:
+  sidewalk:
+    Sidewalk over BLE: SIDEWALK && SIDEWALK_LINK_MASK_BLE
+    Sidewalk over FSK: SIDEWALK && SIDEWALK_LINK_MASK_FSK
+    Sidewalk over LORA: SIDEWALK && SIDEWALK_LINK_MASK_LORA
+    Sidewalk - OTA DFU over Bluetooth LE: SIDEWALK && SIDEWALK_DFU_SERVICE_BLE
   bluetooth:
     Bluetooth LE Peripheral/Central: BT_CTLR && (BT_CENTRAL || BT_PERIPHERAL)
     LLPM: BT_CTLR_SDC_LLPM
     LE Coded PHY: BT_CTLR_PHY_CODED_SUPPORT
-    Bluetooth Mesh: BT_MESH
     Connectionless/Connected CTE Transmitter: BT_CTLR_DF_CTE_TX_SUPPORT
   zigbee:
     Zigbee (Sleepy) End Device: ZIGBEE_ROLE_END_DEVICE

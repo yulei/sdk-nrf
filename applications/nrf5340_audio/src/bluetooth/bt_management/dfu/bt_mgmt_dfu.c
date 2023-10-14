@@ -11,11 +11,8 @@
 #include <zephyr/kernel.h>
 #include <zephyr/bluetooth/bluetooth.h>
 #include <zephyr/bluetooth/conn.h>
-#include <zephyr/settings/settings.h>
 
 #include "string.h"
-#include "button_assignments.h"
-#include "button_handler.h"
 #include "macros_common.h"
 #include "channel_assignment.h"
 
@@ -44,6 +41,7 @@ static void smp_adv(void)
 		return;
 	}
 
+	/* NOTE: The string below is used by the Nordic CI system */
 	LOG_INF("Regular SMP_SVR advertising started");
 }
 

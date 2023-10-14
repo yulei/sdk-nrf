@@ -30,6 +30,7 @@
 #include "slm_at_icmp.h"
 #include "slm_at_sms.h"
 #include "slm_at_fota.h"
+#include "slm_uart_handler.h"
 #if defined(CONFIG_SLM_NATIVE_TLS)
 #include "slm_at_cmng.h"
 #endif
@@ -74,22 +75,14 @@ enum sleep_modes {
 typedef int (*slm_at_handler_t) (enum at_cmd_type);
 
 static struct slm_work_info {
-	struct k_work_delayable uart_work;
 	struct k_work_delayable sleep_work;
 	uint32_t data;
 } slm_work;
-
-/* global variable defined in different files */
-extern struct at_param_list at_param_list;
-extern uint16_t datamode_time_limit;
-extern struct uart_config slm_uart;
 
 /* global functions defined in different files */
 void enter_idle(void);
 void enter_sleep(void);
 void enter_shutdown(void);
-int slm_uart_configure(void);
-int poweroff_uart(void);
 bool verify_datamode_control(uint16_t time_limit, uint16_t *time_limit_min);
 
 /** @return Whether the modem is in the given functional mode. */
@@ -115,11 +108,7 @@ static void modem_power_off(void)
 	}
 }
 
-/** @brief Handles AT#XSLMVER command.
- *  AT#XSLMVER
- *  AT#XSLMVER? not supported
- *  AT#XSLMVER=? not supported
- */
+/* Handles AT#XSLMVER command. */
 static int handle_at_slmver(enum at_cmd_type type)
 {
 	int ret = -EINVAL;
@@ -139,7 +128,7 @@ static void go_sleep_wk(struct k_work *work)
 	ARG_UNUSED(work);
 
 	if (slm_work.data == SLEEP_MODE_IDLE) {
-		if (poweroff_uart() == 0) {
+		if (slm_uart_power_off() == 0) {
 			enter_idle();
 		} else {
 			LOG_ERR("failed to power off UART");
@@ -157,17 +146,13 @@ static void go_sleep_wk(struct k_work *work)
 	}
 }
 
-/** @brief Handles AT#XSLEEP commands.
- *  AT#XSLEEP=<sleep_mode>
- *  AT#XSLEEP? not supported
- *  AT#XSLEEP=?
- */
+/* Handles AT#XSLEEP commands. */
 static int handle_at_sleep(enum at_cmd_type type)
 {
 	int ret = -EINVAL;
 
 	if (type == AT_CMD_TYPE_SET_COMMAND) {
-		ret = at_params_unsigned_int_get(&at_param_list, 1, &slm_work.data);
+		ret = at_params_unsigned_int_get(&slm_at_param_list, 1, &slm_work.data);
 		if (ret) {
 			return -EINVAL;
 		}
@@ -184,11 +169,7 @@ static int handle_at_sleep(enum at_cmd_type type)
 	return ret;
 }
 
-/** @brief Handles AT#XSHUTDOWN command.
- *  AT#XSHUTDOWN
- *  AT#XSHUTDOWN? not supported
- *  AT#XSHUTDOWN=? not supported
- */
+/* Handles AT#XSHUTDOWN command. */
 static int handle_at_shutdown(enum at_cmd_type type)
 {
 	int ret = -EINVAL;
@@ -204,11 +185,7 @@ static int handle_at_shutdown(enum at_cmd_type type)
 	return ret;
 }
 
-/** @brief Handles AT#XRESET command.
- *  AT#XRESET
- *  AT#XRESET? not supported
- *  AT#XRESET=? not supported
- */
+/* Handles AT#XRESET command. */
 static int handle_at_reset(enum at_cmd_type type)
 {
 	int ret = -EINVAL;
@@ -225,11 +202,7 @@ static int handle_at_reset(enum at_cmd_type type)
 	return ret;
 }
 
-/** @brief Handles AT#XMODEMRESET command.
- *  AT#XMODEMRESET
- *  AT#XMODEMRESET? not supported
- *  AT#XMODEMRESET=? not supported
- */
+/* Handles AT#XMODEMRESET command. */
 static int handle_at_modemreset(enum at_cmd_type type)
 {
 	if (type != AT_CMD_TYPE_SET_COMMAND) {
@@ -242,40 +215,41 @@ static int handle_at_modemreset(enum at_cmd_type type)
 	unsigned int step = 1;
 	int ret;
 
-	do {
-		ret = nrf_modem_lib_shutdown();
-		if (ret != 0) {
-			break;
-		}
-		++step;
+	/* The fota stage is updated in the dfu_callback during modem initialization.
+	 * We store it here to see if a fota was performed during this modem init.
+	 */
+	enum fota_stage fota_stage = slm_fota_stage;
 
-		ret = nrf_modem_lib_init();
-		if (ret < 0) {
-			break;
-		}
-		++step;
 
-		if (ret > 0 || (fota_stage != FOTA_STAGE_INIT
-					&& fota_type == DFU_TARGET_IMAGE_TYPE_MODEM_DELTA)) {
-			slm_finish_modem_fota(ret);
-			slm_fota_post_process();
-		}
+	ret = nrf_modem_lib_shutdown();
+	if (ret != 0) {
+		goto out;
+	}
+	++step;
 
-		/* Success. */
-		rsp_send("\r\n#XMODEMRESET: 0\r\n");
+	ret = nrf_modem_lib_init();
+
+	if ((fota_stage == FOTA_STAGE_ACTIVATE &&
+	    (slm_fota_type == DFU_TARGET_IMAGE_TYPE_MODEM_DELTA ||
+	     slm_fota_type == DFU_TARGET_IMAGE_TYPE_FULL_MODEM))) {
+#if defined(CONFIG_SLM_FULL_FOTA)
+		slm_finish_modem_full_dfu();
+#endif
+		slm_fota_post_process();
+	}
+
+out:
+	if (ret) {
+		/* Error; print the step that failed and its error code. */
+		rsp_send("\r\n#XMODEMRESET: %u,%d\r\n", step, ret);
 		return 0;
-	} while (0);
+	}
 
-	/* Error; print the step that failed and its error code. */
-	rsp_send("\r\n#XMODEMRESET: %u,%d\r\n", step, ret);
+	rsp_send("\r\n#XMODEMRESET: 0\r\n");
 	return 0;
 }
 
-/** @brief Handles AT#XUUID command.
- *  AT#XUUID
- *  AT#XUUID? not supported
- *  AT#XUUID=? not supported
- */
+/* Handles AT#XUUID command. */
 static int handle_at_uuid(enum at_cmd_type type)
 {
 	int ret;
@@ -296,80 +270,7 @@ static int handle_at_uuid(enum at_cmd_type type)
 	return ret;
 }
 
-static void set_uart_wk(struct k_work *work)
-{
-	int err;
-
-	err = slm_uart_configure();
-	if (err != 0) {
-		LOG_ERR("slm_uart_configure: %d", err);
-		return;
-	}
-	err = slm_settings_uart_save();
-	if (err != 0) {
-		LOG_ERR("slm_settings_uart_save: %d", err);
-	}
-}
-
-/** @brief Handles AT#XSLMUART commands.
- *  AT#XSLMUART[=<baud_rate>]
- *  AT#XSLMUART?
- *  AT#XSLMUART=?
- */
-static int handle_at_slmuart(enum at_cmd_type type)
-{
-	int ret = -EINVAL;
-
-	if (type == AT_CMD_TYPE_SET_COMMAND) {
-		uint32_t baudrate;
-
-		ret = at_params_unsigned_int_get(&at_param_list, 1, &baudrate);
-
-		if (ret == 0) {
-			switch (baudrate) {
-			case 1200:
-			case 2400:
-			case 4800:
-			case 9600:
-			case 14400:
-			case 19200:
-			case 38400:
-			case 57600:
-			case 115200:
-			case 230400:
-			case 460800:
-			case 921600:
-			case 1000000:
-				slm_uart.baudrate = baudrate;
-				break;
-			default:
-				LOG_ERR("Invalid uart baud rate provided. %d", baudrate);
-				return -EINVAL;
-			}
-		}
-
-		ret = k_work_reschedule(&slm_work.uart_work, K_MSEC(SLM_UART_RESPONSE_DELAY));
-		if (ret > 0) {
-			ret = 0;
-		}
-	}
-	if (type == AT_CMD_TYPE_READ_COMMAND) {
-		rsp_send("\r\n#XSLMUART: %d,%d\r\n", slm_uart.baudrate, slm_uart.flow_ctrl);
-		ret = 0;
-	}
-	if (type == AT_CMD_TYPE_TEST_COMMAND) {
-		rsp_send("\r\n#XSLMUART: (1200,2400,4800,9600,14400,19200,38400,57600,"
-			 "115200,230400,460800,921600,1000000)\r\n");
-		ret = 0;
-	}
-	return ret;
-}
-
-/** @brief Handles AT#XDATACTRL commands.
- *  AT#XDATACTRL=<time_limit>
- *  AT#XDATACTRL?
- *  AT#XDATACTRL=?
- */
+/* Handles AT#XDATACTRL commands. */
 static int handle_at_datactrl(enum at_cmd_type cmd_type)
 {
 	int ret = 0;
@@ -377,20 +278,20 @@ static int handle_at_datactrl(enum at_cmd_type cmd_type)
 
 	switch (cmd_type) {
 	case AT_CMD_TYPE_SET_COMMAND:
-		ret = at_params_unsigned_short_get(&at_param_list, 1, &time_limit);
+		ret = at_params_unsigned_short_get(&slm_at_param_list, 1, &time_limit);
 		if (ret) {
 			return ret;
 		}
 		if (time_limit > 0 && verify_datamode_control(time_limit, NULL)) {
-			datamode_time_limit = time_limit;
+			slm_datamode_time_limit = time_limit;
 		} else {
 			return -EINVAL;
 		}
 		break;
 
 	case AT_CMD_TYPE_READ_COMMAND:
-		(void)verify_datamode_control(datamode_time_limit, &time_limit_min);
-		rsp_send("\r\n#XDATACTRL: %d,%d\r\n", datamode_time_limit, time_limit_min);
+		(void)verify_datamode_control(slm_datamode_time_limit, &time_limit_min);
+		rsp_send("\r\n#XDATACTRL: %d,%d\r\n", slm_datamode_time_limit, time_limit_min);
 		break;
 
 	case AT_CMD_TYPE_TEST_COMMAND:
@@ -404,11 +305,6 @@ static int handle_at_datactrl(enum at_cmd_type cmd_type)
 	return ret;
 }
 
-/** @brief Handles AT#XCLAC command.
- *  AT#XCLAC
- *  AT#XCLAC? not supported
- *  AT#XCLAC=? not supported
- */
 int handle_at_clac(enum at_cmd_type cmd_type);
 
 /* TCP proxy commands */
@@ -454,23 +350,9 @@ int handle_at_sms(enum at_cmd_type cmd_type);
 /* FOTA commands */
 int handle_at_fota(enum at_cmd_type cmd_type);
 
-#if defined(CONFIG_SLM_NRF_CLOUD)
-int handle_at_nrf_cloud(enum at_cmd_type cmd_type);
-#if defined(CONFIG_NRF_CLOUD_LOCATION)
-int handle_at_cellpos(enum at_cmd_type cmd_type);
-int handle_at_wifipos(enum at_cmd_type cmd_type);
-#endif
-#endif
-
 #if defined(CONFIG_SLM_GNSS)
 int handle_at_gps(enum at_cmd_type cmd_type);
 int handle_at_gps_delete(enum at_cmd_type cmd_type);
-#if defined(CONFIG_SLM_NRF_CLOUD) && defined(CONFIG_NRF_CLOUD_AGPS)
-int handle_at_agps(enum at_cmd_type cmd_type);
-#endif
-#if defined(CONFIG_SLM_NRF_CLOUD) && defined(CONFIG_NRF_CLOUD_PGPS)
-int handle_at_pgps(enum at_cmd_type cmd_type);
-#endif
 #endif
 
 #if defined(CONFIG_SLM_FTPC)
@@ -520,7 +402,6 @@ static struct slm_at_cmd {
 	{"AT#XMODEMRESET", handle_at_modemreset},
 	{"AT#XUUID", handle_at_uuid},
 	{"AT#XCLAC", handle_at_clac},
-	{"AT#XSLMUART", handle_at_slmuart},
 	{"AT#XDATACTRL", handle_at_datactrl},
 
 	/* TCP proxy commands */
@@ -568,8 +449,7 @@ static struct slm_at_cmd {
 #if defined(CONFIG_SLM_NRF_CLOUD)
 	{"AT#XNRFCLOUD", handle_at_nrf_cloud},
 #if defined(CONFIG_NRF_CLOUD_LOCATION)
-	{"AT#XCELLPOS", handle_at_cellpos},
-	{"AT#XWIFIPOS", handle_at_wifipos},
+	{"AT#XNRFCLOUDPOS", handle_at_nrf_cloud_pos},
 #endif
 #endif
 
@@ -577,12 +457,6 @@ static struct slm_at_cmd {
 	/* GNSS commands */
 	{"AT#XGPS", handle_at_gps},
 	{"AT#XGPSDEL", handle_at_gps_delete},
-#if defined(CONFIG_SLM_NRF_CLOUD) && defined(CONFIG_NRF_CLOUD_AGPS)
-	{"AT#XAGPS", handle_at_agps},
-#endif
-#if defined(CONFIG_SLM_NRF_CLOUD) && defined(CONFIG_NRF_CLOUD_PGPS)
-	{"AT#XPGPS", handle_at_pgps},
-#endif
 #endif
 
 #if defined(CONFIG_SLM_FTPC)
@@ -624,6 +498,7 @@ static struct slm_at_cmd {
 
 };
 
+/* Handles AT#XCLAC command. */
 int handle_at_clac(enum at_cmd_type cmd_type)
 {
 	int ret = -EINVAL;
@@ -649,8 +524,8 @@ int slm_at_parse(const char *at_cmd)
 		if (slm_util_cmd_casecmp(at_cmd, slm_at_cmd_list[i].string)) {
 			enum at_cmd_type type = at_parser_cmd_type_get(at_cmd);
 
-			at_params_list_clear(&at_param_list);
-			ret = at_parser_params_from_str(at_cmd, NULL, &at_param_list);
+			at_params_list_clear(&slm_at_param_list);
+			ret = at_parser_params_from_str(at_cmd, NULL, &slm_at_param_list);
 			if (ret) {
 				LOG_ERR("Failed to parse AT command %d", ret);
 				return -EINVAL;
@@ -667,7 +542,6 @@ int slm_at_init(void)
 {
 	int err;
 
-	k_work_init_delayable(&slm_work.uart_work, set_uart_wk);
 	k_work_init_delayable(&slm_work.sleep_work, go_sleep_wk);
 
 	err = slm_at_tcp_proxy_init();

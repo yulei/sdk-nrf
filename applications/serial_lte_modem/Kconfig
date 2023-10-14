@@ -164,12 +164,17 @@ config SLM_NRF_CLOUD
 	bool "nRF Cloud support in SLM"
 	default y
 
+config SLM_FULL_FOTA
+	bool "Full modem FOTA support in SLM"
+	default n
+
 rsource "src/ftp_c/Kconfig"
 rsource "src/mqtt_c/Kconfig"
 rsource "src/http_c/Kconfig"
 rsource "src/twi/Kconfig"
 rsource "src/gpio/Kconfig"
 rsource "src/lwm2m_carrier/Kconfig"
+rsource "src/gnss/Kconfig"
 
 module = SLM
 module-str = serial modem

@@ -153,6 +153,8 @@ enum lwm2m_fota_event_id {
 	LWM2M_FOTA_DOWNLOAD_FINISHED,
 	/** Request for update new image */
 	LWM2M_FOTA_UPDATE_IMAGE_REQ,
+	/** Request to reconnect the modem and LwM2M client*/
+	LWM2M_FOTA_UPDATE_MODEM_RECONNECT_REQ,
 	/** Fota process fail or cancelled  */
 	LWM2M_FOTA_UPDATE_ERROR
 };
@@ -165,7 +167,7 @@ struct lwm2m_fota_download_start {
 
 /** Event data for id LWM2M_FOTA_DOWNLOAD_FINISHED. */
 struct lwm2m_fota_download_finished {
-	/** Object Instance  id for event */
+	/** Object Instance ID for event */
 	uint16_t obj_inst_id;
 	/** DFU type */
 	int dfu_type;
@@ -173,22 +175,28 @@ struct lwm2m_fota_download_finished {
 
 /** Event data for id LWM2M_FOTA_UPDATE_IMAGE_REQ. */
 struct lwm2m_fota_update_request {
-	/** Object Instance  id for event */
+	/** Object Instance ID for event */
 	uint16_t obj_inst_id;
 	/** DFU type */
 	int dfu_type;
 };
 
-/** Event data for id LWM2M_FOTA_UPDATE_ERROR. */
+/** Event data for ID LWM2M_FOTA_UPDATE_MODEM_RECONNECT_REQ. */
+struct lwm2m_fota_reconnect {
+	/** Object Instance ID for event */
+	uint16_t obj_inst_id;
+};
+
+/** Event data for ID LWM2M_FOTA_UPDATE_ERROR. */
 struct lwm2m_fota_update_failure {
-	/** Object Instance  id for event */
+	/** Object Instance ID for event */
 	uint16_t obj_inst_id;
 	/** FOTA failure result */
 	uint8_t update_failure;
 };
 
 struct lwm2m_fota_event {
-	/** Fota event id and indicate used Data structure */
+	/** Fota event ID and indicate used Data structure */
 	enum lwm2m_fota_event_id id;
 	union {
 		/** LWM2M_FOTA_DOWNLOAD_START */
@@ -197,6 +205,8 @@ struct lwm2m_fota_event {
 		struct lwm2m_fota_download_finished download_ready;
 		/** LWM2M_FOTA_UPDATE_IMAGE_REQ */
 		struct lwm2m_fota_update_request update_req;
+		/** LWM2M_FOTA_UPDATE_MODEM_RECONNECT_REQ */
+		struct lwm2m_fota_reconnect reconnect_req;
 		/** LWM2M_FOTA_UPDATE_ERROR */
 		struct lwm2m_fota_update_failure failure;
 	};
@@ -207,8 +217,8 @@ struct lwm2m_fota_event {
  *
  * @param[in] event LwM2M Firmware Update object event structure
  *
- * Callback is used for indicating firmware update states and to prepare application ready
- * for update.
+ * This callback is used for indicating firmware update states, to prepare the application
+ * for an update, and to request for reconnecting the modem after the firmware update.
  *
  * Event handler is getting event callback when Firmware update utils library change states.
  *
@@ -220,6 +230,13 @@ struct lwm2m_fota_event {
  * Callback handler may return zero to grant permission for update. Otherwise it may
  * return negative error code to cancel the update or positive value to indicate that
  * update should be postponed that amount of seconds.
+ *
+ * LWM2M_FOTA_UPDATE_MODEM_RECONNECT_REQ: Request a reconnect and initialize the modem after a
+ * firmware update.
+ * The callback handler may return 0 to indicate that the application is handling the reconnect.
+ * Modem initialization and LwM2M client re-connection needs to be handled outside of the callback
+ * context.
+ * Otherwise, return -1 to indicate that the device is rebooting
  *
  * LWM2M_FOTA_UPDATE_ERROR: Indicate that FOTA process have failed or cancelled.
  *
@@ -343,7 +360,6 @@ void lwm2m_utils_disable_conneval(void);
 /**
  * @brief Start connection pre-evaluation.
  *
- * This function should be called from an event handler registered to lwm2m_rd_client_start().
  * This evaluation may block or alter the ongoing event to prevent LwM2M engine from initiating
  * transfers when network conditions are poor.
  *
@@ -353,6 +369,18 @@ void lwm2m_utils_disable_conneval(void);
  * @return Zero if success, negative error code otherwise.
  */
 int lwm2m_utils_conneval(struct lwm2m_ctx *client, enum lwm2m_rd_client_event *client_event);
+
+/**
+ * @brief LwM2M utils connection event handler.
+ *
+ * This function should be called from an event handler registered to lwm2m_rd_client_start()
+ * before normal event handler part.
+ *
+ * @param client client A pointer to LwM2M context.
+ * @param client_event A pointer to LwM2M RD client events.
+ */
+void lwm2m_utils_connection_manage(struct lwm2m_ctx *client,
+				      enum lwm2m_rd_client_event *client_event);
 
 /* Advanced firmare object support */
 uint8_t lwm2m_adv_firmware_get_update_state(uint16_t obj_inst_id);

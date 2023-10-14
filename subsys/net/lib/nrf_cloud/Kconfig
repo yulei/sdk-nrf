@@ -11,7 +11,7 @@ rsource "Kconfig.nrf_cloud_mqtt"
 
 rsource "Kconfig.nrf_cloud_fota"
 
-rsource "Kconfig.nrf_cloud_agps"
+rsource "Kconfig.nrf_cloud_agnss"
 
 rsource "Kconfig.nrf_cloud_pgps"
 
@@ -45,7 +45,7 @@ config NRF_CLOUD_SEC_TAG
 
 config NRF_CLOUD_SEND_DEVICE_STATUS
 	bool "Send device status on initial connection"
-	depends on NRF_CLOUD_MQTT
+	depends on NRF_CLOUD_MQTT || NRF_CLOUD_COAP
 	depends on MODEM_INFO
 	depends on MODEM_INFO_ADD_DEVICE
 	default y if NRF_CLOUD_FOTA
@@ -63,15 +63,41 @@ config NRF_CLOUD_SEND_DEVICE_STATUS_SIM
 	depends on NRF_CLOUD_SEND_DEVICE_STATUS
 	depends on MODEM_INFO_ADD_SIM
 
+config NRF_CLOUD_SEND_DEVICE_STATUS_CONN_INF
+	bool "Include connection information with device status"
+	depends on NRF_CLOUD_SEND_DEVICE_STATUS
+	default y
+
 config NRF_CLOUD_DEVICE_STATUS_ENCODE_VOLTAGE
 	bool "Include the (battery) voltage when encoding device status"
 	depends on MODEM_INFO
 	depends on MODEM_INFO_ADD_DEVICE
 	default y
 
+choice NRF_CLOUD_WIFI_LOCATION_ENCODE_OPT
+	prompt "Encoding options for Wi-Fi location requests"
+	default NRF_CLOUD_WIFI_LOCATION_ENCODE_OPT_MAC_RSSI
+
+config NRF_CLOUD_WIFI_LOCATION_ENCODE_OPT_MAC_ONLY
+	bool "Encode only the MAC address"
+	help
+		The MAC address is the only required parameter.
+
+config NRF_CLOUD_WIFI_LOCATION_ENCODE_OPT_MAC_RSSI
+	bool "Encode the MAC address and the RSSI value"
+	help
+		The RSSI value may improve location accuracy.
+
+config NRF_CLOUD_WIFI_LOCATION_ENCODE_OPT_ALL
+	bool "Encode all available parameters"
+	help
+		This option increases the memory required for creating requests.
+		It also increases the amount of data sent to nRF Cloud.
+endchoice
+
 endif
 
-if NRF_CLOUD_AGPS || NRF_CLOUD_PGPS
+if NRF_CLOUD_AGNSS || NRF_CLOUD_PGPS
 
 module = NRF_CLOUD_GPS
 module-str = nRF Cloud GPS Assistance

@@ -37,6 +37,16 @@ extern "C" {
  */
 #define EXECUTION_OBJ_DECODED_BIT 2
 
+/** @brief AWS FOTA JSON parse result. */
+enum aws_fota_json_result {
+	AWS_FOTA_JSON_RES_SKIPPED = 1,		/*!< Not a FOTA job document, skipped */
+	AWS_FOTA_JSON_RES_SUCCESS = 0,		/*!< Job document parsed successfully */
+	AWS_FOTA_JSON_RES_INVALID_PARAMS = -1,	/*!< Input parameters invalid */
+	AWS_FOTA_JSON_RES_INVALID_JOB = -2,	/*!< Job document invalid, could not get job id */
+	AWS_FOTA_JSON_RES_INVALID_DOCUMENT = -3,/*!< FOTA update data invalid */
+	AWS_FOTA_JSON_RES_URL_TOO_LONG = -4,	/*!< Parts of URL too large for buffer */
+};
+
 /**
  * @brief Parse a given AWS IoT DescribeJobExecution response JSON object.
  *	  More information on this object can be found at https://docs.aws.amazon.com/iot/latest/developerguide/jobs-api.html#mqtt-describejobexecution
@@ -48,19 +58,25 @@ extern "C" {
  *			   JobExecution data type.
  * @param[out] hostname_buf  Output buffer for the "host" field from the Job
  *			     Document
+ * @param[in] hostname_buf_size  Size of the output buffer for the "host" field
  * @param[out] file_path_buf  Output buffer for the "file" field from the Job
  *			      Document
+ * @param[in] file_path_buf_size  Size of the output buffer for the "file" field
+ * @param[out] protocol_buf  Output buffer for the "protocol" field from the Job Document
+ * @param[in] protocol_buf_size  Size of the output buffer for the "protocol" field
  * @param[out] version_number  Version number from the Job Execution data type.
  *
- * @return 0 if the Job Execution object is empty, 1 if Job Execution object was
- *	     correctly decoded, otherwise a negative error code is returned
- *	     identicating reason of failure.
+ * @return aws_fota_json_result specifying the result of the parse operation.
  **/
 int aws_fota_parse_DescribeJobExecution_rsp(const char *job_document,
 					    uint32_t payload_len,
 					    char *job_id_buf,
 					    char *hostname_buf,
+					    size_t hostname_buf_size,
 					    char *file_path_buf,
+					    size_t file_path_buf_size,
+					    char *protocol_buf,
+					    size_t protocol_buf_size,
 					    int *version_number);
 
 /**

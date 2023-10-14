@@ -54,6 +54,7 @@ extensions = [
     "sphinx_copybutton",
     "notfound.extension",
     "ncs_tool_versions",
+    "page_filter",
 ]
 
 linkcheck_ignore = [
@@ -202,10 +203,8 @@ ncs_tool_versions_host_deps = [
 ]
 ncs_tool_versions_python_deps = [
     ZEPHYR_BASE / "scripts" / "requirements-base.txt",
-    ZEPHYR_BASE / "scripts" / "requirements-doc.txt",
     MCUBOOT_BASE / "scripts" / "requirements.txt",
-    NRF_BASE / "scripts" / "requirements-base.txt",
-    NRF_BASE / "scripts" / "requirements-doc.txt",
+    NRF_BASE / "doc" / "requirements.txt",
     NRF_BASE / "scripts" / "requirements-build.txt",
 ]
 
@@ -228,3 +227,4 @@ def setup(app):
     app.add_css_file("css/nrf.css")
 
     utils.add_google_analytics(app, html_theme_options)
+    utils.add_announcement_banner(html_theme_options)

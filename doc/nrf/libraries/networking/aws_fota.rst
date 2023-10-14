@@ -7,14 +7,14 @@ AWS FOTA
    :local:
    :depth: 2
 
-The Amazon Web Services firmware over-the-air (AWS FOTA) library combines the :ref:`lib_aws_jobs` and :ref:`lib_fota_download` libraries into a library that can perform an over-the-air firmware update using HTTP and MQTT TLS.
+The Amazon Web Services firmware over-the-air (AWS FOTA) library combines the :ref:`lib_aws_jobs` and :ref:`lib_fota_download` libraries into a library that can perform an over-the-air firmware update using HTTP and HTTPS.
 
 It connects to the specified broker using the existing or given certificates and uses `TLS`_ for the MQTT connection.
 This means that the data sent in each MQTT message is encrypted.
 
 When an update is available, the library receives a notification that contains metadata about the update.
 This metadata contains the location of the uploaded firmware image.
-The library then uses HTTP to download the firmware image, replacing the current firmware with the downloaded firmware.
+The library then uses HTTP or HTTPS to download the firmware image, replacing the current firmware with the downloaded firmware.
 After the new firmware image is downloaded, the application must perform a reboot to run the new image and complete the FOTA process.
 The library supports the updating of delta images for both the application and modem firmware.
 
@@ -65,6 +65,7 @@ Creating a FOTA job
 #. Click the uploaded image file :file:`app_update.bin` and copy the *Object URL* without the *https://* prefix and folder path.
 #. Create a text file (job document) with content as in the snippet, replacing the following data:
 
+     * *protocol* with either `http` or `https`.
      * *host_url* with the *Object URL* copied in the previous step (for example, ``examplebucket.s3.eu-central-1.amazonaws.com``).
      * *file_path* with the path and file name (for example, ``app_update.bin``).
 
@@ -76,12 +77,13 @@ Creating a FOTA job
         "fwversion": "v1.0.2",
         "size": 181124,
         "location": {
-          "protocol": "http:",
+          "protocol": "*protocol*",
           "host": "*host_url*",
           "path": "*file_path*"
          }
       }
 
+   To use a single URL, such as when using presigned AWS S3 URLs, see :ref:`aws_iot_jobs`.
    See `AWS IoT Developer Guide: Jobs`_ for more information about AWS jobs.
 #. In the `AWS S3 console`_ Select the bucket, click :guilabel:`Upload`, and upload your job document.
    You must now have two files in your bucket, the uploaded image and the job document.
@@ -142,10 +144,12 @@ The following sequence diagram shows how a firmware over-the-air update is imple
    * The other device has valid (but different) certificates that use the same AWS IoT policy as the original device.
    * The other device is subscribed to the same MQTT topic as the original device.
 
+.. _aws_iot_jobs:
+
 AWS IoT jobs
 ============
 
-The implementation uses a job document like the following (where *bucket_name* is the name of your bucket and *file_name* is the name of your file) for passing information from `AWS IoT jobs`_ to the device:
+The implementation uses a job document like the following (where *protocol* is either `http` or `https`, *bucket_name* is the name of your bucket and *file_name* is the name of your file) for passing information from `AWS IoT jobs`_ to the device:
 
 .. parsed-literal::
    :class: highlight
@@ -155,19 +159,33 @@ The implementation uses a job document like the following (where *bucket_name* i
      "fwversion": "v1.0.2",
      "size": 181124,
      "location": {
-       "protocol": "http:",
+       "protocol": "*protocol*",
        "host": "*bucket_name*.amazonaws.com",
        "path": "*file_name*.bin"
       }
    }
 
-The current implementation uses information from the ``host`` and ``path`` fields only.
+Alternatively, to use a single URL, a document like the following can be used:
+
+.. parsed-literal::
+   :class: highlight
+
+   {
+     "operation": "app_fw_update",
+     "fwversion": "v1.0.2",
+     "size": 181124,
+     "location": {
+       "url": "*url*"
+      }
+   }
+
+For information on how to use presigned AWS S3 URLs, refer to `AWS IoT Developer Guide: Managing Jobs`_.
 
 Limitations
 ***********
 
-* Currently, the library uses HTTP for downloading the firmware.
-  To use HTTPS instead, apply the changes described in :ref:`the HTTPS section of the download client documentation <download_client_https>` to the :ref:`lib_fota_download` library.
+* If the :kconfig:option:`CONFIG_AWS_FOTA_DOWNLOAD_SECURITY_TAG` Kconfig option is not configured but HTTPS is selected as the protocol, the update job fails.
+  For further information about HTTPS support, refer to :ref:`the HTTPS section of the download client documentation <download_client_https>`.
 * The library requires a Content-Range header to be present in the HTTP response from the server.
   This limitation is inherited from the :ref:`lib_download_client` library.
 

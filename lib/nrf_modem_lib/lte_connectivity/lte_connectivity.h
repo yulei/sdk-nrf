@@ -8,7 +8,7 @@
 #define LTE_CONNECTIVITY_H__
 
 #include <zephyr/types.h>
-#include <zephyr/net/conn_mgr_connectivity.h>
+#include <zephyr/net/conn_mgr_connectivity_impl.h>
 
 /**
  * @defgroup lte_connectivity LTE Connectivity layer
@@ -66,8 +66,6 @@ void lte_connectivity_init(struct conn_mgr_conn_binding * const if_conn);
  *	     for more information.
  *
  *  @returns 0 on success, nonzero value on failure.
- *	     If a positive value is returned, modem reinitialization failed. (DFU related)
- *	     DFU related error codes are listed in nrf_modem.h prefixed NRF_MODEM_DFU_RESULT.
  */
 int lte_connectivity_enable(void);
 

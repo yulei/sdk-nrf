@@ -122,7 +122,7 @@ Other versions might also work, but are not verified.
            - :ncs-tool-version:`CMAKE_VERSION_WIN10`
          * - dtc
            - :ncs-tool-version:`DTC_VERSION_WIN10`
-         * - Git
+         * - :ref:`Git <ncs_git_intro>`
            - :ncs-tool-version:`GIT_VERSION_WIN10`
          * - gperf
            - :ncs-tool-version:`GPERF_VERSION_WIN10`
@@ -130,7 +130,7 @@ Other versions might also work, but are not verified.
            - :ncs-tool-version:`NINJA_VERSION_WIN10`
          * - Python
            - :ncs-tool-version:`PYTHON_VERSION_WIN10`
-         * - West
+         * - :ref:`West <ncs_west_intro>`
            - :ncs-tool-version:`WEST_VERSION_WIN10`
 
    .. group-tab:: Linux
@@ -146,7 +146,7 @@ Other versions might also work, but are not verified.
            - :ncs-tool-version:`CMAKE_VERSION_LINUX`
          * - dtc
            - :ncs-tool-version:`DTC_VERSION_LINUX`
-         * - Git
+         * - :ref:`Git <ncs_git_intro>`
            - :ncs-tool-version:`GIT_VERSION_LINUX`
          * - gperf
            - :ncs-tool-version:`GPERF_VERSION_LINUX`
@@ -154,7 +154,7 @@ Other versions might also work, but are not verified.
            - :ncs-tool-version:`NINJA_VERSION_LINUX`
          * - Python
            - :ncs-tool-version:`PYTHON_VERSION_LINUX`
-         * - West
+         * - :ref:`West <ncs_west_intro>`
            - :ncs-tool-version:`WEST_VERSION_LINUX`
 
    .. group-tab:: macOS
@@ -170,7 +170,7 @@ Other versions might also work, but are not verified.
            - :ncs-tool-version:`CMAKE_VERSION_DARWIN`
          * - dtc
            - :ncs-tool-version:`DTC_VERSION_DARWIN`
-         * - Git
+         * - :ref:`Git <ncs_git_intro>`
            - :ncs-tool-version:`GIT_VERSION_DARWIN`
          * - gperf
            - :ncs-tool-version:`GPERF_VERSION_DARWIN`
@@ -178,7 +178,7 @@ Other versions might also work, but are not verified.
            - :ncs-tool-version:`NINJA_VERSION_DARWIN`
          * - Python
            - :ncs-tool-version:`PYTHON_VERSION_DARWIN`
-         * - West
+         * - :ref:`West <ncs_west_intro>`
            - :ncs-tool-version:`WEST_VERSION_DARWIN`
 
 Required Python dependencies
@@ -235,22 +235,43 @@ Building and running applications, samples, and tests
 Building documentation
 ----------------------
 
+Python documentation dependencies are listed in the following table. They can
+all be installed using the ``doc/requirements.txt`` file using ``pip``.
+
 .. list-table::
    :header-rows: 1
 
    * - Package
      - Version
-   * - recommonmark
-     - :ncs-tool-version:`RECOMMONMARK_VERSION`
-   * - sphinxcontrib-mscgen
-     - :ncs-tool-version:`SPHINXCONTRIB_MSCGEN_VERSION`
+   * - azure-storage-blob
+     - :ncs-tool-version:`AZURE_STORAGE_BLOB_VERSION`
    * - breathe
      - :ncs-tool-version:`BREATHE_VERSION`
+   * - m2r2
+     - :ncs-tool-version:`M2R2_VERSION`
+   * - PyYAML
+     - :ncs-tool-version:`PYYAML_VERSION`
+   * - pykwalify
+     - :ncs-tool-version:`PYKWALIFY_VERSION`
+   * - recommonmark
+     - :ncs-tool-version:`RECOMMONMARK_VERSION`
    * - sphinx
      - :ncs-tool-version:`SPHINX_VERSION`
+   * - sphinx-copybutton
+     - :ncs-tool-version:`SPHINX_COPYBUTTON_VERSION`
    * - sphinx-ncs-theme
      - :ncs-tool-version:`SPHINX_NCS_THEME_VERSION`
+   * - sphinx-notfound-page
+     - :ncs-tool-version:`SPHINX_NOTFOUND_PAGE_VERSION`
    * - sphinx-tabs
      - :ncs-tool-version:`SPHINX_TABS_VERSION`
-   * - sphinxcontrib-svg2pdfconverter
-     - :ncs-tool-version:`SPHINXCONTRIB_SVG2PDFCONVERTER_VERSION`
+   * - sphinx-togglebutton
+     - :ncs-tool-version:`SPHINX_TOGGLEBUTTON_VERSION`
+   * - sphinx_markdown_tables
+     - :ncs-tool-version:`SPHINX_MARKDOWN_TABLES_VERSION`
+   * - sphinxcontrib-mscgen
+     - :ncs-tool-version:`SPHINXCONTRIB_MSCGEN_VERSION`
+   * - sphinxcontrib-plantuml
+     - :ncs-tool-version:`SPHINXCONTRIB_PLANTUML_VERSION`
+   * - west
+     - :ncs-tool-version:`WEST_VERSION`

@@ -30,8 +30,8 @@ jobs:
         pip3 install -U pip
         pip3 install -U setuptools
         pip3 install -U wheel
-        grep -E "python-magic|junitparser|lxml|gitlint|pylint|pykwalify|yamllint" scripts/requirements-fixed.txt | xargs pip3 install -U
-        grep -E "west" scripts/requirements-fixed.txt | xargs pip3 install -U
+        grep -E "python-magic|junitparser|lxml|gitlint|pylint|pykwalify|yamllint" scripts/requirements-fixed.txt | grep -v '^[ \t]*#' | xargs pip3 install -U
+        grep -E "west" scripts/requirements-fixed.txt | grep -v '^[ \t]*#' | xargs pip3 install -U
         pip3 show -f west
 
     - name: West init and update
@@ -76,7 +76,7 @@ jobs:
         git log --pretty=oneline | head -n 10
         # For now we run KconfigBasic, but we should transition to Kconfig
         $ZEPHYR_BASE/scripts/ci/check_compliance.py --annotate -e Kconfig \
-        -c origin/${BASE_REF}..
+        -e KconfigBasicNoModules -c origin/${BASE_REF}..
 
     - name: upload-results
       uses: actions/upload-artifact@v3

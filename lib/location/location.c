@@ -8,8 +8,8 @@
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 #include <modem/location.h>
-#if defined(CONFIG_LOCATION_SERVICE_EXTERNAL) && defined(CONFIG_NRF_CLOUD_AGPS)
-#include <net/nrf_cloud_agps.h>
+#if defined(CONFIG_LOCATION_SERVICE_EXTERNAL) && defined(CONFIG_NRF_CLOUD_AGNSS)
+#include <net/nrf_cloud_agnss.h>
 #endif
 #if defined(CONFIG_LOCATION_SERVICE_EXTERNAL) && defined(CONFIG_NRF_CLOUD_PGPS)
 #include <net/nrf_cloud_pgps.h>
@@ -294,18 +294,18 @@ const char *location_method_str(enum location_method method)
 	}
 }
 
-int location_agps_data_process(const char *buf, size_t buf_len)
+int location_agnss_data_process(const char *buf, size_t buf_len)
 {
-#if defined(CONFIG_LOCATION_SERVICE_EXTERNAL) && defined(CONFIG_NRF_CLOUD_AGPS)
+#if defined(CONFIG_LOCATION_SERVICE_EXTERNAL) && defined(CONFIG_NRF_CLOUD_AGNSS)
 	if (!buf) {
-		LOG_ERR("A-GPS data buffer cannot be a NULL pointer.");
+		LOG_ERR("A-GNSS data buffer cannot be a NULL pointer.");
 		return -EINVAL;
 	}
 	if (!buf_len) {
-		LOG_ERR("A-GPS data buffer length cannot be zero.");
+		LOG_ERR("A-GNSS data buffer length cannot be zero.");
 		return -EINVAL;
 	}
-	return nrf_cloud_agps_process(buf, buf_len);
+	return nrf_cloud_agnss_process(buf, buf_len);
 #endif
 	return -ENOTSUP;
 }

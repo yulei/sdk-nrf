@@ -24,11 +24,14 @@ General information about samples in the |NCS|
    :glob:
    :caption: Subpages:
 
+   samples/amazon_sidewalk
    samples/bl
+   samples/mesh
    samples/cellular
    samples/crypto
    samples/debug
    samples/edge
+   samples/esb
    samples/gazell
    samples/matter
    samples/multicore
@@ -36,6 +39,7 @@ General information about samples in the |NCS|
    samples/nfc
    samples/nrf5340
    samples/pmic
+   samples/sensor
    samples/tfm
    samples/thread
    samples/zigbee

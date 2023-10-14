@@ -7,6 +7,7 @@
 #include "app_task.h"
 
 #include "app_config.h"
+#include "fabric_table_delegate.h"
 #include "led_util.h"
 #include "pwm_device.h"
 
@@ -177,12 +178,6 @@ CHIP_ERROR AppTask::Init()
 	/* Initialize trigger effect timer */
 	k_timer_init(&sTriggerEffectTimer, &AppTask::TriggerEffectTimerTimeoutCallback, nullptr);
 
-#ifdef CONFIG_MCUMGR_TRANSPORT_BT
-	/* Initialize DFU over SMP */
-	GetDFUOverSMP().Init();
-	GetDFUOverSMP().ConfirmNewImage();
-#endif
-
 	/* Initialize lighting device (PWM) */
 	uint8_t minLightLevel = kDefaultMinLevel;
 	Clusters::LevelControl::Attributes::MinLevel::Get(kLightEndpointId, &minLightLevel);
@@ -195,6 +190,17 @@ CHIP_ERROR AppTask::Init()
 		return chip::System::MapErrorZephyr(ret);
 	}
 	mPWMDevice.SetCallbacks(ActionInitiated, ActionCompleted);
+
+#ifdef CONFIG_CHIP_OTA_REQUESTOR
+	/* OTA image confirmation must be done before the factory data init. */
+	OtaConfirmNewImage();
+#endif
+
+#ifdef CONFIG_MCUMGR_TRANSPORT_BT
+	/* Initialize DFU over SMP */
+	GetDFUOverSMP().Init();
+	GetDFUOverSMP().ConfirmNewImage();
+#endif
 
 	/* Initialize CHIP server */
 #if CONFIG_CHIP_FACTORY_DATA
@@ -214,6 +220,7 @@ CHIP_ERROR AppTask::Init()
 	app::SetAttributePersistenceProvider(&gDeferredAttributePersister);
 	ConfigurationMgr().LogDeviceConfig();
 	PrintOnboardingCodes(chip::RendezvousInformationFlags(chip::RendezvousInformationFlag::kBLE));
+	AppFabricTableDelegate::Init();
 
 	/*
 	 * Add CHIP event handler and start CHIP thread.

@@ -41,7 +41,7 @@ char http_auth_hdr[] = AUTH_HDR_BEARER_PREFIX_ATT AUTH_HDR_BEARER_ATT_DUMMY CRLF
 char http_auth_hdr_invalid1[] = AUTH_HDR_BEARER_ATT_DUMMY CRLF;
 char http_auth_hdr_invalid2[] = "att." AUTH_HDR_BEARER_ATT_DUMMY CRLF;
 
-char MFW_VER[] = "mfw_nrf9160_99.99.99-DUMMY";
+char MFW_VER[] = "mfw_nrf9161_99.99.99-DUMMY";
 char MFW_VER_NMB[] = "99.99.99";
 
 static void dummy_nrf_provisioning_device_mode_cb(void *user_data)
@@ -67,8 +67,6 @@ void __wrap_k_free(void *ptr)
 {
 	free(ptr);
 }
-
-
 
 void setUp(void)
 {
@@ -369,7 +367,7 @@ static int rest_client_request_url_valid(struct rest_client_req_context *req_ctx
 
 	resp_ctx->http_status_code = NRF_PROVISIONING_HTTP_STATUS_NO_CONTENT;
 
-	/* '/v1/provisioning/commands?txMaxSize=1536&rxMaxSize=1536&mver=1.3.2&cver=1' */
+	/* '/v1/provisioning/commands?txMaxSize=1536&rxMaxSize=1536&mver=2.0.0&cver=1' */
 
 	TEST_ASSERT_EQUAL_INT(3, sgmtc);
 	TEST_ASSERT_GREATER_OR_EQUAL_INT(1, atoi(&(info.apiver[1]))); /* No 'v' */
@@ -391,11 +389,11 @@ static int rest_client_request_url_valid(struct rest_client_req_context *req_ctx
 		} else if (strncmp(query_items[idx], "txMaxSize=", strlen("txMaxSize=")) == 0) {
 			info.txMaxSize = &(query_items[idx][strlen("txMaxSize=")]);
 			TEST_ASSERT_EQUAL_INT(
-				CONFIG_NRF_PROVISIONING_HTTP_TX_BUF_SZ, atoi(info.txMaxSize));
+				CONFIG_NRF_PROVISIONING_TX_BUF_SZ, atoi(info.txMaxSize));
 		} else if (strncmp(query_items[idx], "rxMaxSize=", strlen("rxMaxSize=")) == 0) {
 			info.rxMaxSize = &(query_items[idx][strlen("rxMaxSize=")]);
 			TEST_ASSERT_EQUAL_INT(
-				CONFIG_NRF_PROVISIONING_HTTP_RX_BUF_SZ, atoi(info.rxMaxSize));
+				CONFIG_NRF_PROVISIONING_RX_BUF_SZ, atoi(info.rxMaxSize));
 		} else if (strncmp(query_items[idx], "after=", strlen("after=")) == 0) {
 			;
 		} else {
@@ -403,6 +401,7 @@ static int rest_client_request_url_valid(struct rest_client_req_context *req_ctx
 		}
 	}
 
+	free(tokens);
 	return 0;
 }
 
@@ -643,7 +642,7 @@ void test_codec_finished_valid(void)
 {
 	struct cdc_context cdc_ctx;
 	char at_buff[CONFIG_NRF_PROVISIONING_CODEC_AT_CMD_LEN];
-	char tx_buff[CONFIG_NRF_PROVISIONING_HTTP_RX_BUF_SZ];
+	char tx_buff[CONFIG_NRF_PROVISIONING_RX_BUF_SZ];
 	int mm_cb_ret = 0;
 
 	struct nrf_provisioning_mm_change dummy_cb = {
@@ -682,7 +681,7 @@ void test_codec_priv_keygen_valid(void)
 {
 	struct cdc_context cdc_ctx;
 	char at_buff[CONFIG_NRF_PROVISIONING_CODEC_AT_CMD_LEN];
-	char tx_buff[CONFIG_NRF_PROVISIONING_HTTP_RX_BUF_SZ];
+	char tx_buff[CONFIG_NRF_PROVISIONING_RX_BUF_SZ];
 	int mm_cb_ret = 0;
 
 	struct nrf_provisioning_mm_change dummy_cb = {
@@ -735,7 +734,7 @@ void test_codec_priv_keygen_rejected_invalid(void)
 {
 	struct cdc_context cdc_ctx;
 	char at_buff[CONFIG_NRF_PROVISIONING_CODEC_AT_CMD_LEN];
-	char tx_buff[CONFIG_NRF_PROVISIONING_HTTP_RX_BUF_SZ];
+	char tx_buff[CONFIG_NRF_PROVISIONING_RX_BUF_SZ];
 	int mm_cb_ret = 0;
 
 	struct nrf_provisioning_mm_change dummy_cb = {
@@ -781,7 +780,7 @@ void test_codec_endorsement_keygen_valid(void)
 {
 	struct cdc_context cdc_ctx;
 	char at_buff[CONFIG_NRF_PROVISIONING_CODEC_AT_CMD_LEN];
-	char tx_buff[CONFIG_NRF_PROVISIONING_HTTP_RX_BUF_SZ];
+	char tx_buff[CONFIG_NRF_PROVISIONING_RX_BUF_SZ];
 	int mm_cb_ret = 0;
 
 	struct nrf_provisioning_mm_change dummy_cb = {
@@ -824,7 +823,7 @@ void test_codec_endorsement_keygen_invalid(void)
 {
 	struct cdc_context cdc_ctx;
 	char at_buff[CONFIG_NRF_PROVISIONING_CODEC_AT_CMD_LEN];
-	char tx_buff[CONFIG_NRF_PROVISIONING_HTTP_RX_BUF_SZ];
+	char tx_buff[CONFIG_NRF_PROVISIONING_RX_BUF_SZ];
 	int mm_cb_ret = 0;
 
 	struct nrf_provisioning_mm_change dummy_cb = {
@@ -868,7 +867,7 @@ void test_codec_config_store1_valid(void)
 {
 	struct cdc_context cdc_ctx;
 	char at_buff[CONFIG_NRF_PROVISIONING_CODEC_AT_CMD_LEN];
-	char tx_buff[CONFIG_NRF_PROVISIONING_HTTP_RX_BUF_SZ];
+	char tx_buff[CONFIG_NRF_PROVISIONING_RX_BUF_SZ];
 	int mm_cb_ret = 0;
 
 	struct nrf_provisioning_mm_change dummy_cb = {
@@ -1322,7 +1321,9 @@ void test_provisioning_schedule_no_nw_time_valid(void)
 
 extern int unity_main(void);
 
-void main(void)
+int main(void)
 {
 	(void)unity_main();
+
+	return 0;
 }

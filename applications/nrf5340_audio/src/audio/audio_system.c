@@ -14,7 +14,6 @@
 #include "audio_datapath.h"
 #include "audio_i2s.h"
 #include "data_fifo.h"
-#include "led.h"
 #include "hw_codec.h"
 #include "tone.h"
 #include "contin_array.h"
@@ -28,7 +27,8 @@ LOG_MODULE_REGISTER(audio_system, CONFIG_AUDIO_SYSTEM_LOG_LEVEL);
 #define FIFO_TX_BLOCK_COUNT (CONFIG_FIFO_FRAME_SPLIT_NUM * CONFIG_FIFO_TX_FRAME_COUNT)
 #define FIFO_RX_BLOCK_COUNT (CONFIG_FIFO_FRAME_SPLIT_NUM * CONFIG_FIFO_RX_FRAME_COUNT)
 
-#define DEBUG_INTERVAL_NUM 1000
+#define DEBUG_INTERVAL_NUM     1000
+#define TEST_TONE_BASE_FREQ_HZ 1000
 
 K_THREAD_STACK_DEFINE(encoder_thread_stack, CONFIG_ENCODER_STACK_SIZE);
 
@@ -124,7 +124,7 @@ static void encoder_thread(void *arg1, void *arg2, void *arg3)
 			memcpy(pcm_raw_data + (i * BLOCK_SIZE_BYTES), tmp_pcm_raw_data[i],
 			       pcm_block_size);
 
-			data_fifo_block_free(&fifo_rx, &tmp_pcm_raw_data[i]);
+			data_fifo_block_free(&fifo_rx, tmp_pcm_raw_data[i]);
 		}
 
 		if (sw_codec_cfg.encoder.enabled) {
@@ -162,14 +162,14 @@ static void encoder_thread(void *arg1, void *arg2, void *arg3)
 		}
 
 		if (sw_codec_cfg.encoder.enabled) {
-			streamctrl_encoded_data_send(encoded_data, encoded_data_size,
-						     sw_codec_cfg.encoder.num_ch);
+			streamctrl_send(encoded_data, encoded_data_size,
+					sw_codec_cfg.encoder.num_ch);
 		}
 		STACK_USAGE_PRINT("encoder_thread", &encoder_thread_data);
 	}
 }
 
-int audio_encode_test_tone_set(uint32_t freq)
+int audio_system_encode_test_tone_set(uint32_t freq)
 {
 	int ret;
 
@@ -188,8 +188,41 @@ int audio_encode_test_tone_set(uint32_t freq)
 	return 0;
 }
 
+int audio_system_encode_test_tone_step(void)
+{
+	int ret;
+	static uint32_t test_tone_hz;
+
+	if (CONFIG_AUDIO_BIT_DEPTH_BITS != 16) {
+		LOG_WRN("Tone gen only supports 16 bits");
+		return -ECANCELED;
+	}
+
+	if (test_tone_hz == 0) {
+		test_tone_hz = TEST_TONE_BASE_FREQ_HZ;
+	} else if (test_tone_hz >= TEST_TONE_BASE_FREQ_HZ * 4) {
+		test_tone_hz = 0;
+	} else {
+		test_tone_hz = test_tone_hz * 2;
+	}
+
+	if (test_tone_hz != 0) {
+		LOG_INF("Test tone set at %d Hz", test_tone_hz);
+	} else {
+		LOG_INF("Test tone off");
+	}
+
+	ret = audio_system_encode_test_tone_set(test_tone_hz);
+	if (ret) {
+		LOG_ERR("Failed to generate test tone");
+		return ret;
+	}
+
+	return 0;
+}
+
 /* This function is only used on gateway using USB as audio source and bidirectional stream */
-int audio_decode(void const *const encoded_data, size_t encoded_data_size, bool bad_frame)
+int audio_system_decode(void const *const encoded_data, size_t encoded_data_size, bool bad_frame)
 {
 	int ret;
 	uint32_t blocks_alloced_num;
@@ -228,7 +261,7 @@ int audio_decode(void const *const encoded_data, size_t encoded_data_size, bool 
 				break;
 			}
 
-			data_fifo_block_free(&fifo_tx, &old_data);
+			data_fifo_block_free(&fifo_tx, old_data);
 		}
 	}
 
@@ -303,11 +336,10 @@ void audio_system_start(void)
 	sw_codec_cfg.initialized = true;
 
 	if (sw_codec_cfg.encoder.enabled && encoder_thread_id == NULL) {
-		encoder_thread_id =
-			k_thread_create(&encoder_thread_data, encoder_thread_stack,
-					CONFIG_ENCODER_STACK_SIZE, (k_thread_entry_t)encoder_thread,
-					NULL, NULL, NULL,
-					K_PRIO_PREEMPT(CONFIG_ENCODER_THREAD_PRIO), 0, K_NO_WAIT);
+		encoder_thread_id = k_thread_create(
+			&encoder_thread_data, encoder_thread_stack, CONFIG_ENCODER_STACK_SIZE,
+			(k_thread_entry_t)encoder_thread, NULL, NULL, NULL,
+			K_PRIO_PREEMPT(CONFIG_ENCODER_THREAD_PRIO), 0, K_NO_WAIT);
 		ret = k_thread_name_set(encoder_thread_id, "ENCODER");
 		ERR_CHK(ret);
 	}
@@ -365,25 +397,36 @@ int audio_system_fifo_rx_block_drop(void)
 		return -ECANCELED;
 	}
 
-	data_fifo_block_free(&fifo_rx, &temp);
+	data_fifo_block_free(&fifo_rx, temp);
 
 	LOG_DBG("Block dropped");
 	return 0;
 }
 
-void audio_system_init(void)
+int audio_system_init(void)
 {
 	int ret;
 
 #if ((CONFIG_AUDIO_DEV == GATEWAY) && (CONFIG_AUDIO_SOURCE_USB))
 	ret = audio_usb_init();
-	ERR_CHK(ret);
+	if (ret) {
+		LOG_ERR("Failed to initialize USB: %d", ret);
+		return ret;
+	}
 #else
 	ret = audio_datapath_init();
-	ERR_CHK(ret);
+	if (ret) {
+		LOG_ERR("Failed to initialize audio datapath: %d", ret);
+		return ret;
+	}
+
 	ret = hw_codec_init();
-	ERR_CHK(ret);
+	if (ret) {
+		LOG_ERR("Failed to initialize HW codec: %d", ret);
+		return ret;
+	}
 #endif
+	return 0;
 }
 
 static int cmd_audio_system_start(const struct shell *shell, size_t argc, const char **argv)

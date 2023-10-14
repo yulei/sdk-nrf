@@ -9,6 +9,9 @@
 #include <string.h>
 
 #include <zephyr/shell/shell.h>
+#ifdef CONFIG_GETOPT
+#include <zephyr/posix/unistd.h>
+#endif
 #include <getopt.h>
 #include <net/nrf_cloud.h>
 #if defined(CONFIG_NRF_CLOUD_REST)
@@ -278,8 +281,6 @@ void location_ctrl_event_handler(const struct location_event_data *event_data)
 			event_data->location.latitude, event_data->location.longitude);
 
 		if (gnss_location_to_cloud) {
-			k_work_init(&gnss_location_work_data.work, location_to_cloud_worker);
-
 			gnss_location_work_data.loc_evt_data = *event_data;
 			gnss_location_work_data.format = gnss_location_to_cloud_format;
 			k_work_submit_to_queue(&mosh_common_work_q, &gnss_location_work_data.work);
@@ -300,15 +301,15 @@ void location_ctrl_event_handler(const struct location_event_data *event_data)
 		mosh_error("Location request failed");
 		break;
 #if defined(CONFIG_LOCATION_SERVICE_EXTERNAL)
-#if defined(CONFIG_NRF_CLOUD_AGPS)
+#if defined(CONFIG_NRF_CLOUD_AGNSS)
 	case LOCATION_EVT_GNSS_ASSISTANCE_REQUEST:
 		mosh_print(
-			"A-GPS request from Location library "
+			"A-GNSS request from Location library "
 			"(ephe: 0x%08x alm: 0x%08x flags: 0x%02x)",
-			event_data->agps_request.sv_mask_ephe,
-			event_data->agps_request.sv_mask_alm,
-			event_data->agps_request.data_flags);
-		location_srv_ext_agps_handle(&event_data->agps_request);
+			(uint32_t)event_data->agnss_request.system[0].sv_mask_ephe,
+			(uint32_t)event_data->agnss_request.system[0].sv_mask_alm,
+			event_data->agnss_request.data_flags);
+		location_srv_ext_agnss_handle(&event_data->agnss_request);
 		break;
 #endif
 #if defined(CONFIG_NRF_CLOUD_PGPS)
@@ -358,6 +359,8 @@ void location_ctrl_event_handler(const struct location_event_data *event_data)
 void location_ctrl_init(void)
 {
 	int ret;
+
+	k_work_init(&gnss_location_work_data.work, location_to_cloud_worker);
 
 #if defined(CONFIG_DK_LIBRARY)
 	k_work_init_delayable(&location_evt_led_work, location_evt_led_worker);
@@ -590,7 +593,8 @@ int location_shell(const struct shell *shell, size_t argc, char **argv)
 		struct location_config config = { 0 };
 		struct location_config *real_config = &config;
 
-		if (method_count == 0 && !interval_set && !timeout_set) {
+		if (method_count == 0 && !interval_set && !timeout_set &&
+		    req_mode == LOCATION_REQ_MODE_FALLBACK) {
 			/* No methods or top level config given. Use default config. */
 			real_config = NULL;
 		}

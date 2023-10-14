@@ -86,13 +86,6 @@ config LWM2M_CLIENT_UTILS_FIRMWARE_UPDATE_OBJ_SUPPORT
 
 if LWM2M_CLIENT_UTILS_FIRMWARE_UPDATE_OBJ_SUPPORT
 
-config LWM2M_CLIENT_UTILS_MCUBOOT_FLASH_BUF_SIZE
-	int "Size of buffer used for flash write operations during MCUboot updates"
-	depends on DFU_TARGET_MCUBOOT
-	default 512
-	help
-	  Buffer size must be aligned to the minimal flash write block size.
-
 config LWM2M_CLIENT_UTILS_DOWNLOADER_SEC_TAG
 	int "Security tag for FOTA download library"
 	default 16842753
@@ -100,6 +93,10 @@ config LWM2M_CLIENT_UTILS_DOWNLOADER_SEC_TAG
 	  This security tag is used when firmware image is fetch from
 	  https:// or coaps:// URI. It has no effect on usage of http:// or coap://
 	  -1 disables the usage of security tag.
+
+config LWM2M_CLIENT_UTILS_FIRMWARE_UPDATE_THREAD_STACK_SIZE
+	int "FOTA thread stack size"
+	default 2048
 
 endif # LWM2M_CLIENT_UTILS_FIRMWARE_UPDATE_OBJ_SUPPORT
 
@@ -111,6 +108,17 @@ config LWM2M_CLIENT_UTILS_ADV_FIRMWARE_UPDATE_OBJ_SUPPORT
 	  This is a non standard Advanced Firmware Update object which is still
 	  under development. Server support might be lacking and the implementation
 	  might not match latest specification from OMA working group.
+
+if LWM2M_CLIENT_UTILS_ADV_FIRMWARE_UPDATE_OBJ_SUPPORT
+
+config LWM2M_CLIENT_UTILS_ADV_FOTA_INSTANCE_COUNT
+	int "Firmware object instance count"
+	default 3 if DFU_TARGET_SMP
+	default 2
+	help
+	  Number of supported instances for Advanced Firmware object.
+
+endif # LWM2M_CLIENT_UTILS_ADV_FIRMWARE_UPDATE_OBJ_SUPPORT
 
 config LWM2M_CLIENT_UTILS_GROUND_FIX_OBJ_SUPPORT
 	bool "Support ground fix object"
@@ -134,10 +142,10 @@ config LWM2M_CLIENT_UTILS_LOCATION_ASSIST_CELL
 	  Information of current cell and neighboring cells are sent to lwm2m server to
 	  obtain coarse location.
 
-config LWM2M_CLIENT_UTILS_LOCATION_ASSIST_AGPS
-	bool "Use location based on A-GPS"
+config LWM2M_CLIENT_UTILS_LOCATION_ASSIST_AGNSS
+	bool "Use location based on A-GNSS"
 	help
-	  A-GPS assistance data is requested from lwm2m server and fed to the GNSS module
+	  A-GNSS assistance data is requested from lwm2m server and fed to the GNSS module
 	  after the data has been received.
 
 config LWM2M_CLIENT_UTILS_LOCATION_ASSIST_PGPS
@@ -179,14 +187,14 @@ config LWM2M_CLIENT_UTILS_LOCATION_ASSIST_PGPS_STARTING_TIME
 	help
 	  The starting time of the predictions.
 
-config LWM2M_CLIENT_UTILS_LOCATION_ASSIST_AGPS_BUF_SIZE
+config LWM2M_CLIENT_UTILS_LOCATION_ASSIST_AGNSS_BUF_SIZE
 	int "Size of the buffer for storing the assistance data coming from server"
-	depends on LWM2M_CLIENT_UTILS_LOCATION_ASSIST_AGPS
+	depends on LWM2M_CLIENT_UTILS_LOCATION_ASSIST_AGNSS
 	default 4096
 
-config LWM2M_CLIENT_UTILS_LOCATION_ASSIST_AGPS_ELEVATION_MASK
+config LWM2M_CLIENT_UTILS_LOCATION_ASSIST_AGNSS_ELEVATION_MASK
 	int "Minimum elevation angle for visible satellites."
-	depends on LWM2M_CLIENT_UTILS_LOCATION_ASSIST_AGPS
+	depends on LWM2M_CLIENT_UTILS_LOCATION_ASSIST_AGNSS
 	default -1
 	help
 	  Minimum elevation angle for visible satellites. The range is 0...90.
@@ -262,7 +270,18 @@ config LWM2M_CLIENT_UTILS_DTLS_CID
 	help
 	  Enable DTLS connection Identifier negitiation.
 	  Requires either LWM2M_RD_CLIENT_STOP_POLLING_AT_IDLE or LWM2M_RD_CLIENT_LISTEN_AT_IDLE to be useful.
-	  This requires modem firmware 1.3.5 or newer.
+	  This requires modem firmware v1.3.5 or newer.
+
+if LWM2M_CLIENT_UTILS_DTLS_CID
+
+config LWM2M_CLIENT_UTILS_DTLS_CON_MANAGEMENT
+	bool "Enable DTLS connection save and load"
+	depends on LWM2M_RD_CLIENT_STOP_POLLING_AT_IDLE
+	help
+	  Enable DTLS connection identifier save at idle and load exit from idle.
+	  This requires modem firmware v1.3.5 or newer.
+
+endif #LWM2M_CLIENT_UTILS_DTLS_CID
 
 module = LWM2M_CLIENT_UTILS
 module-dep = LOG

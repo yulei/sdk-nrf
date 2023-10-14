@@ -51,6 +51,11 @@ The sample can operate in one of the following modes:
 * Real temperature sensor mode - In this mode, the thermostat sample is bound to a remote Matter temperature sensor, which provides real temperature measurements.
   This mode requires :ref:`matter_thermostat_sample_sensor`.
 
+  .. figure:: ../../../doc/nrf/images/matter_external_thermostat_setup.png
+     :alt: Real temperature sensor mode setup
+
+     Real temperature sensor mode setup
+
 The sample automatically logs the temperature measurements with a defined interval and it uses buttons for printing the measurement results to the terminal.
 
 You can test the sample in the following ways:
@@ -139,6 +144,13 @@ Remote testing in a network
     :start-after: matter_light_bulb_sample_remote_testing_start
     :end-before: matter_light_bulb_sample_remote_testing_end
 
+Factory data support
+====================
+
+.. include:: ../lock/README.rst
+    :start-after: matter_door_lock_sample_factory_data_start
+    :end-before: matter_door_lock_sample_factory_data_end
+
 User interface
 **************
 
@@ -149,7 +161,7 @@ User interface
 Button 1:
     Depending on how long you press the button:
 
-    * If pressed for less than three seconds, it initiates the SMP server (Security Manager Protocol).
+    * If pressed for less than three seconds, it initiates the SMP server (Simple Management Protocol).
       After that, the Direct Firmware Update (DFU) over Bluetooth Low Energy can be started.
       (See `Upgrading the device firmware`_.)
     * If pressed for more than three seconds, it initiates the factory reset of the device.
@@ -326,6 +338,10 @@ For this sample, you can use one of the following :ref:`onboarding information f
 
        - MT:O4CT342C00KA0648G00
        - 34970112332
+
+.. include:: ../lock/README.rst
+    :start-after: matter_door_lock_sample_onboarding_start
+    :end-before: matter_door_lock_sample_onboarding_end
 
 Upgrading the device firmware
 =============================

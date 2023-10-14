@@ -5,6 +5,7 @@
  */
 
 #include <string.h>
+#include <stdio.h>
 
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
@@ -257,6 +258,7 @@ int filter_cme_error(struct command *cmd, int cme_error)
 
 	for (int i = 0;	i < at_cmd->_at_command_ignore_cme_errors_uint_count; i++) {
 		if (at_cmd->_at_command_ignore_cme_errors_uint[i] == cme_error) {
+			LOG_DBG("Filtered CME error %d", cme_error);
 			filtered = true;
 		}
 	}
@@ -282,15 +284,27 @@ static int exec_at_cmd(struct command *cmd_req, struct cdc_out_fmt_data *out)
 			LOG_ERR("Unable to write response msg field");
 			return -ENOMEM;
 		}
+		memset(resp, 0, resp_sz);
 
 		LOG_DBG("command: \"%s\", input buff len: %d", out->at_buff, resp_sz);
 		ret = nrf_provisioning_at_cmd(resp, resp_sz, out->at_buff);
 
 		if (ret == -E2BIG) {
+			int tag = 0;
+			int type = 0;
+
 			LOG_DBG("Buffer too small for AT response, retrying");
 			k_free(resp);
 			resp = NULL;
+			if (sscanf(out->at_buff, "AT%%KEYGEN=%d,%d,%*s", &tag, &type) == 2) {
+				LOG_DBG("Clear sec_tag %d, type %d", tag, type);
+				int err;
 
+				err = nrf_provisioning_at_del_credential(tag, type);
+				if (err < 0) {
+					LOG_ERR("AT cmd failed, error: %d", err);
+				}
+			}
 			resp_sz *= 2; /* Previous size wasn't sufficient */
 			if (resp_sz > AT_RESP_MAX_SIZE) {
 				LOG_ERR("Key or CSR too big");
@@ -302,10 +316,14 @@ static int exec_at_cmd(struct command *cmd_req, struct cdc_out_fmt_data *out)
 		} else if (ret < 0) {
 			LOG_ERR("AT cmd failed, error: %d", ret);
 		} else if (ret > 0) {
-			ret = filter_cme_error(cmd_req, nrf_modem_at_err(ret));
 			/* 'ERROR' or '+CME ERROR'. Doesn't matter which */
-			LOG_INF("AT cmd failed, type %d, err %d",
+			LOG_DBG("AT cmd failed, type %d, err %d",
 				nrf_modem_at_err_type(ret), nrf_modem_at_err(ret));
+			ret = filter_cme_error(cmd_req, nrf_modem_at_err(ret));
+			if (ret) {
+				/* ERROR was not filtered */
+				LOG_ERR("AT cmd failed, error: %d", ret);
+			}
 		}
 		break;
 	}

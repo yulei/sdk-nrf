@@ -29,17 +29,6 @@ Complete the following steps to test the functionality provided by the :ref:`SLM
       #XSLMVER: "2.3.0","2.3.0"
       OK
 
-#. Read the current baud rate.
-
-   .. parsed-literal::
-      :class: highlight
-
-      **AT#XSLMUART?**
-      #XSLMUART: 115200,0
-      OK
-
-   You can change the used baud rate with the corresponding set command, but note that LTE Link Monitor requires 115200 bps for communication.
-
 #. Retrieve a list of all supported proprietary AT commands.
 
    .. parsed-literal::
@@ -236,7 +225,7 @@ TCP client
          #XTCPCLI: 1,0
          OK
 
-   #. Send plain text data to the TCP server and retrieve ten bytes of the returned data.
+   #. Send plain text data to the TCP server and receive ten bytes of the returned data.
 
       .. parsed-literal::
          :class: highlight
@@ -245,9 +234,8 @@ TCP client
          #XTCPSEND: 8
          OK
 
-         **AT#XTCPRECV=10**
+         #XTCPDATA: 10
          PONG: b'Te
-         #XTCPRECV: 10
          OK
 
    #. Disconnect and confirm the status of the connection.
@@ -291,7 +279,7 @@ UDP client
          #XSENDTO: 8
          OK
          **AT#XRECVFROM=0**
-         #XRECVFROM: 14
+         #XRECVFROM: 14,"<*IP address*>",<*port*>
          PONG: Test UDP
          OK
 
@@ -389,8 +377,8 @@ TLS client
 Before completing this test, you must update the CA certificate, the client certificate, and the private key to be used for the TLS connection in the modem.
 The credentials must use the security tag 16842755.
 
-To store the credentials in the modem, use LTE Link Monitor.
-See `Managing credentials`_ in the LTE Link Monitor User Guide for instructions.
+To store the credentials in the modem, use the Cellular Monitor app.
+See `Managing credentials`_ in the Cellular Monitor User Guide for instructions.
 
 You must register the corresponding credentials on the server side.
 
@@ -461,7 +449,7 @@ You must register the corresponding credentials on the server side.
          #XTCPCLI: 1,0
          OK
 
-   #. Send plain text data to the TLS server and retrieve the returned data.
+   #. Send plain text data to the TLS server and receive the returned data.
 
       .. parsed-literal::
          :class: highlight
@@ -469,12 +457,9 @@ You must register the corresponding credentials on the server side.
          **AT#XTCPSEND="Test TLS client"**
          #XTCPSEND: 15
          OK
-         #XTCPDATA: 24
 
-         **AT#XTCPRECV**
+         #XTCPDATA: 24
          PONG: b'Test TLS client'
-         #XTCPRECV: 24
-         OK
 
    #. Disconnect from the server.
 
@@ -578,11 +563,11 @@ You must register the same PSK and PSK identity on the server side.
 TCP server
 ==========
 
-.. |global_private_address| replace:: the nRF9160 DK must have a global private address.
-   The radio network must be configured to route incoming IP packets to the nRF9160 DK.
+.. |global_private_address| replace:: the nRF91 Series DK must have a global private address.
+   The radio network must be configured to route incoming IP packets to the nRF91 Series DK.
 
 .. |global_private_address_check| replace::    To check if the setup is correct, use the ``AT+CGDCONT?`` command to check if the local IP address allocated by the network is a reserved private address of class A, B, or C (see `Private addresses`_).
-   If it is not, ping your nRF9160 DK from the destination server.
+   If it is not, ping your nRF91 Series DK from the destination server.
 
 
 To act as a TCP server, |global_private_address|
@@ -635,7 +620,7 @@ To act as a TCP server, |global_private_address|
          :class: highlight
 
          **AT#XSOCKET=1,1,1**
-         #XSOCKET: 2,1,6
+         #XSOCKET: 0,1,6
          OK
 
          **AT#XBIND=**\ *1234*
@@ -651,16 +636,16 @@ To act as a TCP server, |global_private_address|
       .. parsed-literal::
          :class: highlight
 
-         **AT#XACCEPT**
-         #XACCEPT: connected with *IP address*
-         #XACCEPT: 3
-         OK
+         **AT#XACCEPT=60**
 
+         #XACCEPT: 1,"*IP address*"
+
+         OK
          **AT#XRECV=0**
+
          #XRECV: 26
          Hello, TCP#1!Hello, TCP#2!
          OK
-
          **AT#XSEND="TCP1/2 received"**
          #XSEND: 15
          OK
@@ -693,7 +678,7 @@ To act as a TCP server, |global_private_address|
          :class: highlight
 
          **AT#XSOCKET=0**
-         #XSOCKET: "closed"
+         #XSOCKET: 0,"closed"
          OK
 
 
@@ -709,7 +694,7 @@ To act as a TCP server, |global_private_address|
          OK
 
          **AT#XTCPSVR?**
-         #XTCPSVR: -1,-1
+         #XTCPSVR: -1,-1,0
          OK
 
    #. Create a TCP server and read the information about the current state.
@@ -719,58 +704,58 @@ To act as a TCP server, |global_private_address|
          :class: highlight
 
          **AT#XTCPSVR=1,**\ *1234*
-         #XTCPSVR: 2,"started"
+         #XTCPSVR: 0,"started"
          OK
 
          **AT#XTCPSVR?**
-         #XTCPSVR: 1,-1,0
+         #XTCPSVR: 0,-1,1
          OK
 
    #. Run the :file:`client_tcp.py` script to start sending data to the server.
 
-   #. Observe that the server accepts the connection from the client.
+   #. Observe that the server accepts the connection from the client and receives the first packets.
       Read the information about the current state again.
 
       .. parsed-literal::
          :class: highlight
 
-         #XTCPSVR: *IP address* connected
+         #XTCPSVR: "*IP address*","connected"
+
          #XTCPDATA: 13
+         Hello, TCP#1!
          #XTCPDATA: 13
+         Hello, TCP#2!
 
          **AT#XTCPSVR?**
-         #XTCPSVR: 1,2,0
+         #XTCPSVR: 0,1,1
          OK
 
-   #. Start receiving and acknowledging the data.
+   #. Send responses and receive the rest of the data.
+      Client disconnects after receiving the last response.
 
       .. parsed-literal::
          :class: highlight
 
-         **AT#XTCPRECV**
-         Hello, TCP#1!Hello, TCP#2!
-         #XTCPRECV: 26
-         OK
-
          **AT#XTCPSEND="TCP1/2 received"**
+
          #XTCPSEND: 15
-         OK
-         #XTCPDATA: 13
-         #XTCPDATA: 13
-         #XTCPDATA: 13
 
-         **AT#XTCPSVR?**
-         #XTCPSVR: 1,2,0
          OK
 
-         **AT#XTCPRECV**
-         Hello, TCP#3!Hello, TCP#4!Hello, TCP#5!
-         #XTCPRECV: 39
-         OK
+         #XTCPDATA: 13
+         Hello, TCP#3!
+         #XTCPDATA: 13
+         Hello, TCP#4!
+         #XTCPDATA: 13
+         Hello, TCP#5!
 
-         **AT#XTCPSEND=1,"TCP3/4/5 received"**
+         **AT#XTCPSEND="TCP3/4/5 received"**
+
          #XTCPSEND: 17
+
          OK
+
+         #XTCPSVR: 0,"disconnected"
 
    #. Observe the output of the Python script::
 
@@ -791,7 +776,7 @@ To act as a TCP server, |global_private_address|
          :class: highlight
 
          **AT#XTCPSVR?**
-         #XTCPSVR: 1,2,0
+         #XTCPSVR: 0,-1,1
          OK
 
    #. Stop the server.
@@ -800,11 +785,11 @@ To act as a TCP server, |global_private_address|
          :class: highlight
 
          **AT#XTCPSVR=0**
-         #XTCPSVR:-1,"stopped"
+         #XTCPSVR:0,"stopped"
          OK
 
          **AT#XTCPSVR?**
-         #XTCPSVR: -1,-1
+         #XTCPSVR: -1,-1,0
          OK
 
 UDP server
@@ -831,22 +816,22 @@ To act as a UDP server, |global_private_address|
       s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
       s.bind(local)
       print("Sending: 'Hello, UDP#1!")
-      s.sendto("Hello, UDP#1!", host)
+      s.sendto(b"Hello, UDP#1!", host)
       time.sleep(1)
       print("Sending: 'Hello, UDP#2!")
-      s.sendto("Hello, UDP#2!", host)
+      s.sendto(b"Hello, UDP#2!", host)
       data, address = s.recvfrom(1024)
       print(data)
       print(address)
 
       print("Sending: 'Hello, UDP#3!")
-      s.sendto("Hello, UDP#3!", host)
+      s.sendto(b"Hello, UDP#3!", host)
       time.sleep(1)
       print("Sending: 'Hello, UDP#4!")
-      s.sendto("Hello, UDP#4!", host)
+      s.sendto(b"Hello, UDP#4!", host)
       time.sleep(1)
       print("Sending: 'Hello, UDP#5!")
-      s.sendto("Hello, UDP#5!", host)
+      s.sendto(b"Hello, UDP#5!", host)
       data, address = s.recvfrom(1024)
       print(data)
       print(address)
@@ -863,7 +848,7 @@ To act as a UDP server, |global_private_address|
          :class: highlight
 
          **AT#XSOCKET=1,2,1**
-         #XSOCKET: 2,2,17
+         #XSOCKET: 0,2,17
          OK
 
          **AT#XBIND=**\ *1234*
@@ -878,12 +863,12 @@ To act as a UDP server, |global_private_address|
          :class: highlight
 
          **AT#XRECVFROM=0**
-         #XRECVFROM: 13
+         #XRECVFROM: 13,"<*IP address*>",<*port*>
          Hello, UDP#1!
          OK
 
          **AT#XRECVFROM=0**
-         #XRECVFROM: 13
+         #XRECVFROM: 13,"<*IP address*>",<*port*>
          Hello, UDP#2!
          OK
 
@@ -892,17 +877,17 @@ To act as a UDP server, |global_private_address|
          OK
 
          **AT#XRECVFROM=0**
-         #XRECVFROM: 13
+         #XRECVFROM: 13,"<*IP address*>",<*port*>
          Hello, UDP#3!
          OK
 
          **AT#XRECVFROM=0**
-         #XRECVFROM: 13
+         #XRECVFROM: 13,"<*IP address*>",<*port*>
          Hello, UDP#4!
          OK
 
          **AT#XRECVFROM=0**
-         #XRECVFROM: 13
+         #XRECVFROM: 13,"<*IP address*>",<*port*>
          Hello, UDP#5!
          OK
 
@@ -910,29 +895,19 @@ To act as a UDP server, |global_private_address|
          #XSENDTO: 17
          OK
 
-      Note that you will get an error message if a UDP packet is lost.
-      For example, this error indicates that a packet is lost in the downlink to the nRF9160 DK:
-
-      .. parsed-literal::
-         :class: highlight
-
-         **AT#XRECVFROM=0**
-         #XSOCKET: -60
-         ERROR
-
    #. Observe the output of the Python script::
 
          $ python client_udp.py
 
          Sending: 'Hello, UDP#1!
          Sending: 'Hello, UDP#2!
-         UDP1/2 received
-         ('000.000.000.00', 1234)
+         b'UDP1/2 received'
+         ('000.000.000.00', 1234, 0, 0)
          Sending: 'Hello, UDP#3!
          Sending: 'Hello, UDP#4!
          Sending: 'Hello, UDP#5!
-         UDP3/4/5 received
-         ('000.000.000.00', 1234)
+         b'UDP3/4/5 received'
+         ('000.000.000.00', 1234, 0, 0)
          Closing connection
 
    #. Close the socket.
@@ -957,7 +932,7 @@ To act as a UDP server, |global_private_address|
          OK
 
          **AT#XUDPSVR=1,**\ *1234*
-         #XUDPSVR: 2,"started"
+         #XUDPSVR: 0,"started"
          OK
 
    #. Run the :file:`client_udp.py` script to start sending data to the server.
@@ -993,13 +968,13 @@ To act as a UDP server, |global_private_address|
 
          Sending: 'Hello, UDP#1!
          Sending: 'Hello, UDP#2!
-         UDP1/2 received
-         ('000.000.000.00', 1234)
+         b'UDP1/2 received'
+         ('000.000.000.00', 1234, 0, 0)
          Sending: 'Hello, UDP#3!
          Sending: 'Hello, UDP#4!
          Sending: 'Hello, UDP#5!
-         UDP3/4/5 received
-         ('000.000.000.00', 1234)
+         b'UDP3/4/5 received'
+         ('000.000.000.00', 1234, 0, 0)
          Closing connection
 
    #. Close the socket.
@@ -1008,36 +983,19 @@ To act as a UDP server, |global_private_address|
          :class: highlight
 
          **AT#XUDPSVR=0**
-         #XUDPSVR: "stopped"
+         #XUDPSVR: 0,"stopped"
          OK
 
 TLS server
 ==========
 
-The TLS server role is currently not supported.
+The TLS server role is currently only supported when using the :file:`overlay-native_tls.conf` configuration file.
 
-.. parsed-literal::
-   :class: highlight
-
-   **AT#XSOCKET=1,1,1,16842753**
-   #XSOCKET: "(D)TLS Server not supported"
-   ERROR
-
-   **AT#XTCPSVR=1,3443,16842753**
-   #XTCPSVR: "TLS Server not supported"
-   ERROR
 
 DTLS server
 ===========
 
 The DTLS server role is currently not supported (modem limitation).
-
-.. parsed-literal::
-   :class: highlight
-
-   **AT#XSOCKET=1,2,1,16842755**
-   #XSOCKET: "(D)TLS Server not supported"
-   ERROR
 
 DNS lookup
 ==========
@@ -1140,7 +1098,7 @@ Complete the following steps to test the functionality provided by the :ref:`SLM
 FTP AT commands
 ***************
 
-Note that these commands are available only if :kconfig:option:`CONFIG_SLM_FTPC` is defined.
+Note that these commands are available only if :ref:`CONFIG_SLM_FTPC <CONFIG_SLM_FTPC>` is defined.
 Before you test the FTP AT commands, check the setting of the :kconfig:option:`CONFIG_FTP_CLIENT_KEEPALIVE_TIME` option.
 By default, the :ref:`lib_ftp_client` library keeps the connection to the FTP server alive for 60 seconds, but you can change the duration or turn KEEPALIVE off by setting :kconfig:option:`CONFIG_FTP_CLIENT_KEEPALIVE_TIME` to 0.
 

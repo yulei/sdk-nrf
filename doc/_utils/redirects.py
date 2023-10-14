@@ -76,6 +76,7 @@ NRF = [
     ("ug_memfault", "external_comp/memfault"),
     ("ug_nrf_cloud", "external_comp/nrf_cloud"),
     ("gs_assistant", "installation/assistant"),
+    ("getting_started", "installation"),
     ("getting_started/assistant", "installation/assistant"),
     ("gs_installing", "installation/installing"),
     ("getting_started/installing", "installation/installing"),
@@ -117,6 +118,7 @@ NRF = [
     ("ug_matter_device_attestation","protocols/matter/end_product/attestation"),
     ("ug_matter_device_bootloader","protocols/matter/end_product/bootloader"),
     ("ug_matter_device_certification","protocols/matter/end_product/certification"),
+    ("ug_matter_ecosystems_certification","protocols/matter/end_product/ecosystems_certification"),
     ("ug_matter_device_dcl","protocols/matter/end_product/dcl"),
     ("ug_matter_device_factory_provisioning","protocols/matter/end_product/factory_provisioning"),
     ("ug_matter_intro_device","protocols/matter/end_product/index"),
@@ -220,4 +222,5 @@ NRF = [
     ("ug_thingy91_gsg","device_guides/working_with_nrf/nrf91/thingy91_gsg"),
     ("working_with_nrf/nrf91/thingy91_gsg","device_guides/working_with_nrf/nrf91/thingy91_gsg"),
     ("known_issues","releases_and_maturity/known_issues"),
+    ("libraries/networking/nrf_cloud_agps","libraries/networking/nrf_cloud_agnss"),
 ]

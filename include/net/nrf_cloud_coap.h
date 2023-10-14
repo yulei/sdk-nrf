@@ -16,8 +16,9 @@ extern "C" {
 #endif
 
 #include <net/nrf_cloud_rest.h>
-#include <net/nrf_cloud_agps.h>
+#include <net/nrf_cloud_agnss.h>
 #include <net/nrf_cloud_pgps.h>
+#include <net/nrf_cloud_codec.h>
 #include <zephyr/net/coap_client.h>
 
 /**
@@ -38,9 +39,11 @@ int nrf_cloud_coap_init(void);
  * This function must return 0 indicating success so that the other functions below,
  * other than nrf_cloud_coap_disconnect(), will not immediately return an error when called.
  *
+ * @param app_ver Version to report to the shadow; can be NULL.
+ *
  * @return 0 if authorized successfully, otherwise, a negative error number.
  */
-int nrf_cloud_coap_connect(void);
+int nrf_cloud_coap_connect(const char * const app_ver);
 
 /**
  * @brief Pause CoAP connection.
@@ -88,21 +91,21 @@ int nrf_cloud_coap_disconnect(void);
 /* nRF Cloud service functions */
 
 /**
- * @brief Request nRF Cloud CoAP Assisted GPS (A-GPS) data.
+ * @brief Request nRF Cloud CoAP Assisted GNSS (A-GNSS) data.
  *
  * @param[in]     request Data to be provided in API call.
- * @param[in,out] result Structure pointing to caller-provided buffer in which to store A-GPS data.
+ * @param[in,out] result Structure pointing to caller-provided buffer in which to store A-GNSS data.
  *
  *  @retval -EINVAL will be returned, and an error message printed, if invalid parameters
  *          are given.
- *  @retval -ENOENT will be returned if there was no A-GPS data requested for the specified
+ *  @retval -ENOENT will be returned if there was no A-GNSS data requested for the specified
  *          request type.
  *  @retval -ENOBUFS will be returned, and an error message printed, if there is not enough
- *          buffer space to store retrieved AGPS data.
+ *          buffer space to store retrieved A-GNSS data.
  * @retval 0 If successful.
  */
-int nrf_cloud_coap_agps_data_get(struct nrf_cloud_rest_agps_request const *const request,
-				 struct nrf_cloud_rest_agps_result *result);
+int nrf_cloud_coap_agnss_data_get(struct nrf_cloud_rest_agnss_request const *const request,
+				  struct nrf_cloud_rest_agnss_result *result);
 
 /**
  * @brief Request URL for nRF Cloud Predicted GPS (P-GPS) data.
@@ -134,6 +137,35 @@ int nrf_cloud_coap_pgps_url_get(struct nrf_cloud_rest_pgps_request const *const 
  *          Otherwise, a (negative) error code is returned.
  */
 int nrf_cloud_coap_sensor_send(const char *app_id, double value, int64_t ts_ms);
+
+/**
+ * @brief Send a message string to nRF Cloud.
+ *
+ *  The CoAP message is sent as a non-confirmable CoAP message.
+ *
+ * @param[in]     app_id     The app_id identifying the type of data. See the values in
+ *                           nrf_cloud_defs.h that begin with  NRF_CLOUD_JSON_APPID_.
+ *                           You may also use custom names.
+ * @param[in]     message    The string to send.
+ * @param[in]     json       Set true if the data should be sent in JSON format, otherwise CBOR.
+ * @param[in]     ts_ms      Timestamp the data was measured, or NRF_CLOUD_NO_TIMESTAMP.
+ *
+ * @retval 0 If successful.
+ *          Otherwise, a (negative) error code is returned.
+ */
+int nrf_cloud_coap_message_send(const char *app_id, const char *message, bool json, int64_t ts_ms);
+
+/**
+ * @brief Send a preencoded JSON message to nRF Cloud.
+ *
+ *  The CoAP message is sent as a non-confirmable CoAP message.
+ *
+ * @param[in]     message    The string to send.
+ *
+ * @retval 0 If successful.
+ *          Otherwise, a (negative) error code is returned.
+ */
+int nrf_cloud_coap_json_message_send(const char *message);
 
 /**
  * @brief Send the device location in the @ref nrf_cloud_gnss_data PVT field to nRF Cloud.
@@ -168,7 +200,7 @@ int nrf_cloud_coap_location_get(struct nrf_cloud_rest_location_request const *co
  *
  * @param[out]    job Parsed job info. If no job exists, type will
  *                    be set to invalid. If a job exists, user must call
- *                    @ref nrf_cloud_rest_fota_job_free to free the memory
+ *                    @ref nrf_cloud_coap_fota_job_free to free the memory
  *                    allocated by this function.
  *
  * @return 0 if the request succeeded, a positive value indicating a CoAP result code,
@@ -244,6 +276,32 @@ int nrf_cloud_coap_shadow_device_status_update(const struct nrf_cloud_device_sta
  * or a negative error number.
  */
 int nrf_cloud_coap_shadow_service_info_update(const struct nrf_cloud_svc_info * const svc_inf);
+
+/**
+ * @brief Process any elements of the shadow relevant to this library.
+ *
+ * One such element is the control section, which specifies the log level and turns
+ * alerts on and off.
+ *
+ * @param[in] in_data A pointer to a structure with the length and a pointer to the delta received.
+ *
+ * @return 0 if the request succeeded, a positive value indicating a CoAP result code,
+ * or a negative error number.
+ */
+int nrf_cloud_coap_shadow_delta_process(const struct nrf_cloud_data *in_data);
+
+/**
+ * @brief Send an nRF Cloud object
+ *
+ * This only supports sending of the CoAP CBOR or JSON type or a pre-encoded CBOR buffer.
+ *
+ * @param[in]     obj An nRF Cloud object. Will be encoded first if obj->enc_src is
+ * NRF_CLOUD_ENC_SRC_NONE.
+ *
+ * @return 0 if the request succeeded, a positive value indicating a CoAP result code,
+ * or a negative error number.
+ */
+int nrf_cloud_coap_obj_send(struct nrf_cloud_obj *const obj);
 
 /** @} */
 

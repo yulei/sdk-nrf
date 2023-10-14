@@ -8,12 +8,16 @@ Memfault
    :depth: 2
 
 The Memfault sample shows how to use the `Memfault SDK`_ in an |NCS| application to collect coredumps and metrics.
-The sample connects to an LTE network using the nRF9160 DK or Thingy:91, or to Wi-Fi using the nRF7002 DK, and sends the collected data to Memfault's cloud using HTTPS.
+The sample connects to an LTE network using an nRF91 Series DK or Thingy:91, or to Wi-Fi using the nRF7002 DK, and sends the collected data to Memfault's cloud using HTTPS.
 
 To get started with Memfault integration in |NCS|, see :ref:`ug_memfault`.
 
 Requirements
 ************
+
+Before using this sample, make sure to sign up in the `Memfault registration page`_ and `create a new project in Memfault`_.
+You will be directed to the Integration guide for Memfault.
+You will receive the ``project key`` here to set in the :kconfig:option:`CONFIG_MEMFAULT_NCS_PROJECT_KEY` Kconfig option.
 
 The sample supports the following development kits:
 
@@ -52,7 +56,6 @@ This metric is defined in :file:`samples/debug/memfault/config/memfault_metrics_
 
 *  ``Switch1ToggleCount`` - The number of times **Switch 1** has been toggled on an nRF9160 DK.
 
-
 Error Tracking with trace events
 ================================
 
@@ -60,7 +63,6 @@ The sample implements a user-defined trace reason for demonstration purposes.
 The trace reason is called ``Switch2Toggled``, and is collected every time **Switch 2** is toggled on an nRF9160 DK.
 In addition to detection of the event, the trace includes the current switch state.
 See `Memfault: Error Tracking with Trace Events`_ for information on how to configure and use trace events.
-
 
 Coredumps
 =========
@@ -122,7 +124,7 @@ Check and configure the following options in Memfault SDK that are used by the s
 * :kconfig:option:`CONFIG_MEMFAULT_HTTP_PERIODIC_UPLOAD_USE_DEDICATED_WORKQUEUE`
 * :kconfig:option:`CONFIG_MEMFAULT_COREDUMP_COLLECT_BSS_REGIONS`
 
-If :kconfig:option:`CONFIG_MEMFAULT_ROOT_CERT_STORAGE_NRF9160_MODEM` is enabled, TLS certificates used for HTTP uploads are provisioned to the nRF9160 modem when :c:func:`memfault_zephyr_port_install_root_certs` is called.
+If :kconfig:option:`CONFIG_MEMFAULT_ROOT_CERT_STORAGE_NRF9160_MODEM` is enabled, TLS certificates used for HTTP uploads are provisioned to the cellular modem when :c:func:`memfault_zephyr_port_install_root_certs` is called.
 
 Check and configure the following options for Memfault that are specific to |NCS|:
 
@@ -133,13 +135,6 @@ Check and configure the following options for Memfault that are specific to |NCS
 
 If :kconfig:option:`CONFIG_MEMFAULT_NCS_INTERNAL_FLASH_BACKED_COREDUMP` is enabled, :kconfig:option:`CONFIG_PM_PARTITION_SIZE_MEMFAULT_STORAGE` can be used to set the flash partition size for the flash storage.
 
-
-Configuration files
-===================
-
-.. include:: ../../../doc/nrf/libraries/debug/memfault_ncs.rst
-   :start-after: memfault_config_files_start
-   :end-before: memfault_config_files_end
 
 .. include:: /libraries/modem/nrf_modem_lib/nrf_modem_lib_trace.rst
    :start-after: modem_lib_sending_traces_UART_start
@@ -234,8 +229,12 @@ The sample requires the Memfault SDK, which is part of |NCS|'s West manifest, an
 This sample uses the following |NCS| libraries and drivers:
 
 * :ref:`dk_buttons_and_leds_readme`
-* :ref:`lte_lc_readme`
-* :ref:`nrf_security`
+* :ref:`ug_memfault`
+
+It uses the following Zephyr libraries:
+
+* :ref:`net_if_interface`
+* :ref:`net_mgmt_interface`
 
 It uses the following `sdk-nrfxlib`_ libraries:
 
@@ -244,8 +243,3 @@ It uses the following `sdk-nrfxlib`_ libraries:
 In addition, it uses the following secure firmware component:
 
 * :ref:`Trusted Firmware-M <ug_tfm>`
-
-For Wi-Fi, the sample also uses modules found in the following locations in the |NCS| folder structure:
-
-* :file:`modules/lib/hostap`
-* :file:`modules/mbedtls`

@@ -13,7 +13,7 @@
 #include <cJSON.h>
 #include <modem/modem_info.h>
 #include <date_time.h>
-#include <net/nrf_cloud_agps.h>
+#include <net/nrf_cloud_agnss.h>
 #include <net/nrf_cloud_pgps.h>
 #include <net/nrf_cloud_codec.h>
 #include <zephyr/logging/log_ctrl.h>
@@ -119,7 +119,7 @@ static void cache_pgps_header(const struct nrf_cloud_pgps_header *header);
 static int consume_pgps_data(uint8_t pnum, const char *buf, size_t buf_len);
 static void prediction_work_handler(struct k_work *work);
 static void prediction_timer_handler(struct k_timer *dummy);
-void agps_print_enable(bool enable);
+void agnss_print_enable(bool enable);
 static void print_time_details(const char *info,
 			       int64_t sec, uint16_t day, uint32_t time_of_day);
 static int pgps_request(const struct gps_pgps_request *request);
@@ -258,8 +258,8 @@ static int validate_prediction(const struct nrf_cloud_pgps_prediction *p,
 	int err = 0;
 
 	/* validate that this prediction was actually updated and matches */
-	if ((p->schema_version != NRF_CLOUD_AGPS_BIN_SCHEMA_VERSION) ||
-	    (p->time_type != NRF_CLOUD_AGPS_GPS_SYSTEM_CLOCK) ||
+	if ((p->schema_version != NRF_CLOUD_AGNSS_BIN_SCHEMA_VERSION) ||
+	    (p->time_type != NRF_CLOUD_AGNSS_GPS_SYSTEM_CLOCK) ||
 	    (p->time_count != 1)) {
 		LOG_ERR("invalid prediction header");
 		err = -EINVAL;
@@ -290,7 +290,7 @@ static int validate_prediction(const struct nrf_cloud_pgps_prediction *p,
 		err = -EINVAL;
 	}
 
-	if ((p->ephemeris_type != NRF_CLOUD_AGPS_EPHEMERIDES) ||
+	if ((p->ephemeris_type != NRF_CLOUD_AGNSS_GPS_EPHEMERIDES) ||
 	    (p->ephemeris_count != NRF_CLOUD_PGPS_NUM_SV)) {
 		LOG_ERR("ephemeris header bad:%u, %u",
 			p->ephemeris_type, p->ephemeris_count);
@@ -628,7 +628,7 @@ int nrf_cloud_pgps_find_prediction(struct nrf_cloud_pgps_prediction **prediction
 
 	if ((start_day == 0) && (start_time == 0)) {
 		if (nrf_cloud_pgps_loading()) {
-			LOG_WRN("Predictions not loaded yet");
+			LOG_INF("Predictions not loaded yet");
 			return -ELOADING;
 		}
 		index.cur_pnum = 0xff;
@@ -968,12 +968,12 @@ int nrf_cloud_pgps_preemptive_updates(void)
 }
 
 int nrf_cloud_pgps_inject(struct nrf_cloud_pgps_prediction *p,
-			  const struct nrf_modem_gnss_agps_data_frame *request)
+			  const struct nrf_modem_gnss_agnss_data_frame *request)
 {
 	int err;
 	int ret = 0;
-	struct nrf_modem_gnss_agps_data_frame remainder;
-	struct nrf_modem_gnss_agps_data_frame processed;
+	struct nrf_modem_gnss_agnss_data_frame remainder;
+	struct nrf_modem_gnss_agnss_data_frame processed;
 
 	if (state == PGPS_NONE) {
 		LOG_ERR("P-GPS subsystem is not initialized.");
@@ -985,39 +985,43 @@ int nrf_cloud_pgps_inject(struct nrf_cloud_pgps_prediction *p,
 	} else {
 		/* no assistance request provided from modem; assume just ephemerides */
 		memset(&remainder, 0, sizeof(remainder));
-		remainder.sv_mask_ephe = 0xFFFFFFFFU;
+		remainder.system_count = 1;
+		remainder.system[0].system_id = NRF_MODEM_GNSS_SYSTEM_GPS;
+		remainder.system[0].sv_mask_ephe = 0xFFFFFFFFU;
 	}
-	nrf_cloud_agps_processed(&processed);
-	LOG_DBG("A-GPS has processed emask:0x%08X amask:0x%08X utc:%u "
+
+	nrf_cloud_agnss_processed(&processed);
+
+	LOG_DBG("A-GNSS has processed emask:0x%08X amask:0x%08X utc:%u "
 		"klo:%u neq:%u tow:%u pos:%u int:%u",
-		processed.sv_mask_ephe,
-		processed.sv_mask_alm,
-		processed.data_flags & NRF_MODEM_GNSS_AGPS_GPS_UTC_REQUEST ? 1 : 0,
-		processed.data_flags & NRF_MODEM_GNSS_AGPS_KLOBUCHAR_REQUEST ? 1 : 0,
-		processed.data_flags & NRF_MODEM_GNSS_AGPS_NEQUICK_REQUEST ? 1 : 0,
-		processed.data_flags & NRF_MODEM_GNSS_AGPS_SYS_TIME_AND_SV_TOW_REQUEST ? 1 : 0,
-		processed.data_flags & NRF_MODEM_GNSS_AGPS_POSITION_REQUEST ? 1 : 0,
-		processed.data_flags & NRF_MODEM_GNSS_AGPS_INTEGRITY_REQUEST ? 1 : 0);
+		(uint32_t)processed.system[0].sv_mask_ephe,
+		(uint32_t)processed.system[0].sv_mask_alm,
+		processed.data_flags & NRF_MODEM_GNSS_AGNSS_GPS_UTC_REQUEST ? 1 : 0,
+		processed.data_flags & NRF_MODEM_GNSS_AGNSS_KLOBUCHAR_REQUEST ? 1 : 0,
+		processed.data_flags & NRF_MODEM_GNSS_AGNSS_NEQUICK_REQUEST ? 1 : 0,
+		processed.data_flags & NRF_MODEM_GNSS_AGNSS_GPS_SYS_TIME_AND_SV_TOW_REQUEST ? 1 : 0,
+		processed.data_flags & NRF_MODEM_GNSS_AGNSS_POSITION_REQUEST ? 1 : 0,
+		processed.data_flags & NRF_MODEM_GNSS_AGNSS_INTEGRITY_REQUEST ? 1 : 0);
 
-	/* we will get more accurate data from AGPS for these */
-	if (processed.data_flags & NRF_MODEM_GNSS_AGPS_POSITION_REQUEST &&
-	    remainder.data_flags & NRF_MODEM_GNSS_AGPS_POSITION_REQUEST) {
-		LOG_DBG("A-GPS already received position; skipping");
-		remainder.data_flags &= ~NRF_MODEM_GNSS_AGPS_POSITION_REQUEST;
+	/* we will get more accurate data from AGNSS for these */
+	if (processed.data_flags & NRF_MODEM_GNSS_AGNSS_POSITION_REQUEST &&
+	    remainder.data_flags & NRF_MODEM_GNSS_AGNSS_POSITION_REQUEST) {
+		LOG_DBG("A-GNSS already received position; skipping");
+		remainder.data_flags &= ~NRF_MODEM_GNSS_AGNSS_POSITION_REQUEST;
 	}
-	if (processed.data_flags & NRF_MODEM_GNSS_AGPS_SYS_TIME_AND_SV_TOW_REQUEST &&
-	    remainder.data_flags & NRF_MODEM_GNSS_AGPS_SYS_TIME_AND_SV_TOW_REQUEST) {
-		LOG_DBG("A-GPS already received time; skipping");
-		remainder.data_flags &= ~NRF_MODEM_GNSS_AGPS_SYS_TIME_AND_SV_TOW_REQUEST;
+	if (processed.data_flags & NRF_MODEM_GNSS_AGNSS_GPS_SYS_TIME_AND_SV_TOW_REQUEST &&
+	    remainder.data_flags & NRF_MODEM_GNSS_AGNSS_GPS_SYS_TIME_AND_SV_TOW_REQUEST) {
+		LOG_DBG("A-GNSS already received time; skipping");
+		remainder.data_flags &= ~NRF_MODEM_GNSS_AGNSS_GPS_SYS_TIME_AND_SV_TOW_REQUEST;
 	}
 
-	if (remainder.data_flags & NRF_MODEM_GNSS_AGPS_SYS_TIME_AND_SV_TOW_REQUEST) {
+	if (remainder.data_flags & NRF_MODEM_GNSS_AGNSS_GPS_SYS_TIME_AND_SV_TOW_REQUEST) {
 		struct pgps_sys_time sys_time;
 		uint16_t day;
 		uint32_t sec;
 
-		sys_time.schema_version = NRF_CLOUD_AGPS_BIN_SCHEMA_VERSION;
-		sys_time.type = NRF_CLOUD_AGPS_GPS_SYSTEM_CLOCK;
+		sys_time.schema_version = NRF_CLOUD_AGNSS_BIN_SCHEMA_VERSION;
+		sys_time.type = NRF_CLOUD_AGNSS_GPS_SYSTEM_CLOCK;
 		sys_time.count = 1;
 		sys_time.time.time_frac_ms = 0;
 		sys_time.time.sv_mask = 0;
@@ -1030,7 +1034,7 @@ int nrf_cloud_pgps_inject(struct nrf_cloud_pgps_prediction *p,
 				day, sec);
 
 			/* send time */
-			err = nrf_cloud_agps_process((const char *)&sys_time,
+			err = nrf_cloud_agnss_process((const char *)&sys_time,
 						     sizeof(sys_time) -
 						     sizeof(sys_time.time.sv_tow) + 4);
 			if (err) {
@@ -1049,12 +1053,12 @@ int nrf_cloud_pgps_inject(struct nrf_cloud_pgps_prediction *p,
 
 	const struct gps_location *saved_location = npgps_get_saved_location();
 
-	if (remainder.data_flags & NRF_MODEM_GNSS_AGPS_POSITION_REQUEST &&
+	if (remainder.data_flags & NRF_MODEM_GNSS_AGNSS_POSITION_REQUEST &&
 	    saved_location->gps_sec) {
 		struct pgps_location location;
 
-		location.schema_version = NRF_CLOUD_AGPS_BIN_SCHEMA_VERSION;
-		location.type = NRF_CLOUD_AGPS_LOCATION;
+		location.schema_version = NRF_CLOUD_AGNSS_BIN_SCHEMA_VERSION;
+		location.type = NRF_CLOUD_AGNSS_LOCATION;
 		location.count = 1;
 		location.location.latitude = saved_location->latitude;
 		location.location.longitude = saved_location->longitude;
@@ -1070,24 +1074,24 @@ int nrf_cloud_pgps_inject(struct nrf_cloud_pgps_prediction *p,
 			saved_location->longitude);
 		/* send location */
 
-		err = nrf_cloud_agps_process((const char *)&location, sizeof(location));
+		err = nrf_cloud_agnss_process((const char *)&location, sizeof(location));
 		if (err) {
 			LOG_ERR("Error injecting P-GPS location (%d, %d): %d",
 				location.location.latitude, location.location.longitude,
 				err);
 			ret = err;
 		}
-	} else if (remainder.data_flags & NRF_MODEM_GNSS_AGPS_POSITION_REQUEST) {
+	} else if (remainder.data_flags & NRF_MODEM_GNSS_AGNSS_POSITION_REQUEST) {
 		LOG_WRN("GPS unit needs location, but it is unknown!");
 	} else {
 		LOG_DBG("GPS unit does not need location assistance.");
 	}
 
-	if (remainder.sv_mask_ephe) {
+	if (remainder.system[0].sv_mask_ephe) {
 		LOG_INF("GPS unit needs ephemerides. Injecting %u.", p->ephemeris_count);
 
 		/* send ephemerii */
-		err = nrf_cloud_agps_process((const char *)&p->schema_version,
+		err = nrf_cloud_agnss_process((const char *)&p->schema_version,
 					     sizeof(p->schema_version) +
 					     sizeof(p->ephemeris_type) +
 					     sizeof(p->ephemeris_count) +
@@ -1218,7 +1222,7 @@ static int store_prediction(uint8_t *p, size_t len, uint32_t sentinel, bool last
 	static bool first = true;
 	static uint8_t pad[PGPS_PREDICTION_PAD];
 	int err;
-	uint8_t schema = NRF_CLOUD_AGPS_BIN_SCHEMA_VERSION;
+	uint8_t schema = NRF_CLOUD_AGNSS_BIN_SCHEMA_VERSION;
 	size_t schema_offset = ((size_t) &((struct nrf_cloud_pgps_prediction *)0)->schema_version);
 
 	if (first) {
@@ -1384,11 +1388,11 @@ static void cache_pgps_header(const struct nrf_cloud_pgps_header *header)
 			(int64_t)index.period_sec * index.header.prediction_count;
 }
 
-static size_t get_next_pgps_element(struct nrf_cloud_apgs_element *element,
+static size_t get_next_pgps_element(struct nrf_cloud_agnss_element *element,
 				    const char *buf)
 {
 	static uint16_t elements_left_to_process;
-	static enum nrf_cloud_agps_type element_type;
+	static enum nrf_cloud_agnss_type element_type;
 	size_t len = 0;
 
 	/* Check if there are more elements left in the array to process.
@@ -1396,27 +1400,27 @@ static size_t get_next_pgps_element(struct nrf_cloud_apgs_element *element,
 	 * each element.
 	 */
 	if (elements_left_to_process == 0) {
-		element->type = (enum nrf_cloud_agps_type)
-				buf[NRF_CLOUD_AGPS_BIN_TYPE_OFFSET];
+		element->type = (enum nrf_cloud_agnss_type)
+				buf[NRF_CLOUD_AGNSS_BIN_TYPE_OFFSET];
 		element_type = element->type;
 		elements_left_to_process =
-			*(uint16_t *)&buf[NRF_CLOUD_AGPS_BIN_COUNT_OFFSET] - 1;
-		len += NRF_CLOUD_AGPS_BIN_TYPE_SIZE +
-			NRF_CLOUD_AGPS_BIN_COUNT_SIZE;
+			*(uint16_t *)&buf[NRF_CLOUD_AGNSS_BIN_COUNT_OFFSET] - 1;
+		len += NRF_CLOUD_AGNSS_BIN_TYPE_SIZE +
+			NRF_CLOUD_AGNSS_BIN_COUNT_SIZE;
 	} else {
 		element->type = element_type;
 		elements_left_to_process -= 1;
 	}
 
 	switch (element->type) {
-	case NRF_CLOUD_AGPS_EPHEMERIDES:
-		element->ephemeris = (struct nrf_cloud_agps_ephemeris *)(buf + len);
-		len += sizeof(struct nrf_cloud_agps_ephemeris);
+	case NRF_CLOUD_AGNSS_GPS_EPHEMERIDES:
+		element->ephemeris = (struct nrf_cloud_agnss_ephemeris *)(buf + len);
+		len += sizeof(struct nrf_cloud_agnss_ephemeris);
 		break;
-	case NRF_CLOUD_AGPS_GPS_SYSTEM_CLOCK:
+	case NRF_CLOUD_AGNSS_GPS_SYSTEM_CLOCK:
 		element->time_and_tow =
-			(struct nrf_cloud_agps_system_time *)(buf + len);
-		len += sizeof(struct nrf_cloud_agps_system_time) -
+			(struct nrf_cloud_agnss_system_time *)(buf + len);
+		len += sizeof(struct nrf_cloud_agnss_system_time) -
 			sizeof(element->time_and_tow->sv_tow) + 4;
 		break;
 	default:
@@ -1432,10 +1436,10 @@ static size_t get_next_pgps_element(struct nrf_cloud_apgs_element *element,
 
 static int consume_pgps_data(uint8_t pnum, const char *buf, size_t buf_len)
 {
-	struct nrf_cloud_apgs_element element = {};
+	struct nrf_cloud_agnss_element element = {};
 	uint8_t *prediction_ptr = (uint8_t *)buf;
 	uint8_t *element_ptr = prediction_ptr;
-	struct agps_header *elem = (struct agps_header *)element_ptr;
+	struct agnss_header *elem = (struct agnss_header *)element_ptr;
 	size_t parsed_len = 0;
 	int64_t gps_sec;
 	bool finished = false;
@@ -1455,14 +1459,14 @@ static int consume_pgps_data(uint8_t pnum, const char *buf, size_t buf_len)
 			break;
 		}
 		switch (element.type) {
-		case NRF_CLOUD_AGPS_GPS_SYSTEM_CLOCK:
+		case NRF_CLOUD_AGNSS_GPS_SYSTEM_CLOCK:
 			gps_sec = npgps_gps_day_time_to_sec(element.time_and_tow->date_day,
 							    element.time_and_tow->time_full_s);
 			break;
-		case NRF_CLOUD_AGPS_EPHEMERIDES:
+		case NRF_CLOUD_AGNSS_GPS_EPHEMERIDES:
 			/* check for all zeros except first byte (sv_id) */
 			empty = true;
-			for (int i = 1; i < sizeof(struct nrf_cloud_agps_ephemeris); i++) {
+			for (int i = 1; i < sizeof(struct nrf_cloud_agnss_ephemeris); i++) {
 				if (element_ptr[i] != 0) {
 					empty = false;
 					break;
@@ -1696,13 +1700,13 @@ int nrf_cloud_pgps_init(struct nrf_cloud_pgps_init_param *param)
 			return -ENOMEM;
 		}
 #if PGPS_DEBUG
-		agps_print_enable(true);
+		agnss_print_enable(true);
 
-		LOG_DBG("agps_system_time size:%u, "
-			"agps_ephemeris size:%u, "
+		LOG_DBG("agnss_system_time size:%u, "
+			"agnss_ephemeris size:%u, "
 			"prediction struct size:%u",
 			sizeof(struct nrf_cloud_pgps_system_time),
-			sizeof(struct nrf_cloud_agps_ephemeris),
+			sizeof(struct nrf_cloud_agnss_ephemeris),
 			sizeof(struct nrf_cloud_pgps_prediction));
 #endif
 	}

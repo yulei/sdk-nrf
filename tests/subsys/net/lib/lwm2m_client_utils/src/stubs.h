@@ -56,13 +56,11 @@ DECLARE_FAKE_VALUE_FUNC(int, lte_lc_func_mode_get, enum lte_lc_func_mode *);
 DECLARE_FAKE_VALUE_FUNC(int, lte_lc_ptw_set, enum lte_lc_lte_mode, const char *);
 DECLARE_FAKE_VALUE_FUNC(int, lte_lc_psm_param_set, const char *, const char *);
 DECLARE_FAKE_VALUE_FUNC(int, lte_lc_psm_req, bool);
-DECLARE_FAKE_VALUE_FUNC(int, lte_lc_rai_param_set, const char *);
-DECLARE_FAKE_VALUE_FUNC(int, lte_lc_rai_req, bool);
 DECLARE_FAKE_VALUE_FUNC(int, lte_lc_edrx_param_set, enum lte_lc_lte_mode, const char *);
 DECLARE_FAKE_VALUE_FUNC(int, lte_lc_edrx_req, bool);
 DECLARE_FAKE_VALUE_FUNC(int, lte_lc_neighbor_cell_measurement, struct lte_lc_ncellmeas_params *);
 DECLARE_FAKE_VOID_FUNC(lte_lc_register_handler, lte_lc_evt_handler_t);
-DECLARE_FAKE_VALUE_FUNC(int, nrf_cloud_agps_process, const char *, size_t);
+DECLARE_FAKE_VALUE_FUNC(int, nrf_cloud_agnss_process, const char *, size_t);
 DECLARE_FAKE_VALUE_FUNC(int, nrf_cloud_pgps_begin_update);
 DECLARE_FAKE_VALUE_FUNC(int, nrf_cloud_pgps_process_update, uint8_t *, size_t);
 DECLARE_FAKE_VALUE_FUNC(int, nrf_cloud_pgps_finish_update);
@@ -103,6 +101,7 @@ DECLARE_FAKE_VALUE_FUNC(int, at_params_unsigned_short_get, const struct at_param
 DECLARE_FAKE_VALUE_FUNC_VARARG(int, nrf_modem_at_cmd_async, nrf_modem_at_resp_handler_t,
 			       const char *, ...);
 DECLARE_FAKE_VALUE_FUNC(int, at_params_list_init, struct at_param_list *, size_t);
+DECLARE_FAKE_VALUE_FUNC(int, z_impl_zsock_setsockopt, int, int, int, const void *, socklen_t);
 
 /* List of fakes used by this unit tester */
 #define DO_FOREACH_FAKE(FUNC) do { \
@@ -146,13 +145,11 @@ DECLARE_FAKE_VALUE_FUNC(int, at_params_list_init, struct at_param_list *, size_t
 	FUNC(lte_lc_ptw_set)                            \
 	FUNC(lte_lc_psm_param_set)                      \
 	FUNC(lte_lc_psm_req)                            \
-	FUNC(lte_lc_rai_param_set)                      \
-	FUNC(lte_lc_rai_req)                            \
 	FUNC(lte_lc_edrx_param_set)                     \
 	FUNC(lte_lc_edrx_req)                           \
 	FUNC(lte_lc_neighbor_cell_measurement)          \
 	FUNC(lte_lc_register_handler)                   \
-	FUNC(nrf_cloud_agps_process)			\
+	FUNC(nrf_cloud_agnss_process)			\
 	FUNC(nrf_cloud_pgps_begin_update)		\
 	FUNC(nrf_cloud_pgps_process_update)		\
 	FUNC(nrf_cloud_pgps_finish_update)		\
@@ -175,6 +172,7 @@ DECLARE_FAKE_VALUE_FUNC(int, at_params_list_init, struct at_param_list *, size_t
 	FUNC(at_params_unsigned_short_get)              \
 	FUNC(nrf_modem_at_cmd_async)                    \
 	FUNC(at_params_list_init)                       \
+	FUNC(z_impl_zsock_setsockopt)                   \
 	} while (0)
 
 #endif

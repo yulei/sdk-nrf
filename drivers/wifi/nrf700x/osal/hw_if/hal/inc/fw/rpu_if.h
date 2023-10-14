@@ -179,6 +179,7 @@ static const struct rpu_addr_map RPU_ADDR_MAP_MCU[] = {
 #define RPU_MEM_HPQ_INFO 0xB0000024
 #define RPU_MEM_TX_CMD_BASE 0xB00000B8
 #define RPU_MEM_OTP_INFO 0xB000005C
+#define RPU_MEM_OTP_FT_PROG_VERSION 0xB0004FD8
 #define RPU_MEM_OTP_INFO_FLAGS 0xB0004FDC
 #define RPU_MEM_LMAC_IF_INFO 0xB0004FE0
 
@@ -214,8 +215,7 @@ static const struct rpu_addr_map RPU_ADDR_MAP_MCU[] = {
 
 /* REGION PROTECT : OTP Address offsets (word offsets) */
 #define REGION_PROTECT 64
-#define PRODTEST_FT_PROGVERSION1 28
-#define PRODTEST_FT_PROGVERSION2 29
+#define PRODTEST_FT_PROGVERSION 29
 #define PRODTEST_TRIM0 32
 #define PRODTEST_TRIM1 33
 #define PRODTEST_TRIM2 34
@@ -232,6 +232,9 @@ static const struct rpu_addr_map RPU_ADDR_MAP_MCU[] = {
 #define PRODTEST_TRIM13 45
 #define PRODTEST_TRIM14 46
 #define PRODCTRL_DISABLE5GHZ 47
+#define INFO_PART 48
+#define INFO_VARIANT 49
+#define INFO_UUID 52
 #define QSPI_KEY 68
 #define MAC0_ADDR 72
 #define MAC1_ADDR 74
@@ -245,8 +248,25 @@ static const struct rpu_addr_map RPU_ADDR_MAP_MCU[] = {
 #define CALIB_TXPOWBACKOFFT 83
 #define CALIB_TXPOWBACKOFFV 84
 #define REGION_DEFAULTS 85
+#define PRODRETEST_PROGVERSION 86
+#define PRODRETEST_TRIM0 87
+#define PRODRETEST_TRIM1 88
+#define PRODRETEST_TRIM2 89
+#define PRODRETEST_TRIM3 90
+#define PRODRETEST_TRIM4 91
+#define PRODRETEST_TRIM5 92
+#define PRODRETEST_TRIM6 93
+#define PRODRETEST_TRIM7 94
+#define PRODRETEST_TRIM8 95
+#define PRODRETEST_TRIM9 96
+#define PRODRETEST_TRIM10 97
+#define PRODRETEST_TRIM11 98
+#define PRODRETEST_TRIM12 99
+#define PRODRETEST_TRIM13 100
+#define PRODRETEST_TRIM14 101
 #define OTP_MAX_WORD_LEN 128
 #define QSPI_KEY_LENGTH_BYTES 16
+#define RETRIM_LEN 15
 
 /* Size of OTP fields in bytes */
 #define OTP_SZ_CALIB_XO 1
@@ -327,6 +347,7 @@ static const struct rpu_addr_map RPU_ADDR_MAP_MCU[] = {
 #define OTP_ENABLE_PATTERN 0x50FA50FA
 #define OTP_INVALID 0xDEADBEEF
 
+#define FT_PROG_VER_MASK 0xF0000
 
 /**
  * struct nrf_wifi_rpu_pwr_data - Data that host may want to read from the Power IP.

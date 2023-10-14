@@ -102,6 +102,7 @@ static void supp_shell_connect_status(struct k_work *work)
 {
 	static int seconds_counter;
 	int status = CONNECTION_SUCCESS;
+	int conn_result = CONNECTION_FAILURE;
 	struct wpa_supplicant *wpa_s;
 	struct wpa_supp_api_ctrl *ctrl = &wpa_supp_api_ctrl;
 
@@ -120,14 +121,18 @@ static void supp_shell_connect_status(struct k_work *work)
 
 	if (ctrl->requested_op == CONNECT && wpa_s->wpa_state != WPA_COMPLETED) {
 		if (ctrl->connection_timeout > 0 && seconds_counter++ > ctrl->connection_timeout) {
+			wpa_printf(MSG_ERROR, "Connection timed out, timeout: %d seconds",
+				ctrl->connection_timeout);
 			_wpa_cli_cmd_v("disconnect");
+			conn_result = -ETIMEDOUT;
 			send_wifi_mgmt_event(wpa_s->ifname, NET_EVENT_WIFI_CMD_CONNECT_RESULT,
-				-ETIMEDOUT);
+					     (void *)&conn_result, sizeof(int));
 			status = CONNECTION_FAILURE;
 			goto out;
 		}
 
-		k_work_reschedule(&wpa_supp_status_work, K_SECONDS(OP_STATUS_POLLING_INTERVAL));
+		k_work_reschedule_for_queue(&z_wpas_wq, &wpa_supp_status_work,
+			K_SECONDS(OP_STATUS_POLLING_INTERVAL));
 		ctrl->status_thread_state = STATUS_THREAD_RUNNING;
 		k_mutex_unlock(&wpa_supplicant_mutex);
 		return;
@@ -148,7 +153,7 @@ static inline void wpa_supp_restart_status_work(void)
 	wpa_supp_api_ctrl.terminate = 0;
 
 	/* Start afresh */
-	k_work_reschedule(&wpa_supp_status_work,
+	k_work_reschedule_for_queue(&z_wpas_wq, &wpa_supp_status_work,
 		K_MSEC(10));
 }
 
@@ -283,12 +288,12 @@ int z_wpa_supplicant_connect(const struct device *dev,
 				params->channel);
 			goto out;
 		}
-		z_wpa_cli_cmd_v("set_network %d scan_freq %d",
+		_wpa_cli_cmd_v("set_network %d scan_freq %d",
 			resp.network_id, freq);
 	}
+
 	_wpa_cli_cmd_v("select_network %d", resp.network_id);
 
-	z_wpa_cli_cmd_v("select_network %d", resp.network_id);
 	wpa_supp_api_ctrl.dev = dev;
 	wpa_supp_api_ctrl.requested_op = CONNECT;
 	wpa_supp_api_ctrl.connection_timeout = params->timeout;
@@ -544,4 +549,44 @@ int z_wpa_supplicant_reg_domain(const struct device *dev,
 	}
 
 	return wifi_mgmt_api->reg_domain(dev, reg_domain);
+}
+
+int z_wpa_supplicant_mode(const struct device *dev,
+			  struct wifi_mode_info *mode)
+{
+	const struct wifi_mgmt_ops *const wifi_mgmt_api = get_wifi_mgmt_api(dev);
+
+	if (!wifi_mgmt_api || !wifi_mgmt_api->mode) {
+		wpa_printf(MSG_ERROR, "Setting mode not supported");
+		return -ENOTSUP;
+	}
+
+	wpa_printf(MSG_ERROR, "wpa supplicant mode setting being invoked");
+	return wifi_mgmt_api->mode(dev, mode);
+}
+
+int z_wpa_supplicant_filter(const struct device *dev,
+			    struct wifi_filter_info *filter)
+{
+	const struct wifi_mgmt_ops *const wifi_mgmt_api = get_wifi_mgmt_api(dev);
+
+	if (!wifi_mgmt_api || !wifi_mgmt_api->filter) {
+		wpa_printf(MSG_ERROR, "Setting filter not supported");
+		return -ENOTSUP;
+	}
+
+	return wifi_mgmt_api->filter(dev, filter);
+}
+
+int z_wpa_supplicant_channel(const struct device *dev,
+			     struct wifi_channel_info *channel)
+{
+	const struct wifi_mgmt_ops *const wifi_mgmt_api = get_wifi_mgmt_api(dev);
+
+	if (!wifi_mgmt_api || !wifi_mgmt_api->channel) {
+		wpa_printf(MSG_ERROR, "Setting channel not supported");
+		return -ENOTSUP;
+	}
+
+	return wifi_mgmt_api->channel(dev, channel);
 }

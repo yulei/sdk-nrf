@@ -3,7 +3,7 @@
 /*
  * Copyright (c) 2015-2016 Intel Corporation
  *
- * SPDX-License-Identifier: Apache-2.0
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
 #include <zephyr/sys/util.h>
@@ -145,6 +145,7 @@ struct mesh_provision_node_cmd {
 
 #define MESH_INIT			0x04
 #define MESH_RESET			0x05
+#define MESH_START			0x78
 
 /* events */
 #define MESH_EV_OUT_NUMBER_ACTION	0x80

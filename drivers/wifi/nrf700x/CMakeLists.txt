@@ -72,6 +72,7 @@ zephyr_library_sources_ifndef(CONFIG_NRF700X_RADIO_TEST
 
 zephyr_library_sources_ifdef(CONFIG_NRF700X_RADIO_TEST
 	osal/fw_if/umac_if/src/radio_test/fmac_api.c
+	osal/fw_if/umac_if/src/fmac_util.c
 )
 
 zephyr_library_sources_ifdef(CONFIG_NRF700X_DATA_TX
@@ -114,3 +115,10 @@ if (CONFIG_NRF_WIFI_PATCHES_EXT_FLASH)
 # Run patches from the external flash (XIP). No need to copy.
 zephyr_code_relocate(FILES zephyr/src/zephyr_fw_load.c LOCATION EXTFLASH_RODATA NOCOPY)
 endif()
+
+# These are XIP related anomalies and aren't applicable for nRF7002 and cause
+# throughput issues.
+zephyr_compile_definitions_ifdef(CONFIG_NRF700X_ON_QSPI
+	-DNRF53_ERRATA_43_ENABLE_WORKAROUND=0
+	-DNRF52_ERRATA_215_ENABLE_WORKAROUND=0
+)

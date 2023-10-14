@@ -312,8 +312,8 @@ static int gen_provisioning_url(struct rest_client_req_context *const req)
 {
 	char *url;
 	size_t buff_sz;
-	char *rx_buf_sz = STRINGIFY(CONFIG_NRF_PROVISIONING_HTTP_RX_BUF_SZ);
-	char *tx_buf_sz = STRINGIFY(CONFIG_NRF_PROVISIONING_HTTP_TX_BUF_SZ);
+	char *rx_buf_sz = STRINGIFY(CONFIG_NRF_PROVISIONING_RX_BUF_SZ);
+	char *tx_buf_sz = STRINGIFY(CONFIG_NRF_PROVISIONING_TX_BUF_SZ);
 	char mver[128];
 	char *cver = STRINGIFY(1);
 	int ret;
@@ -454,10 +454,10 @@ int nrf_provisioning_http_req(struct nrf_provisioning_http_context *const rest_c
 
 	/* Only one provisioning ongoing at a time*/
 	static union {
-		char http[CONFIG_NRF_PROVISIONING_HTTP_TX_BUF_SZ];
+		char http[CONFIG_NRF_PROVISIONING_TX_BUF_SZ];
 		char at[CONFIG_NRF_PROVISIONING_CODEC_AT_CMD_LEN];
 	} tx_buf;
-	static char rx_buf[CONFIG_NRF_PROVISIONING_HTTP_RX_BUF_SZ];
+	static char rx_buf[CONFIG_NRF_PROVISIONING_RX_BUF_SZ];
 
 	char *auth_hdr = NULL;
 	struct rest_client_req_context req;
@@ -496,6 +496,7 @@ int nrf_provisioning_http_req(struct nrf_provisioning_http_context *const rest_c
 
 		print_req_info(&req, sizeof(headers) / sizeof(*headers) - 1);
 
+		LOG_INF("Requesting commands");
 		ret = rest_client_request(&req, &resp);
 		k_free(auth_hdr);
 		auth_hdr = NULL;
@@ -543,6 +544,7 @@ int nrf_provisioning_http_req(struct nrf_provisioning_http_context *const rest_c
 			cdc_ctx.opkt = tx_buf.http;
 			cdc_ctx.opkt_sz = sizeof(tx_buf);
 
+			LOG_INF("Processing commands");
 			ret = nrf_provisioning_codec_process_commands();
 			if (ret < 0) {
 				break;
@@ -551,6 +553,7 @@ int nrf_provisioning_http_req(struct nrf_provisioning_http_context *const rest_c
 				finished = true;
 			}
 
+			LOG_INF("Sending response to server");
 			ret = nrf_provisioning_responses_req(rest_ctx, &req, &resp, &cdc_ctx);
 			if (ret < 0) {
 				finished = false;

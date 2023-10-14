@@ -23,6 +23,8 @@ LOG_MODULE_REGISTER(slm_uart_handler, CONFIG_SLM_LOG_LEVEL);
 
 #define SLM_SYNC_STR	"Ready\r\n"
 
+uint32_t slm_uart_baudrate;
+
 static const struct device *uart_dev = DEVICE_DT_GET(DT_CHOSEN(ncs_slm_uart));
 
 static struct k_work_delayable rx_process_work;
@@ -61,10 +63,6 @@ static atomic_t recovery_state;
 K_SEM_DEFINE(tx_done_sem, 0, 1);
 
 slm_uart_rx_callback_t rx_callback_t;
-
-/* global variable defined in different files */
-extern bool uart_configured;
-extern struct uart_config slm_uart;
 
 /* global functions defined in different files */
 int indicate_start(void);
@@ -114,7 +112,7 @@ static void rx_buf_unref(void *buf)
 
 	/* ref_counter is the uart_buf->ref_counter value prior to decrement */
 	if (ref_counter == 1) {
-		k_mem_slab_free(&rx_slab, (void **)&uart_buf);
+		k_mem_slab_free(&rx_slab, (void *)uart_buf);
 	}
 }
 
@@ -293,7 +291,7 @@ static void uart_callback(const struct device *dev, struct uart_event *evt, void
 	}
 }
 
-int poweron_uart(void)
+int slm_uart_power_on(void)
 {
 	int err;
 
@@ -317,7 +315,7 @@ int poweron_uart(void)
 	return 0;
 }
 
-int poweroff_uart(void)
+int slm_uart_power_off(void)
 {
 	int err;
 
@@ -328,39 +326,37 @@ int poweroff_uart(void)
 	}
 
 	/* Write sync str to buffer, so it is send first when we power UART.*/
-	(void)slm_uart_tx_write(SLM_SYNC_STR, sizeof(SLM_SYNC_STR)-1);
+	(void)slm_uart_tx_write(SLM_SYNC_STR, sizeof(SLM_SYNC_STR)-1, true);
 
 	return err;
 }
 
-int slm_uart_configure(void)
+bool slm_uart_can_context_send(const uint8_t *data, size_t len)
 {
-	int err;
-
-	LOG_DBG("Set UART baudrate to: %d", slm_uart.baudrate);
-
-	err = uart_configure(uart_dev, &slm_uart);
-	if (err != 0) {
-		LOG_ERR("uart_configure: %d", err);
+	if (!k_is_in_isr()) {
+		return true;
 	}
-
-	return err;
+	LOG_ERR("FIXME: Attempt to send UART message (of size %u) in ISR.", len);
+	return false;
 }
 
 /* Write the data to tx_buffer and trigger sending. */
-int slm_uart_tx_write(const uint8_t *data, size_t len)
+int slm_uart_tx_write(const uint8_t *data, size_t len, bool print_full_debug)
 {
 	size_t ret;
 	size_t sent = 0;
 	int err;
 
+	if (!slm_uart_can_context_send(data, len)) {
+		return -EINTR;
+	}
 	k_mutex_lock(&mutex_tx_put, K_FOREVER);
 	while (sent < len) {
 		ret = ring_buf_put(&tx_buf, data + sent, len - sent);
 		if (ret) {
 			sent += ret;
 		} else {
-			/* Buffer full, block and and start TX. */
+			/* Buffer full, block and start TX. */
 			k_sem_take(&tx_done_sem, K_FOREVER);
 			err = tx_start();
 			if (err) {
@@ -389,6 +385,8 @@ int slm_uart_tx_write(const uint8_t *data, size_t len)
 		/* TX already in progress. */
 	}
 
+	LOG_HEXDUMP_DBG(data, print_full_debug ? len : MIN(HEXDUMP_LIMIT, len), "TX");
+
 	return 0;
 }
 
@@ -396,35 +394,22 @@ int slm_uart_handler_init(slm_uart_rx_callback_t callback_t)
 {
 	int err;
 	uint32_t start_time;
+	struct uart_config cfg;
 
 	if (!device_is_ready(uart_dev)) {
 		LOG_ERR("UART device not ready");
 		return -ENODEV;
 	}
-	/* Save UART configuration to setting page */
-	if (!uart_configured) {
-		uart_configured = true;
-		err = uart_config_get(uart_dev, &slm_uart);
-		if (err != 0) {
-			LOG_ERR("uart_config_get: %d", err);
-			return err;
-		}
-		err = slm_settings_uart_save();
-		if (err != 0) {
-			LOG_ERR("slm_settings_uart_save: %d", err);
-			return err;
-		}
-	} else {
-		/* else re-config UART based on setting page */
-		err = slm_uart_configure();
-		if (err != 0) {
-			LOG_ERR("Fail to set UART baudrate: %d", err);
-			return err;
-		}
+
+	err = uart_config_get(uart_dev, &cfg);
+	if (err) {
+		LOG_ERR("uart_config_get: %d", err);
+		return err;
 	}
+	slm_uart_baudrate = cfg.baudrate;
 	LOG_INF("UART baud: %d d/p/s-bits: %d/%d/%d HWFC: %d",
-		slm_uart.baudrate, slm_uart.data_bits, slm_uart.parity,
-		slm_uart.stop_bits, slm_uart.flow_ctrl);
+		cfg.baudrate, cfg.data_bits, cfg.parity,
+		cfg.stop_bits, cfg.flow_ctrl);
 
 	/* Wait for the UART line to become valid */
 	start_time = k_uptime_get_32();
@@ -456,7 +441,7 @@ int slm_uart_handler_init(slm_uart_rx_callback_t callback_t)
 
 	k_sem_give(&tx_done_sem);
 
-	err = slm_uart_tx_write(SLM_SYNC_STR, sizeof(SLM_SYNC_STR)-1);
+	err = slm_uart_tx_write(SLM_SYNC_STR, sizeof(SLM_SYNC_STR)-1, true);
 	if (err) {
 		return err;
 	}

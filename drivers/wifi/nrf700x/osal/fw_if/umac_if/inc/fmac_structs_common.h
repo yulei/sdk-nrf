@@ -53,9 +53,9 @@ struct rpu_op_stats {
  * @brief Structure to hold FW patch information.
  *
  */
-struct wifi_nrf_fw_info {
+struct nrf_wifi_fw_info {
 	/** Pointer to the FW patch data. */
-	const void *data;
+	void *data;
 	/** Size of the FW patch data. */
 	unsigned int size;
 };
@@ -65,15 +65,15 @@ struct wifi_nrf_fw_info {
  * @brief Structure to hold FW patch information for LMAC and UMAC.
  *
  */
-struct wifi_nrf_fmac_fw_info {
+struct nrf_wifi_fmac_fw_info {
 	/** Primary LMAC FW patch information. */
-	struct wifi_nrf_fw_info lmac_patch_pri;
+	struct nrf_wifi_fw_info lmac_patch_pri;
 	/** Secondary LMAC FW patch information. */
-	struct wifi_nrf_fw_info lmac_patch_sec;
+	struct nrf_wifi_fw_info lmac_patch_sec;
 	/** Primary UMAC FW patch information. */
-	struct wifi_nrf_fw_info umac_patch_pri;
+	struct nrf_wifi_fw_info umac_patch_pri;
 	/** Secondary UMAC FW patch information. */
-	struct wifi_nrf_fw_info umac_patch_sec;
+	struct nrf_wifi_fw_info umac_patch_sec;
 };
 
 
@@ -81,7 +81,7 @@ struct wifi_nrf_fmac_fw_info {
  * @brief Structure to hold OTP region information.
  *
  */
-struct wifi_nrf_fmac_otp_info {
+struct nrf_wifi_fmac_otp_info {
 	/** OTP region information. */
 	struct host_rpu_umac_info info;
 	/** Flags indicating which OTP regions are valid. */
@@ -92,11 +92,53 @@ struct wifi_nrf_fmac_otp_info {
  * @brief Structure to hold Regulatory parameter data.
  *
  */
-struct wifi_nrf_fmac_reg_info {
+struct nrf_wifi_fmac_reg_info {
 	/** ISO IEC Country code. */
 	unsigned char alpha2[NRF_WIFI_COUNTRY_CODE_LEN];
 	 /** Forcefully set regulatory. */
 	bool force;
+};
+
+/**
+ * @brief Structure to hold common fmac priv parameter data.
+ *
+ */
+struct nrf_wifi_fmac_priv {
+	/** Handle to the OS abstraction layer. */
+	struct nrf_wifi_osal_priv *opriv;
+	/** Handle to the HAL layer. */
+	struct nrf_wifi_hal_priv *hpriv;
+	/** Data pointer to mode specific parameters */
+	char priv[];
+};
+
+/**
+ * @brief Structure to hold common fmac dev context parameter data.
+ *
+ */
+struct nrf_wifi_fmac_dev_ctx {
+	/** Handle to the FMAC IF abstraction layer. */
+	struct nrf_wifi_fmac_priv *fpriv;
+	/** Handle to the OS abstraction layer. */
+	void *os_dev_ctx;
+	/** Handle to the HAL layer. */
+	void *hal_dev_ctx;
+	/** Firmware statistics. */
+	struct rpu_fw_stats *fw_stats;
+	/** Firmware statistics requested. */
+	bool stats_req;
+	/** Firmware boot done. */
+	bool fw_boot_done;
+	/** Firmware init done. */
+	bool fw_init_done;
+	/** Firmware deinit done. */
+	bool fw_deinit_done;
+	/** Alpha2 valid. */
+	bool alpha2_valid;
+	/** Alpha2 country code, last byte is reserved for null character. */
+	unsigned char alpha2[3];
+	/** Data pointer to mode specific parameters */
+	char priv[];
 };
 /**
  * @}

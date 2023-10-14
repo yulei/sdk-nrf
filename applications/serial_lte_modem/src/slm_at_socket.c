@@ -9,6 +9,7 @@
 #include <string.h>
 #include <zephyr/net/socket.h>
 #include <zephyr/net/tls_credentials.h>
+#include <zephyr/net/net_ip.h>
 #include "slm_util.h"
 #include "slm_at_host.h"
 #include "slm_at_socket.h"
@@ -59,10 +60,6 @@ static struct slm_socket {
 static struct pollfd fds[SLM_MAX_SOCKET_COUNT];
 static struct slm_socket sock;
 
-/* global variable defined in different files */
-extern struct at_param_list at_param_list;
-extern uint8_t data_buf[SLM_MAX_MESSAGE_SIZE];
-
 /* forward declarations */
 #define SOCKET_SEND_TMO_SEC      30
 static int socket_poll(int sock_fd, int event, int timeout);
@@ -104,16 +101,16 @@ static int find_avail_socket(void)
 	return -ENOENT;
 }
 
-static int bind_to_device(uint16_t cid)
+static int bind_to_pdn(uint16_t cid)
 {
 	int ret = 0;
 
 	if (cid > 0) {
 		int cid_int = cid;
 
-		ret = setsockopt(sock.fd, SOL_SOCKET, SO_BINDTODEVICE, &cid_int, sizeof(int));
+		ret = setsockopt(sock.fd, SOL_SOCKET, SO_BINDTOPDN, &cid_int, sizeof(int));
 		if (ret < 0) {
-			LOG_ERR("SO_BINDTODEVICE error: %d", -errno);
+			LOG_ERR("SO_BINDTOPDN error: %d", -errno);
 		}
 	}
 
@@ -146,7 +143,7 @@ static int do_socket_open(void)
 
 	sock.fd = ret;
 	/* Explicitly bind to secondary PDP context if required */
-	ret = bind_to_device(sock.cid);
+	ret = bind_to_pdn(sock.cid);
 	if (ret) {
 		close(sock.fd);
 		return ret;
@@ -183,7 +180,7 @@ static int do_secure_socket_open(int peer_verify)
 	}
 	sock.fd = ret;
 	/* Explicitly bind to secondary PDP context if required */
-	ret = bind_to_device(sock.cid);
+	ret = bind_to_pdn(sock.cid);
 	if (ret) {
 		close(sock.fd);
 		return ret;
@@ -306,15 +303,12 @@ static int do_socket_close(void)
 
 static int do_socketopt_set(int option, int value)
 {
-	int ret = -ENOTSUP;
+	int ret = 0;
 
 	switch (option) {
-	case SO_BINDTODEVICE:
+	case SO_BINDTOPDN:
 	case SO_REUSEADDR:
 		ret = setsockopt(sock.fd, SOL_SOCKET, option, &value, sizeof(int));
-		if (ret < 0) {
-			LOG_ERR("setsockopt(%d) error: %d", option, -errno);
-		}
 		break;
 
 	case SO_RCVTIMEO:
@@ -323,20 +317,20 @@ static int do_socketopt_set(int option, int value)
 		socklen_t len = sizeof(struct timeval);
 
 		ret = setsockopt(sock.fd, SOL_SOCKET, option, &tmo, len);
-		if (ret < 0) {
-			LOG_ERR("setsockopt(%d) error: %d", option, -errno);
-		}
 	} break;
 
 	/** NCS extended socket options */
 	case SO_SILENCE_ALL:
+		ret = setsockopt(sock.fd, IPPROTO_ALL, option, &value, sizeof(int));
+		break;
 	case SO_IP_ECHO_REPLY:
+		ret = setsockopt(sock.fd, IPPROTO_IP, option, &value, sizeof(int));
+		break;
 	case SO_IPV6_ECHO_REPLY:
+		ret = setsockopt(sock.fd, IPPROTO_IPV6, option, &value, sizeof(int));
+		break;
 	case SO_TCP_SRV_SESSTIMEO:
-		ret = setsockopt(sock.fd, SOL_SOCKET, option, &value, sizeof(int));
-		if (ret < 0) {
-			LOG_ERR("setsockopt(%d) error: %d", option, -errno);
-		}
+		ret = setsockopt(sock.fd, IPPROTO_TCP, option, &value, sizeof(int));
 		break;
 
 	/* RAI-related */
@@ -346,19 +340,30 @@ static int do_socketopt_set(int option, int value)
 	case SO_RAI_ONGOING:
 	case SO_RAI_WAIT_MORE:
 		ret = setsockopt(sock.fd, SOL_SOCKET, option, NULL, 0);
-		if (ret < 0) {
-			LOG_ERR("setsockopt(%d) error: %d", option, -errno);
-		}
-		break;
-
-	case SO_PRIORITY:
-	case SO_TIMESTAMPING:
-		rsp_send("\r\n#XSOCKETOPT: \"not supported\"\r\n");
 		break;
 
 	default:
-		LOG_WRN("Unknown option %d", option);
+		ret = -ENOTSUP;
+		LOG_WRN("Unsupported option: %d", option);
 		break;
+	}
+
+	if (ret && ret != -ENOTSUP) {
+		LOG_ERR("setsockopt(%d) error: %d", option, -errno);
+	}
+
+	return ret;
+}
+
+static int do_sockopt_get_int(int level, int option)
+{
+	int ret;
+	int value;
+	socklen_t len = sizeof(int);
+
+	ret = getsockopt(sock.fd, level, option, &value, &len);
+	if (ret == 0) {
+		rsp_send("\r\n#XSOCKETOPT: %d\r\n", value);
 	}
 
 	return ret;
@@ -370,20 +375,20 @@ static int do_socketopt_get(int option)
 
 	switch (option) {
 	case SO_SILENCE_ALL:
+		ret = do_sockopt_get_int(IPPROTO_ALL, option);
+		break;
 	case SO_IP_ECHO_REPLY:
+		ret = do_sockopt_get_int(IPPROTO_IP, option);
+		break;
 	case SO_IPV6_ECHO_REPLY:
+		ret = do_sockopt_get_int(IPPROTO_IPV6, option);
+		break;
 	case SO_TCP_SRV_SESSTIMEO:
-	case SO_ERROR: {
-		int value;
-		socklen_t len = sizeof(int);
-
-		ret = getsockopt(sock.fd, SOL_SOCKET, option, &value, &len);
-		if (ret) {
-			LOG_ERR("getsockopt(%d) error: %d", option, -errno);
-		} else {
-			rsp_send("\r\n#XSOCKETOPT: %d\r\n", value);
-		}
-	} break;
+		ret = do_sockopt_get_int(IPPROTO_TCP, option);
+		break;
+	case SO_ERROR:
+		ret = do_sockopt_get_int(SOL_SOCKET, option);
+		break;
 
 	case SO_RCVTIMEO:
 	case SO_SNDTIMEO: {
@@ -391,21 +396,19 @@ static int do_socketopt_get(int option)
 		socklen_t len = sizeof(struct timeval);
 
 		ret = getsockopt(sock.fd, SOL_SOCKET, option, &tmo, &len);
-		if (ret) {
-			LOG_ERR("getsockopt(%d) error: %d", option, -errno);
-		} else {
-			rsp_send("\r\n#XSOCKETOPT: \"%ld sec\"\r\n", (long)tmo.tv_sec);
+		if (ret == 0) {
+			rsp_send("\r\n#XSOCKETOPT: %ld\r\n", (long)tmo.tv_sec);
 		}
 	} break;
 
-	case SO_TYPE:
-	case SO_PRIORITY:
-	case SO_PROTOCOL:
-		rsp_send("\r\n#XSOCKETOPT: \"not supported\"\r\n");
-		break;
-
 	default:
+		ret = -ENOTSUP;
+		LOG_WRN("Unsupported option: %d", option);
 		break;
+	}
+
+	if (ret && ret != -ENOTSUP) {
+		LOG_ERR("setsockopt(%d) error: %d", option, -errno);
 	}
 
 	return ret;
@@ -413,7 +416,7 @@ static int do_socketopt_get(int option)
 
 static int do_secure_socketopt_set_str(int option, const char *value)
 {
-	int ret = -ENOTSUP;
+	int ret = 0;
 
 	switch (option) {
 	case TLS_HOSTNAME:
@@ -425,15 +428,16 @@ static int do_secure_socketopt_set_str(int option, const char *value)
 		} else {
 			ret = setsockopt(sock.fd, SOL_TLS, option, value, strlen(value));
 		}
-		if (ret < 0) {
-			LOG_ERR("setsockopt(%d) error: %d", option, -errno);
-		}
 		break;
 
 	default:
-		rsp_send("\r\n#XSSOCKETOPT: \"not supported\"\r\n");
-		LOG_WRN("Unknown option %d", option);
+		ret = -ENOTSUP;
+		LOG_WRN("Unsupported option: %d", option);
 		break;
+	}
+
+	if (ret && ret != -ENOTSUP) {
+		LOG_ERR("setsockopt(%d) error: %d", option, -errno);
 	}
 
 	return ret;
@@ -441,7 +445,7 @@ static int do_secure_socketopt_set_str(int option, const char *value)
 
 static int do_secure_socketopt_set_int(int option, int value)
 {
-	int ret = -ENOTSUP;
+	int ret = 0;
 
 	switch (option) {
 	case TLS_PEER_VERIFY:
@@ -450,15 +454,19 @@ static int do_secure_socketopt_set_int(int option, int value)
 	case TLS_DTLS_HANDSHAKE_TIMEO:
 	case TLS_DTLS_CID:
 		ret = setsockopt(sock.fd, SOL_TLS, option, &value, sizeof(value));
-		if (ret < 0) {
+		if (ret) {
 			LOG_ERR("setsockopt(%d) error: %d", option, -errno);
 		}
 		break;
 
 	default:
-		rsp_send("\r\n#XSSOCKETOPT: \"not supported\"\r\n");
-		LOG_WRN("Unknown option %d", option);
+		ret = -ENOTSUP;
+		LOG_WRN("Unsupported option: %d", option);
 		break;
+	}
+
+	if (ret && ret != -ENOTSUP) {
+		LOG_ERR("setsockopt(%d) error: %d", option, -errno);
 	}
 
 	return ret;
@@ -466,28 +474,37 @@ static int do_secure_socketopt_set_int(int option, int value)
 
 static int do_secure_socketopt_get(int option)
 {
+	int ret = 0;
+	int value;
+	socklen_t len = sizeof(int);
+
 	switch (option) {
 	case TLS_CIPHERSUITE_USED: /* MFW >= 2.0.0 */
-	case TLS_DTLS_CID_STATUS:
+		ret = getsockopt(sock.fd, SOL_TLS, option, &value, &len);
+		if (ret == 0) {
+			rsp_send("\r\n#XSSOCKETOPT: 0x%x\r\n", value);
+		}
 		break;
+	case TLS_DTLS_CID_STATUS:
+	case TLS_PEER_VERIFY:
+	case TLS_SESSION_CACHE:
+	case TLS_DTLS_HANDSHAKE_TIMEO:
+		ret = getsockopt(sock.fd, SOL_TLS, option, &value, &len);
+		if (ret == 0) {
+			rsp_send("\r\n#XSSOCKETOPT: %d\r\n", value);
+		}
+		break;
+
 	default:
-		rsp_send("\r\n#XSSOCKETOPT: \"not supported\"\r\n");
-		return -1;
+		ret = -ENOTSUP;
+		LOG_WRN("Unsupported option: %d", option);
+		break;
 	}
 
-	int ret;
-	int value;
-	socklen_t len = sizeof(value);
-
-	ret = getsockopt(sock.fd, SOL_TLS, option, &value, &len);
-	if (ret) {
-		/* The modem doesn't distinguish between unsupported and
-		 * invalid arguments. EINVAL is returned in both cases.
-		 */
-		LOG_ERR("getsockopt(%d) error: %d", option, -errno);
-	} else {
-		rsp_send("\r\n#XSSOCKETOPT: %d\r\n", value);
+	if (ret && ret != -ENOTSUP) {
+		LOG_ERR("setsockopt(%d) error: %d", option, -errno);
 	}
+
 	return ret;
 }
 
@@ -726,7 +743,7 @@ static int do_recv(int timeout, int flags)
 	if (ret) {
 		return ret;
 	}
-	ret = recv(sockfd, (void *)data_buf, sizeof(data_buf), flags);
+	ret = recv(sockfd, (void *)slm_data_buf, sizeof(slm_data_buf), flags);
 	if (ret < 0) {
 		LOG_WRN("recv() error: %d", -errno);
 		return -errno;
@@ -742,7 +759,7 @@ static int do_recv(int timeout, int flags)
 		LOG_WRN("recv() return 0");
 	} else {
 		rsp_send("\r\n#XRECV: %d\r\n", ret);
-		data_send(data_buf, ret);
+		data_send(slm_data_buf, ret);
 		ret = 0;
 	}
 
@@ -840,7 +857,8 @@ static int do_recvfrom(int timeout, int flags)
 	if (ret) {
 		return ret;
 	}
-	ret = recvfrom(sock.fd, (void *)data_buf, sizeof(data_buf), flags, &remote, &addrlen);
+	ret = recvfrom(
+		sock.fd, (void *)slm_data_buf, sizeof(slm_data_buf), flags, &remote, &addrlen);
 	if (ret < 0) {
 		LOG_ERR("recvfrom() error: %d", -errno);
 		return -errno;
@@ -854,16 +872,21 @@ static int do_recvfrom(int timeout, int flags)
 		LOG_WRN("recvfrom() return 0");
 	} else {
 		char peer_addr[NET_IPV6_ADDR_LEN] = {0};
+		uint16_t peer_port = 0;
 
 		if (remote.sa_family == AF_INET) {
 			(void)inet_ntop(AF_INET, &((struct sockaddr_in *)&remote)->sin_addr,
-			    peer_addr, sizeof(peer_addr));
+					peer_addr, sizeof(peer_addr));
+			peer_port = ntohs(((struct sockaddr_in *)&remote)->sin_port);
+
 		} else if (remote.sa_family == AF_INET6) {
 			(void)inet_ntop(AF_INET6, &((struct sockaddr_in6 *)&remote)->sin6_addr,
-			    peer_addr, sizeof(peer_addr));
+					peer_addr, sizeof(peer_addr));
+			peer_port = ntohs(((struct sockaddr_in6 *)&remote)->sin6_port);
 		}
-		rsp_send("\r\n#XRECVFROM: %d,\"%s\"\r\n", ret, peer_addr);
-		data_send(data_buf, ret);
+
+		rsp_send("\r\n#XRECVFROM: %d,\"%s\",%d\r\n", ret, peer_addr, peer_port);
+		data_send(slm_data_buf, ret);
 	}
 
 	return 0;
@@ -945,11 +968,7 @@ static int socket_datamode_callback(uint8_t op, const uint8_t *data, int len, ui
 	return ret;
 }
 
-/**@brief handle AT#XSOCKET commands
- *  AT#XSOCKET=<op>[,<type>,<role>[,<cid>]]
- *  AT#XSOCKET?
- *  AT#XSOCKET=?
- */
+/* Handles AT#XSOCKET commands. */
 int handle_at_socket(enum at_cmd_type cmd_type)
 {
 	int err = -EINVAL;
@@ -957,7 +976,7 @@ int handle_at_socket(enum at_cmd_type cmd_type)
 
 	switch (cmd_type) {
 	case AT_CMD_TYPE_SET_COMMAND:
-		err = at_params_unsigned_short_get(&at_param_list, 1, &op);
+		err = at_params_unsigned_short_get(&slm_at_param_list, 1, &op);
 		if (err) {
 			return err;
 		}
@@ -967,17 +986,18 @@ int handle_at_socket(enum at_cmd_type cmd_type)
 				return -EINVAL;
 			}
 			INIT_SOCKET(sock);
-			err = at_params_unsigned_short_get(&at_param_list, 2, &sock.type);
+			err = at_params_unsigned_short_get(&slm_at_param_list, 2, &sock.type);
 			if (err) {
 				return err;
 			}
-			err = at_params_unsigned_short_get(&at_param_list, 3, &sock.role);
+			err = at_params_unsigned_short_get(&slm_at_param_list, 3, &sock.role);
 			if (err) {
 				return err;
 			}
 			sock.family = (op == AT_SOCKET_OPEN) ? AF_INET : AF_INET6;
-			if (at_params_valid_count_get(&at_param_list) > 4) {
-				err = at_params_unsigned_short_get(&at_param_list, 4, &sock.cid);
+			if (at_params_valid_count_get(&slm_at_param_list) > 4) {
+				err = at_params_unsigned_short_get(
+					&slm_at_param_list, 4, &sock.cid);
 				if (err) {
 					return err;
 				}
@@ -1015,11 +1035,7 @@ int handle_at_socket(enum at_cmd_type cmd_type)
 	return err;
 }
 
-/**@brief handle AT#XSOCKET commands
- *  AT#XSSOCKET=<op>[,<type>,<role>,<sec_tag>[,<peer_verify>[,<cid>]]]
- *  AT#XSSOCKET?
- *  AT#XSSOCKET=?
- */
+/* Handles AT#XSOCKET commands. */
 int handle_at_secure_socket(enum at_cmd_type cmd_type)
 {
 	int err = -EINVAL;
@@ -1027,7 +1043,7 @@ int handle_at_secure_socket(enum at_cmd_type cmd_type)
 
 	switch (cmd_type) {
 	case AT_CMD_TYPE_SET_COMMAND:
-		err = at_params_unsigned_short_get(&at_param_list, 1, &op);
+		err = at_params_unsigned_short_get(&slm_at_param_list, 1, &op);
 		if (err) {
 			return err;
 		}
@@ -1046,11 +1062,11 @@ int handle_at_secure_socket(enum at_cmd_type cmd_type)
 				return -EINVAL;
 			}
 			INIT_SOCKET(sock);
-			err = at_params_unsigned_short_get(&at_param_list, 2, &sock.type);
+			err = at_params_unsigned_short_get(&slm_at_param_list, 2, &sock.type);
 			if (err) {
 				return err;
 			}
-			err = at_params_unsigned_short_get(&at_param_list, 3, &sock.role);
+			err = at_params_unsigned_short_get(&slm_at_param_list, 3, &sock.role);
 			if (err) {
 				return err;
 			}
@@ -1061,20 +1077,21 @@ int handle_at_secure_socket(enum at_cmd_type cmd_type)
 			} else {
 				return -EINVAL;
 			}
-			err = at_params_unsigned_int_get(&at_param_list, 4, &sock.sec_tag);
+			err = at_params_unsigned_int_get(&slm_at_param_list, 4, &sock.sec_tag);
 			if (err) {
 				return err;
 			}
-			if (at_params_valid_count_get(&at_param_list) > 5) {
-				err = at_params_unsigned_short_get(&at_param_list, 5,
+			if (at_params_valid_count_get(&slm_at_param_list) > 5) {
+				err = at_params_unsigned_short_get(&slm_at_param_list, 5,
 								   &peer_verify);
 				if (err) {
 					return err;
 				}
 			}
 			sock.family = (op == AT_SOCKET_OPEN) ? AF_INET : AF_INET6;
-			if (at_params_valid_count_get(&at_param_list) > 6) {
-				err = at_params_unsigned_short_get(&at_param_list, 6, &sock.cid);
+			if (at_params_valid_count_get(&slm_at_param_list) > 6) {
+				err = at_params_unsigned_short_get(
+					&slm_at_param_list, 6, &sock.cid);
 				if (err) {
 					return err;
 				}
@@ -1113,11 +1130,7 @@ int handle_at_secure_socket(enum at_cmd_type cmd_type)
 	return err;
 }
 
-/**@brief handle AT#XSOCKETSELECT commands
- *  AT#XSOCKETSELECT=<fd>
- *  AT#XSOCKETSELECT?
- *  AT#XSOCKETSELECT=?
- */
+/* Handles AT#XSOCKETSELECT commands. */
 int handle_at_socket_select(enum at_cmd_type cmd_type)
 {
 	int err = 0;
@@ -1125,7 +1138,7 @@ int handle_at_socket_select(enum at_cmd_type cmd_type)
 
 	switch (cmd_type) {
 	case AT_CMD_TYPE_SET_COMMAND:
-		err = at_params_int_get(&at_param_list, 1, &fd);
+		err = at_params_int_get(&slm_at_param_list, 1, &fd);
 		if (err) {
 			return err;
 		}
@@ -1164,11 +1177,7 @@ int handle_at_socket_select(enum at_cmd_type cmd_type)
 
 }
 
-/**@brief handle AT#XSOCKETOPT commands
- *  AT#XSOCKETOPT=<op>,<name>[,<value>]
- *  AT#XSOCKETOPT? READ command not supported
- *  AT#XSOCKETOPT=?
- */
+/* Handles AT#XSOCKETOPT commands. */
 int handle_at_socketopt(enum at_cmd_type cmd_type)
 {
 	int err = -EINVAL;
@@ -1178,18 +1187,18 @@ int handle_at_socketopt(enum at_cmd_type cmd_type)
 
 	switch (cmd_type) {
 	case AT_CMD_TYPE_SET_COMMAND:
-		err = at_params_unsigned_short_get(&at_param_list, 1, &op);
+		err = at_params_unsigned_short_get(&slm_at_param_list, 1, &op);
 		if (err) {
 			return err;
 		}
-		err = at_params_unsigned_short_get(&at_param_list, 2, &name);
+		err = at_params_unsigned_short_get(&slm_at_param_list, 2, &name);
 		if (err) {
 			return err;
 		}
 		if (op == AT_SOCKETOPT_SET) {
 			/* some options don't require a value */
-			if (at_params_valid_count_get(&at_param_list) > 3) {
-				err = at_params_int_get(&at_param_list, 3, &value);
+			if (at_params_valid_count_get(&slm_at_param_list) > 3) {
+				err = at_params_int_get(&slm_at_param_list, 3, &value);
 				if (err) {
 					return err;
 				}
@@ -1212,11 +1221,7 @@ int handle_at_socketopt(enum at_cmd_type cmd_type)
 	return err;
 }
 
-/**@brief handle AT#XSSOCKETOPT commands
- *  AT#XSSOCKETOPT=<op>,<name>[,<value>]
- *  AT#XSSOCKETOPT? READ command not supported
- *  AT#XSSOCKETOPT=?
- */
+/* Handles AT#XSSOCKETOPT commands. */
 int handle_at_secure_socketopt(enum at_cmd_type cmd_type)
 {
 	int err = -EINVAL;
@@ -1230,11 +1235,11 @@ int handle_at_secure_socketopt(enum at_cmd_type cmd_type)
 			LOG_ERR("Not secure socket");
 			return err;
 		}
-		err = at_params_unsigned_short_get(&at_param_list, 1, &op);
+		err = at_params_unsigned_short_get(&slm_at_param_list, 1, &op);
 		if (err) {
 			return err;
 		}
-		err = at_params_unsigned_short_get(&at_param_list, 2, &name);
+		err = at_params_unsigned_short_get(&slm_at_param_list, 2, &name);
 		if (err) {
 			return err;
 		}
@@ -1243,15 +1248,15 @@ int handle_at_secure_socketopt(enum at_cmd_type cmd_type)
 			char value_str[SLM_MAX_URL] = {0};
 			int size = SLM_MAX_URL;
 
-			type = at_params_type_get(&at_param_list, 3);
+			type = at_params_type_get(&slm_at_param_list, 3);
 			if (type == AT_PARAM_TYPE_NUM_INT) {
-				err = at_params_int_get(&at_param_list, 3, &value_int);
+				err = at_params_int_get(&slm_at_param_list, 3, &value_int);
 				if (err) {
 					return err;
 				}
 				err = do_secure_socketopt_set_int(name, value_int);
 			} else if (type == AT_PARAM_TYPE_STRING) {
-				err = util_string_get(&at_param_list, 3, value_str, &size);
+				err = util_string_get(&slm_at_param_list, 3, value_str, &size);
 				if (err) {
 					return err;
 				}
@@ -1276,11 +1281,7 @@ int handle_at_secure_socketopt(enum at_cmd_type cmd_type)
 	return err;
 }
 
-/**@brief handle AT#XBIND commands
- *  AT#XBIND=<port>
- *  AT#XBIND?
- *  AT#XBIND=? TEST command not supported
- */
+/* Handles AT#XBIND commands. */
 int handle_at_bind(enum at_cmd_type cmd_type)
 {
 	int err = -EINVAL;
@@ -1288,7 +1289,7 @@ int handle_at_bind(enum at_cmd_type cmd_type)
 
 	switch (cmd_type) {
 	case AT_CMD_TYPE_SET_COMMAND:
-		err = at_params_unsigned_short_get(&at_param_list, 1, &port);
+		err = at_params_unsigned_short_get(&slm_at_param_list, 1, &port);
 		if (err < 0) {
 			return err;
 		}
@@ -1302,11 +1303,7 @@ int handle_at_bind(enum at_cmd_type cmd_type)
 	return err;
 }
 
-/**@brief handle AT#XCONNECT commands
- *  AT#XCONNECT=<url>,<port>
- *  AT#XCONNECT?
- *  AT#XCONNECT=? TEST command not supported
- */
+/* Handles AT#XCONNECT commands. */
 int handle_at_connect(enum at_cmd_type cmd_type)
 {
 	int err = -EINVAL;
@@ -1321,11 +1318,11 @@ int handle_at_connect(enum at_cmd_type cmd_type)
 
 	switch (cmd_type) {
 	case AT_CMD_TYPE_SET_COMMAND:
-		err = util_string_get(&at_param_list, 1, url, &size);
+		err = util_string_get(&slm_at_param_list, 1, url, &size);
 		if (err) {
 			return err;
 		}
-		err = at_params_unsigned_short_get(&at_param_list, 2, &port);
+		err = at_params_unsigned_short_get(&slm_at_param_list, 2, &port);
 		if (err) {
 			return err;
 		}
@@ -1339,11 +1336,7 @@ int handle_at_connect(enum at_cmd_type cmd_type)
 	return err;
 }
 
-/**@brief handle AT#XLISTEN commands
- *  AT#XLISTEN
- *  AT#XLISTEN? READ command not supported
- *  AT#XLISTEN=? TEST command not supported
- */
+/* Handles AT#XLISTEN commands. */
 int handle_at_listen(enum at_cmd_type cmd_type)
 {
 	int err = -EINVAL;
@@ -1365,11 +1358,7 @@ int handle_at_listen(enum at_cmd_type cmd_type)
 	return err;
 }
 
-/**@brief handle AT#XACCEPT commands
- *  AT#XACCEPT=<timeout>
- *  AT#XACCEPT? READ command not supported
- *  AT#XACCEPT=? TEST command not supported
- */
+/* Handles AT#XACCEPT command. */
 int handle_at_accept(enum at_cmd_type cmd_type)
 {
 	int err = -EINVAL;
@@ -1382,7 +1371,7 @@ int handle_at_accept(enum at_cmd_type cmd_type)
 
 	switch (cmd_type) {
 	case AT_CMD_TYPE_SET_COMMAND:
-		err = at_params_int_get(&at_param_list, 1, &timeout);
+		err = at_params_int_get(&slm_at_param_list, 1, &timeout);
 		if (err) {
 			return err;
 		}
@@ -1405,11 +1394,7 @@ int handle_at_accept(enum at_cmd_type cmd_type)
 	return err;
 }
 
-/**@brief handle AT#XSEND commands
- *  AT#XSEND[=<data>]
- *  AT#XSEND? READ command not supported
- *  AT#XSEND=? TEST command not supported
- */
+/* Handles AT#XSEND command. */
 int handle_at_send(enum at_cmd_type cmd_type)
 {
 	int err = -EINVAL;
@@ -1418,9 +1403,9 @@ int handle_at_send(enum at_cmd_type cmd_type)
 
 	switch (cmd_type) {
 	case AT_CMD_TYPE_SET_COMMAND:
-		if (at_params_valid_count_get(&at_param_list) > 1) {
+		if (at_params_valid_count_get(&slm_at_param_list) > 1) {
 			size = sizeof(data);
-			err = util_string_get(&at_param_list, 1, data, &size);
+			err = util_string_get(&slm_at_param_list, 1, data, &size);
 			if (err) {
 				return err;
 			}
@@ -1437,11 +1422,7 @@ int handle_at_send(enum at_cmd_type cmd_type)
 	return err;
 }
 
-/**@brief handle AT#XRECV commands
- *  AT#XRECV=<timeout>
- *  AT#XRECV? READ command not supported
- *  AT#XRECV=? TEST command not supported
- */
+/* Handles AT#XRECV command. */
 int handle_at_recv(enum at_cmd_type cmd_type)
 {
 	int err = -EINVAL;
@@ -1450,12 +1431,12 @@ int handle_at_recv(enum at_cmd_type cmd_type)
 
 	switch (cmd_type) {
 	case AT_CMD_TYPE_SET_COMMAND:
-		err = at_params_int_get(&at_param_list, 1, &timeout);
+		err = at_params_int_get(&slm_at_param_list, 1, &timeout);
 		if (err) {
 			return err;
 		}
-		if (at_params_valid_count_get(&at_param_list) > 2) {
-			err = at_params_int_get(&at_param_list, 2, &flags);
+		if (at_params_valid_count_get(&slm_at_param_list) > 2) {
+			err = at_params_int_get(&slm_at_param_list, 2, &flags);
 			if (err) {
 				return err;
 			}
@@ -1470,11 +1451,7 @@ int handle_at_recv(enum at_cmd_type cmd_type)
 	return err;
 }
 
-/**@brief handle AT#XSENDTO commands
- *  AT#XSENDTO=<url>,<port>[<data>]
- *  AT#XSENDTO? READ command not supported
- *  AT#XSENDTO=? TEST command not supported
- */
+/* Handles AT#XSENDTO command. */
 int handle_at_sendto(enum at_cmd_type cmd_type)
 {
 	int err = -EINVAL;
@@ -1483,19 +1460,19 @@ int handle_at_sendto(enum at_cmd_type cmd_type)
 	switch (cmd_type) {
 	case AT_CMD_TYPE_SET_COMMAND:
 		size = sizeof(udp_url);
-		err = util_string_get(&at_param_list, 1, udp_url, &size);
+		err = util_string_get(&slm_at_param_list, 1, udp_url, &size);
 		if (err) {
 			return err;
 		}
-		err = at_params_unsigned_short_get(&at_param_list, 2, &udp_port);
+		err = at_params_unsigned_short_get(&slm_at_param_list, 2, &udp_port);
 		if (err) {
 			return err;
 		}
-		if (at_params_valid_count_get(&at_param_list) > 3) {
+		if (at_params_valid_count_get(&slm_at_param_list) > 3) {
 			char data[SLM_MAX_PAYLOAD_SIZE + 1] = {0};
 
 			size = sizeof(data);
-			err = util_string_get(&at_param_list, 3, data, &size);
+			err = util_string_get(&slm_at_param_list, 3, data, &size);
 			if (err) {
 				return err;
 			}
@@ -1512,11 +1489,7 @@ int handle_at_sendto(enum at_cmd_type cmd_type)
 	return err;
 }
 
-/**@brief handle AT#XRECVFROM commands
- *  AT#XRECVFROM=<timeout>[,<flags>]
- *  AT#XRECVFROM? READ command not supported
- *  AT#XRECVFROM=? TEST command not supported
- */
+/* Handles AT#XRECVFROM command. */
 int handle_at_recvfrom(enum at_cmd_type cmd_type)
 {
 	int err = -EINVAL;
@@ -1525,12 +1498,12 @@ int handle_at_recvfrom(enum at_cmd_type cmd_type)
 
 	switch (cmd_type) {
 	case AT_CMD_TYPE_SET_COMMAND:
-		err = at_params_int_get(&at_param_list, 1, &timeout);
+		err = at_params_int_get(&slm_at_param_list, 1, &timeout);
 		if (err) {
 			return err;
 		}
-		if (at_params_valid_count_get(&at_param_list) > 2) {
-			err = at_params_int_get(&at_param_list, 2, &flags);
+		if (at_params_valid_count_get(&slm_at_param_list) > 2) {
+			err = at_params_int_get(&slm_at_param_list, 2, &flags);
 			if (err) {
 				return err;
 			}
@@ -1545,11 +1518,7 @@ int handle_at_recvfrom(enum at_cmd_type cmd_type)
 	return err;
 }
 
-/**@brief handle AT#XGETADDRINFO commands
- *  AT#XGETADDRINFO=<url>
- *  AT#XGETADDRINFO? READ command not supported
- *  AT#XGETADDRINFO=? TEST command not supported
- */
+/* Handles AT#XGETADDRINFO command. */
 int handle_at_getaddrinfo(enum at_cmd_type cmd_type)
 {
 	int err = -EINVAL;
@@ -1562,7 +1531,7 @@ int handle_at_getaddrinfo(enum at_cmd_type cmd_type)
 
 	switch (cmd_type) {
 	case AT_CMD_TYPE_SET_COMMAND:
-		err = util_string_get(&at_param_list, 1, host, &size);
+		err = util_string_get(&slm_at_param_list, 1, host, &size);
 		if (err) {
 			return err;
 		}
@@ -1607,20 +1576,16 @@ int handle_at_getaddrinfo(enum at_cmd_type cmd_type)
 	return err;
 }
 
-/**@brief handle AT#XPOLL commands
- *  AT#XPOLL=<timeout>[,<handle1>[,<handle2> ...<handle8>]
- *  AT#XPOLL? READ command not support
- *  AT#XPOLL=? TEST command not support
- */
+/* Handles AT#XPOLL command. */
 int handle_at_poll(enum at_cmd_type cmd_type)
 {
 	int err = -EINVAL;
 	int timeout, handle;
-	int count = at_params_valid_count_get(&at_param_list);
+	int count = at_params_valid_count_get(&slm_at_param_list);
 
 	switch (cmd_type) {
 	case AT_CMD_TYPE_SET_COMMAND:
-		err = at_params_int_get(&at_param_list, 1, &timeout);
+		err = at_params_int_get(&slm_at_param_list, 1, &timeout);
 		if (err) {
 			return err;
 		}
@@ -1637,7 +1602,7 @@ int handle_at_poll(enum at_cmd_type cmd_type)
 			for (int i = 0; i < SLM_MAX_SOCKET_COUNT; i++) {
 				fds[i].fd = INVALID_SOCKET;
 				if (count > 2 + i) {
-					err = at_params_int_get(&at_param_list, 2 + i, &handle);
+					err = at_params_int_get(&slm_at_param_list, 2 + i, &handle);
 					if (err) {
 						return err;
 					}

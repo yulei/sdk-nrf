@@ -31,10 +31,10 @@ enum fota_status {
 	FOTA_STATUS_CANCELLED
 };
 
-extern uint8_t fota_type;
-extern enum fota_stage fota_stage;
-extern enum fota_status fota_status;
-extern int32_t fota_info;
+extern uint8_t slm_fota_type; /* FOTA image type. */
+extern enum fota_stage slm_fota_stage; /* Current stage of FOTA process. */
+extern enum fota_status slm_fota_status; /* FOTA process status. */
+extern int32_t slm_fota_info; /* FOTA download percentage or failure cause in case of error. */
 
 /**
  * @brief Initialize FOTA AT command parser.
@@ -58,20 +58,14 @@ int slm_at_fota_uninit(void);
 void slm_fota_post_process(void);
 
 /**
- * @brief Finishes the modem firmware update.
+ * @brief Finishes the full modem firmware update.
  *
  * This is to be called after the application or modem
- * has been rebooted and a modem firmware update is ongoing.
+ * has been rebooted and a full modem firmware update is ongoing.
  */
-void slm_finish_modem_fota(int modem_lib_init_ret);
-
-/**
- * @brief Handles @ref nrf_modem_lib_init() return values
- * relating to modem firmware update.
- *
- * @return Whether the modem must be re-initialized.
- */
-bool handle_nrf_modem_lib_init_ret(int modem_lib_init_ret);
+#if defined(CONFIG_SLM_FULL_FOTA)
+void slm_finish_modem_full_dfu(void);
+#endif
 
 /** @} */
 #endif /* SLM_AT_FOTA_ */

@@ -693,32 +693,32 @@ void test_encode_wifi_aps_data_object(void)
 	TEST_ASSERT_EQUAL(-ENODATA, ret);
 }
 
-void test_encode_agps_request_data_object(void)
+void test_encode_agnss_request_data_object(void)
 {
 	int ret;
-	struct cloud_data_agps_request data = {
+	struct cloud_data_agnss_request data = {
 		.mcc = 242,
 		.mnc = 1,
 		.cell = 21679716,
 		.area = 40401,
-		.request.sv_mask_ephe = UINT32_MAX,
-		.request.sv_mask_alm = UINT32_MAX,
+		.request.system[0].sv_mask_ephe = UINT32_MAX,
+		.request.system[0].sv_mask_alm = UINT32_MAX,
 		.request.data_flags =
-			NRF_MODEM_GNSS_AGPS_GPS_UTC_REQUEST |
-			NRF_MODEM_GNSS_AGPS_KLOBUCHAR_REQUEST |
-			NRF_MODEM_GNSS_AGPS_NEQUICK_REQUEST |
-			NRF_MODEM_GNSS_AGPS_SYS_TIME_AND_SV_TOW_REQUEST |
-			NRF_MODEM_GNSS_AGPS_POSITION_REQUEST |
-			NRF_MODEM_GNSS_AGPS_INTEGRITY_REQUEST,
+			NRF_MODEM_GNSS_AGNSS_GPS_UTC_REQUEST |
+			NRF_MODEM_GNSS_AGNSS_KLOBUCHAR_REQUEST |
+			NRF_MODEM_GNSS_AGNSS_NEQUICK_REQUEST |
+			NRF_MODEM_GNSS_AGNSS_GPS_SYS_TIME_AND_SV_TOW_REQUEST |
+			NRF_MODEM_GNSS_AGNSS_POSITION_REQUEST |
+			NRF_MODEM_GNSS_AGNSS_INTEGRITY_REQUEST,
 		.queued = true
 	};
 
-	ret = json_common_agps_request_data_add(dummy.root_obj,
-						&data,
-						JSON_COMMON_ADD_DATA_TO_OBJECT);
+	ret = json_common_agnss_request_data_add(dummy.root_obj,
+						 &data,
+						 JSON_COMMON_ADD_DATA_TO_OBJECT);
 	TEST_ASSERT_EQUAL(0, ret);
 
-	ret = encoded_output_check(dummy.root_obj, TEST_VALIDATE_AGPS_REQUEST_JSON_SCHEMA,
+	ret = encoded_output_check(dummy.root_obj, TEST_VALIDATE_AGNSS_REQUEST_JSON_SCHEMA,
 				   data.queued);
 	TEST_ASSERT_EQUAL(0, ret);
 
@@ -726,9 +726,9 @@ void test_encode_agps_request_data_object(void)
 
 	data.queued = false;
 
-	ret = json_common_agps_request_data_add(dummy.root_obj,
-						&data,
-						JSON_COMMON_ADD_DATA_TO_OBJECT);
+	ret = json_common_agnss_request_data_add(dummy.root_obj,
+						 &data,
+						 JSON_COMMON_ADD_DATA_TO_OBJECT);
 	TEST_ASSERT_EQUAL(-ENODATA, ret);
 }
 

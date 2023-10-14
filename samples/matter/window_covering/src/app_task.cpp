@@ -7,6 +7,7 @@
 #include "app_task.h"
 
 #include "app_config.h"
+#include "fabric_table_delegate.h"
 #include "led_util.h"
 #include "window_covering.h"
 
@@ -134,6 +135,11 @@ CHIP_ERROR AppTask::Init()
 	k_timer_init(&sFunctionTimer, &AppTask::FunctionTimerTimeoutCallback, nullptr);
 	k_timer_user_data_set(&sFunctionTimer, this);
 
+#ifdef CONFIG_CHIP_OTA_REQUESTOR
+	/* OTA image confirmation must be done before the factory data init. */
+	OtaConfirmNewImage();
+#endif
+
 #ifdef CONFIG_MCUMGR_TRANSPORT_BT
 	/* Initialize DFU over SMP */
 	GetDFUOverSMP().Init();
@@ -157,6 +163,7 @@ CHIP_ERROR AppTask::Init()
 	ReturnErrorOnFailure(chip::Server::GetInstance().Init(initParams));
 	ConfigurationMgr().LogDeviceConfig();
 	PrintOnboardingCodes(chip::RendezvousInformationFlags(chip::RendezvousInformationFlag::kBLE));
+	AppFabricTableDelegate::Init();
 
 #ifdef CONFIG_CHIP_ICD_SUBSCRIPTION_HANDLING
 	chip::app::InteractionModelEngine::GetInstance()->RegisterReadHandlerAppCallback(&GetICDUtil());

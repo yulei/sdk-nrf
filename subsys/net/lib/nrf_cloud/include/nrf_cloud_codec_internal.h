@@ -17,8 +17,8 @@
 #if defined(CONFIG_NRF_CLOUD_PGPS)
 #include <net/nrf_cloud_pgps.h>
 #endif
-#if defined(CONFIG_NRF_CLOUD_AGPS) || defined(CONFIG_NRF_CLOUD_PGPS)
-#include <net/nrf_cloud_agps.h>
+#if defined(CONFIG_NRF_CLOUD_AGNSS) || defined(CONFIG_NRF_CLOUD_PGPS)
+#include <net/nrf_cloud_agnss.h>
 #endif
 #if defined(CONFIG_NRF_MODEM)
 #include <nrf_modem_gnss.h>
@@ -27,7 +27,7 @@
 #include <net/nrf_cloud_log.h>
 #include "cJSON.h"
 #include "nrf_cloud_fsm.h"
-#include "nrf_cloud_agps_schema_v1.h"
+#include "nrf_cloud_agnss_schema_v1.h"
 #include "nrf_cloud_log_internal.h"
 #include "nrf_cloud_fota.h"
 
@@ -118,11 +118,6 @@ int nrf_cloud_data_endpoint_decode(const struct nrf_cloud_data *input,
 int nrf_cloud_state_encode(uint32_t reported_state, const bool update_desired_topic,
 			   const bool add_dev_status, struct nrf_cloud_data *output);
 
-/** @brief Search input for config and encode response if necessary. */
-int nrf_cloud_shadow_config_response_encode(struct nrf_cloud_data const *const input,
-					    struct nrf_cloud_data *const output,
-					    bool *const has_config);
-
 /** @brief Parse input for control section, and return contents and status of it. */
 int nrf_cloud_shadow_control_decode(struct nrf_cloud_data const *const input,
 				    enum nrf_cloud_ctrl_status *status,
@@ -130,7 +125,15 @@ int nrf_cloud_shadow_control_decode(struct nrf_cloud_data const *const input,
 
 /** @brief Encode response that we have accepted a shadow delta. */
 int nrf_cloud_shadow_control_response_encode(struct nrf_cloud_ctrl_data const *const data,
+					     bool accept,
 					     struct nrf_cloud_data *const output);
+
+/** @brief Parse shadow delta for control section. Act on any changes to logging or alerts.
+ * If needed, generate output JSON to send back to cloud to confirm change.
+ */
+int nrf_cloud_device_control_update(const struct nrf_cloud_data *const in_data,
+				    struct nrf_cloud_data *out_data,
+				    enum nrf_cloud_ctrl_status *status);
 
 /** @brief Encode the device status data into a JSON formatted buffer to be saved to
  * the device shadow.
@@ -226,16 +229,17 @@ int nrf_cloud_cell_info_json_encode(cJSON * const data_obj,
 int nrf_cloud_cell_pos_req_json_encode(struct lte_lc_cells_info const *const inf,
 				       cJSON * const req_obj_out);
 
-/** @brief Build a location request string using the provided info.
- * If successful, memory will be allocated for the output string and the user is
- * responsible for freeing it using @ref cJSON_free.
- */
-int nrf_cloud_location_req_json_encode(struct lte_lc_cells_info const *const cell_info,
-				       struct wifi_scan_info const *const wifi_info,
-				       char **string_out);
+/** @brief Add the location request data payload to the provided initialized object */
+int nrf_cloud_obj_location_request_payload_add(struct nrf_cloud_obj *const obj,
+					       struct lte_lc_cells_info const *const cells_inf,
+					       struct wifi_scan_info const *const wifi_inf);
 
-/** @brief Build a WiFi positioning request in the provided cJSON object
- * using the provided WiFi info
+/** @brief Build a Wi-Fi positioning request in the provided cJSON object using the provided
+ * Wi-Fi info. Local MAC addresses are not included in the request.
+ *
+ * @retval 0 Success.
+ * @retval -ENODATA Access point (non-local) count less than NRF_CLOUD_LOCATION_WIFI_AP_CNT_MIN.
+ * @return -ENOMEM Out of memory.
  */
 int nrf_cloud_wifi_req_json_encode(struct wifi_scan_info const *const wifi,
 				   cJSON *const req_obj_out);
@@ -303,8 +307,8 @@ enum nrf_cloud_rcv_topic nrf_cloud_dc_rx_topic_decode(const char *const topic);
  */
 void nrf_cloud_set_app_version(const char *const app_ver);
 
-/** @brief Encode the data payload of an nRF Cloud A-GPS request into the provided object */
-int nrf_cloud_agps_req_data_json_encode(const enum nrf_cloud_agps_type *const types,
+/** @brief Encode the data payload of an nRF Cloud A-GNSS request into the provided object */
+int nrf_cloud_agnss_req_data_json_encode(const enum nrf_cloud_agnss_type *const types,
 					const size_t type_count,
 					const struct lte_lc_cell *const cell_inf,
 					const bool fetch_cell_inf,
@@ -317,16 +321,16 @@ int nrf_cloud_modem_pvt_data_encode(const struct nrf_modem_gnss_pvt_data_frame	*
 				    cJSON * const pvt_data_obj);
 #endif
 
-#if defined(CONFIG_NRF_CLOUD_AGPS) || defined(CONFIG_NRF_CLOUD_PGPS)
-/** @brief Build A-GPS type array based on request.
+#if defined(CONFIG_NRF_CLOUD_AGNSS) || defined(CONFIG_NRF_CLOUD_PGPS)
+/** @brief Build A-GNSS type array based on request.
  */
-int nrf_cloud_agps_type_array_get(const struct nrf_modem_gnss_agps_data_frame *const request,
-				  enum nrf_cloud_agps_type *array, const size_t array_size);
+int nrf_cloud_agnss_type_array_get(const struct nrf_modem_gnss_agnss_data_frame *const request,
+				  enum nrf_cloud_agnss_type *array, const size_t array_size);
 
-/** @brief Encode an A-GPS request device message to be sent to nRF Cloud */
-int nrf_cloud_agps_req_json_encode(const struct nrf_modem_gnss_agps_data_frame *const request,
-				   cJSON * const agps_req_obj_out);
-#endif /* CONFIG_NRF_CLOUD_AGPS */
+/** @brief Encode an A-GNSS request device message to be sent to nRF Cloud */
+int nrf_cloud_agnss_req_json_encode(const struct nrf_modem_gnss_agnss_data_frame *const request,
+				   cJSON * const agnss_req_obj_out);
+#endif /* CONFIG_NRF_CLOUD_AGNSS || CONFIG_NRF_CLOUD_PGPS */
 
 #if defined(CONFIG_NRF_CLOUD_PGPS)
 /** @brief Parse the PGPS response (REST and MQTT) from nRF Cloud */

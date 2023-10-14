@@ -393,8 +393,7 @@ void link_ind_handler(const struct lte_lc_evt *const evt)
 	case LTE_LC_EVT_NW_REG_STATUS:
 		link_shell_print_reg_status(evt->nw_reg_status);
 
-		if (evt->nw_reg_status == LTE_LC_NW_REG_REGISTERED_EMERGENCY ||
-		    evt->nw_reg_status == LTE_LC_NW_REG_REGISTERED_HOME ||
+		if (evt->nw_reg_status == LTE_LC_NW_REG_REGISTERED_HOME ||
 		    evt->nw_reg_status == LTE_LC_NW_REG_REGISTERED_ROAMING) {
 			k_work_submit_to_queue(&mosh_common_work_q, &registered_work);
 		} else {
@@ -667,7 +666,7 @@ int link_func_mode_set(enum lte_lc_func_mode fun, bool rel14_used)
 		/* Set saved system mode (if set) from settings (by link sysmode -mosh command) */
 		sysmode = link_sett_sysmode_get();
 		lte_pref = link_sett_sysmode_lte_preference_get();
-		if (sysmode != LTE_LC_SYSTEM_MODE_NONE) {
+		if (sysmode != LINK_SYSMODE_NONE) {
 			return_value = lte_lc_system_mode_set(sysmode, lte_pref);
 			if (return_value < 0) {
 				mosh_warn("lte_lc_system_mode_set returned error %d", return_value);
@@ -701,7 +700,8 @@ void link_rai_read(void)
 
 	err = link_api_rai_status(&rai_status);
 	if (err == 0) {
-		mosh_print("Release Assistance Indication status is enabled=%d", rai_status);
+		mosh_print("Release Assistance Indication is %s",
+			   rai_status ? "enabled" : "disabled");
 	} else {
 		mosh_error("Reading RAI failed with error code %d", err);
 	}
@@ -714,9 +714,9 @@ int link_rai_enable(bool enable)
 	err = nrf_modem_at_printf("AT%%RAI=%d", enable);
 	if (!err) {
 		mosh_print(
-			"Release Assistance Indication functionality set to enabled=%d.\n"
+			"Release Assistance Indication functionality %s.\n"
 			"The change will be applied when going to normal mode for the next time.",
-			enable);
+			enable ? "enabled" : "disabled");
 	} else {
 		mosh_error("RAI AT command failed, error: %d", err);
 		return -EFAULT;
@@ -762,4 +762,18 @@ int link_setdnsaddr(const char *ip_address)
 	}
 
 	return 0;
+}
+
+void link_propripsm_read(void)
+{
+	int ret;
+	uint16_t state;
+
+	ret = nrf_modem_at_scanf("AT%FEACONF=1,0", "%%FEACONF: %*u,%hu", &state);
+	if (ret == 1) {
+		mosh_print("Proprietary PSM is %s",
+			   state == 1 ? "enabled" : "disabled");
+	} else {
+		mosh_error("Reading proprietary PSM failed with error code %d", ret);
+	}
 }

@@ -70,11 +70,15 @@ Additionally, the following Kconfig options are available:
 * :kconfig:option:`CONFIG_NRF_CLOUD_COAP_RESPONSE_TIMEOUT_MS`
 * :kconfig:option:`CONFIG_NON_RESP_RETRIES`
 * :kconfig:option:`CONFIG_NRF_CLOUD_COAP_SEND_SSIDS`
+* :kconfig:option:`CONFIG_NRF_CLOUD_SEND_DEVICE_STATUS`
+* :kconfig:option:`CONFIG_NRF_CLOUD_SEND_DEVICE_STATUS_NETWORK`
+* :kconfig:option:`CONFIG_NRF_CLOUD_SEND_DEVICE_STATUS_SIM`
+* :kconfig:option:`CONFIG_NRF_CLOUD_SEND_DEVICE_STATUS_CONN_INF`
 
 Finally, configure these recommended additional options:
 
 * :kconfig:option:`CONFIG_COAP_CLIENT_BLOCK_SIZE` set to ``1024``.
-* :kconfig:option:`CONFIG_COAP_CLIENT_STACK_SIZE` set to ``6144``..`
+* :kconfig:option:`CONFIG_COAP_CLIENT_STACK_SIZE` set to ``6144``.
 * :kconfig:option:`CONFIG_COAP_CLIENT_THREAD_PRIORITY` set to ``0``.
 * :kconfig:option:`CONFIG_COAP_EXTENDED_OPTIONS_LEN_VALUE` set to ``32``.
 
@@ -97,6 +101,7 @@ Samples using the library
 The following |NCS| samples use this library:
 
 * :ref:`modem_shell_application`
+* :ref:`nrf_cloud_multi_service`
 
 Limitations
 ***********
@@ -111,10 +116,20 @@ This will result in a new full handshake of the DTLS connection and the need to 
 Due to the same limitations in the modem, a call to :c:func:`nrf_cloud_coap_disconnect` followed by a subsequent call to :c:func:`nrf_cloud_coap_connect` will require a full DTLS handshake and reauthentication.
 This is true whether or not the LTE connection is intact.
 
+References
+**********
+
+* `RFC 7252 - The Constrained Application Protocol`_
+* `RFC 7959 - Block-Wise Transfer in CoAP`_
+* `RFC 7049 - Concise Binary Object Representation`_
+* `RFC 8610 - Concise Data Definition Language (CDDL)`_
+* `RFC 8132 - PATCH and FETCH Methods for CoAP`_
+* `RFC 9146 - Connection Identifier for DTLS 1.2`_
+
 Dependencies
 ************
 
-This library uses the following |NCS| libraries:
+This library uses the following |NCS| library:
 
 * :ref:`lib_nrf_cloud`
 

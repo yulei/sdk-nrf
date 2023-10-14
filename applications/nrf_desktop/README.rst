@@ -364,7 +364,8 @@ Depending on what development kit you use, you need to select the respective con
          :header: heading
          :rows: nrf52840dk_nrf52840, nrf52833dk_nrf52833, nrf52833dk_nrf52820, nrf5340dk_nrf5340_cpuapp
 
-      In nRF52840 DK, the application is configured to work as gaming mouse (with motion emulated by using DK buttons) and in nRF52833 DK, the application is configured to work as HID dongle.
+      Depending on the configuration, a DK may act either as mouse, keyboard or dongle.
+      You can check supported configurations for each board in the :ref:`nrf_desktop_board_configuration_files` section.
 
 ..
 
@@ -816,17 +817,34 @@ Adding nRF21540 EK shield support
 The nRF Desktop application can be used with the :ref:`ug_radio_fem_nrf21540ek` shield, an RF front-end module (FEM) for the 2.4 GHz range extension.
 The shield can be used with any nRF Desktop HID application configured for a development kit that is fitted with Arduino-compatible connector (see the :guilabel:`DK` tab in `Requirements`_).
 This means that the shield support is not available for nRF Desktop's dedicated boards, such as ``nrf52840gmouse_nrf52840``, ``nrf52kbd_nrf52832``, or ``nrf52840dongle_nrf52840``.
+
+Low Latency Packet mode
+-----------------------
+
+The RF front-end module (FEM) cannot be used together with Low Latency Packet Mode (LLPM) due to timing requirements.
+The LLPM support in the nRF Desktop application (:kconfig:option:`CONFIG_CAF_BLE_USE_LLPM`) must be disabled for builds with FEM.
+
+Building with EK shield support
+-------------------------------
+
 To build the application with the shield support, pass the ``SHIELD`` parameter to the build command.
+Make sure to also disable the LLPM support.
+For example, you can build the application for ``nrf52840dk_nrf52840`` with ``nrf21540ek`` shield using the following command:
 
-For detailed information about building the nRF Desktop application for the nRF21540 EK, see the :ref:`ug_radio_fem_nrf21540ek_programming` section on the nRF21540 EK documentation page.
+.. code-block:: console
 
-.. note::
-   For the multi-core build, use the ``hci_rpmsg_`` as the *childImageName* parameter, because in the nRF Desktop application, network core runs using ``hci_rpmsg_``.
-   The command would look as follows:
+   west build -b nrf52840dk_nrf52840 -- -DSHIELD=nrf21540ek -DCONFIG_CAF_BLE_USE_LLPM=n
 
-   .. code-block:: console
+For the multi-core build, you need to pass the ``SHIELD`` parameter to images built on both application and network core.
+The network core controls the FEM, but the application core needs to forward the needed pins to the network core.
+Use ``hci_rpmsg_`` as the *childImageName* parameter, because in the nRF Desktop application, network core runs using ``hci_rpmsg_``.
+The command for ``nrf5340dk_nrf5340_cpuapp`` with ``nrf21540ek`` shield would look as follows:
 
-      west build -b nrf5340dk_nrf5340_cpuapp -- -DSHIELD=nrf21540ek -Dhci_rpmsg_SHIELD=nrf21540ek
+.. code-block:: console
+
+   west build -b nrf5340dk_nrf5340_cpuapp -- -DSHIELD=nrf21540ek_fwd -Dhci_rpmsg_SHIELD=nrf21540ek -DCONFIG_CAF_BLE_USE_LLPM=n
+
+For detailed information about building an application using the nRF21540 EK, see the :ref:`ug_radio_fem_nrf21540ek_programming` section in the Working with RF Front-end modules documentation.
 
 Building and running
 ********************
@@ -868,19 +886,23 @@ Selecting a build type from command line
 
    * NCS keyboard - The Fast Pair Provider meant to be used with keyboards:
 
-      * Device name: NCS keyboard
+      * Device Name: NCS keyboard
       * Model ID: ``0x52FF02``
-      * Anti-spoofing key (base64, uncompressed): ``8E8ulwhSIp/skZeg27xmWv2SxRxTOagypHrf2OdrhGY=``
-      * Type: Input device
-      * Additional features: Data only connection, Support personalized name, Ringing device unsupported
+      * Anti-Spoofing Private Key (base64, uncompressed): ``8E8ulwhSIp/skZeg27xmWv2SxRxTOagypHrf2OdrhGY=``
+      * Device Type: Input Device
+      * Notification Type: Fast Pair
+      * Data-Only connection: true
+      * No Personalized Name: false
 
    * NCS gaming mouse - Fast Pair Provider meant to be used with gaming mice:
 
-      * Device name: NCS gaming mouse
+      * Device Name: NCS gaming mouse
       * Model ID: ``0x8E717D``
-      * Anti-spoofing key (base64, uncompressed): ``dZxFzP7X9CcfLPC0apyRkmgsh3n2EbWo9NFNXfVuxAM=``
-      * Type: Input device
-      * Additional features: Data only connection, Support personalized name, Ringing device unsupported
+      * Anti-Spoofing Private Key (base64, uncompressed): ``dZxFzP7X9CcfLPC0apyRkmgsh3n2EbWo9NFNXfVuxAM=``
+      * Device Type: Input Device
+      * Notification Type: Fast Pair
+      * Data-Only connection: true
+      * No Personalized Name: false
 
    See :ref:`ug_bt_fast_pair_provisioning` documentation for the following information:
 
@@ -1925,11 +1947,12 @@ Direct-xip mode
 
 The direct-xip mode is used for the :ref:`background DFU <nrf_desktop_bootloader_background_dfu>`.
 In this mode, the MCUboot bootloader boots an image directly from a given slot, so the swap operation is not needed.
-Make sure to enable the :kconfig:option:`CONFIG_BOOT_BUILD_DIRECT_XIP_VARIANT` Kconfig option in the application configuration to build application update images for both slots.
+To set the MCUboot mode of operations to the direct-xip mode, make sure to enable the :kconfig:option:`CONFIG_MCUBOOT_BOOTLOADER_MODE_DIRECT_XIP` Kconfig option in the application configuration.
+This option automatically enables :kconfig:option:`CONFIG_BOOT_BUILD_DIRECT_XIP_VARIANT` to build application update images for both slots.
 
 Enable the ``CONFIG_BOOT_DIRECT_XIP`` Kconfig option in the bootloader configuration to make the MCUboot run the image directly from both image slots.
 The nRF Desktop's bootloader configurations do not enable the revert mechanism (``CONFIG_BOOT_DIRECT_XIP_REVERT``).
-When the direct-xip mode is enabled (the :kconfig:option:`CONFIG_BOOT_BUILD_DIRECT_XIP_VARIANT` Kconfig option is set in the application configuration), the application modules that control the DFU transport do not request firmware upgrades and do not confirm the running image.
+When the direct-xip mode is enabled (the :kconfig:option:`CONFIG_MCUBOOT_BOOTLOADER_MODE_DIRECT_XIP` Kconfig option is set in the application configuration), the application modules that control the DFU transport do not request firmware upgrades and do not confirm the running image.
 In that scenario, the MCUboot bootloader simply boots the image with the higher image version.
 
 By default, the MCUboot bootloader ignores the build number while comparing image versions.

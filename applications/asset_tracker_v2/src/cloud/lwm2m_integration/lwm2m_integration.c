@@ -177,6 +177,9 @@ static void rd_client_event(struct lwm2m_ctx *client, enum lwm2m_rd_client_event
 		cloud_wrap_evt.type = CLOUD_WRAP_EVT_ERROR;
 		notify = true;
 		break;
+	case LWM2M_RD_CLIENT_EVENT_DEREGISTER:
+		LOG_DBG("LWM2M_RD_CLIENT_EVENT_DEREGISTER");
+		break;
 	default:
 		LOG_ERR("Unknown event: %d", client_event);
 		break;
@@ -288,6 +291,10 @@ static int lwm2m_firmware_event_cb(struct lwm2m_fota_event *event)
 			event->failure.update_failure);
 		cloud_wrap_evt.type = CLOUD_WRAP_EVT_FOTA_ERROR;
 		break;
+	case LWM2M_FOTA_UPDATE_MODEM_RECONNECT_REQ:
+		/* FOTA requests modem re-initialization and client re-connection */
+		/* Return -1 to cause normal system reboot */
+		return -1;
 	}
 
 	cloud_wrapper_notify_event(&cloud_wrap_evt);
@@ -515,14 +522,14 @@ int cloud_wrap_cloud_location_send(char *buf, size_t len, bool ack, uint32_t id)
 	return location_assistance_ground_fix_request_send(&client);
 }
 
-int cloud_wrap_agps_request_send(char *buf, size_t len, bool ack, uint32_t id)
+int cloud_wrap_agnss_request_send(char *buf, size_t len, bool ack, uint32_t id)
 {
 	ARG_UNUSED(buf);
 	ARG_UNUSED(len);
 	ARG_UNUSED(id);
 	ARG_UNUSED(ack);
 
-	return location_assistance_agps_request_send(&client);
+	return location_assistance_agnss_request_send(&client);
 }
 
 int cloud_wrap_pgps_request_send(char *buf, size_t len, bool ack, uint32_t id)

@@ -106,7 +106,7 @@ Configuration options for device ID
 
 * :kconfig:option:`CONFIG_NRF_CLOUD_CLIENT_ID_SRC_IMEI` - If you enable this option, the ID is automatically generated using a prefix and the modem's IMEI (``<prefix><IMEI>``). You can configure the prefix by using :kconfig:option:`CONFIG_NRF_CLOUD_CLIENT_ID_PREFIX`. The default format of the prefix is ``nrf-`` and it is valid only for Nordic devices such as Thingy:91 or nRF9160 DK. For custom hardware, use a prefix other than ``nrf-`` by modifying :kconfig:option:`CONFIG_NRF_CLOUD_CLIENT_ID_PREFIX`.
 
-* :kconfig:option:`CONFIG_NRF_CLOUD_CLIENT_ID_SRC_INTERNAL_UUID` - If you enable this option, the ID is automatically generated using the modem's 128-bit internal UUID, which results in a 32-character string with no hyphens. This option requires modem firmware v1.3.0 or higher.
+* :kconfig:option:`CONFIG_NRF_CLOUD_CLIENT_ID_SRC_INTERNAL_UUID` - If you enable this option, the ID is automatically generated using the modem's 128-bit internal UUID, which results in a 36 character string of hexadecimal values in the 8-4-4-4-12 UUID format. This option requires modem firmware v1.3.0 or higher.
 
 * :kconfig:option:`CONFIG_NRF_CLOUD_CLIENT_ID_SRC_COMPILE_TIME` - If you enable this option, the ID is set at compile time using the value specified by :kconfig:option:`CONFIG_NRF_CLOUD_CLIENT_ID`.
 
@@ -161,7 +161,12 @@ For example, a device that supports all the FOTA types writes the following data
    }}}}}
 
 You can initiate FOTA updates through `nRF Cloud`_ or by using the `nRF Cloud REST API (v1)`_.
-When the device receives FOTA update information from nRF Cloud, the nRF Cloud library sends the :c:enumerator:`NRF_CLOUD_EVT_FOTA_START` event to the application.
+If the :kconfig:option:`CONFIG_NRF_CLOUD_FOTA` Kconfig option is enabled, FOTA update job information is requested by the device after the MQTT connection to nRF Cloud is completed.
+The :kconfig:option:`NRF_CLOUD_FOTA_AUTO_START_JOB` Kconfig option controls how FOTA jobs are started on the device.
+
+* If enabled, the nRF Cloud library starts the FOTA update job immediately upon receipt of the FOTA update job information from nRF Cloud. If the job is successfully started, the library sends the :c:enumerator:`NRF_CLOUD_EVT_FOTA_START` event to the application.
+* If disabled, the :c:enumerator:`NRF_CLOUD_EVT_FOTA_JOB_AVAILABLE` event is sent to the application. When the application is ready to start the FOTA update job it must call :c:func:`nrf_cloud_fota_job_start`.
+
 The FOTA update is in progress until the application receives either the :c:enumerator:`NRF_CLOUD_EVT_FOTA_DONE` or :c:enumerator:`NRF_CLOUD_EVT_FOTA_ERROR` event.
 When receiving the :c:enumerator:`NRF_CLOUD_EVT_FOTA_DONE` event, the application must perform any necessary cleanup and reboot the device to complete the update.
 The message payload of the :c:enumerator:`NRF_CLOUD_EVT_FOTA_DONE` event contains the :c:enum:`nrf_cloud_fota_type` value.
@@ -222,7 +227,7 @@ Location services
 `nRF Cloud`_ offers location services that allow you to obtain the location of your device.
 The following enhancements to this library can be used to interact with `nRF Cloud Location Services <nRF Cloud Location Services documentation_>`_:
 
-* Assisted GPS - :ref:`lib_nrf_cloud_agps`
+* Assisted GNSS - :ref:`lib_nrf_cloud_agnss`
 * Predicted GPS - :ref:`lib_nrf_cloud_pgps`
 * Cellular Positioning - :ref:`lib_nrf_cloud_cell_pos`
 * nRF Cloud REST  - :ref:`lib_nrf_cloud_rest`

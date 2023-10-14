@@ -16,9 +16,9 @@
 #include <sys/fcntl.h>
 LOG_MODULE_REGISTER(wpa_supplicant, LOG_LEVEL_DBG);
 
-#if defined(CONFIG_WPA_SUPP_CRYPTO) && !defined(CONFIG_MBEDTLS_ENABLE_HEAP)
+#if !defined(CONFIG_WPA_SUPP_CRYPTO_NONE) && !defined(CONFIG_MBEDTLS_ENABLE_HEAP)
 #include <mbedtls/platform.h>
-#endif /* CONFIG_WPA_SUPP_CRYPTO */
+#endif /* !CONFIG_WPA_SUPP_CRYPTO_NONE && !CONFIG_MBEDTLS_ENABLE_HEAP */
 
 #include <zephyr/net/wifi_nm.h>
 
@@ -60,13 +60,13 @@ static K_THREAD_STACK_DEFINE(z_wpa_s_thread_stack,
 			     CONFIG_WPA_SUPP_THREAD_STACK_SIZE);
 static struct k_thread z_wpa_s_tid;
 
-static K_THREAD_STACK_DEFINE(z_wpas_iface_wq_stack,
-	CONFIG_WPA_SUPP_IFACE_WQ_STACK_SIZE);
+static K_THREAD_STACK_DEFINE(z_wpas_wq_stack,
+	CONFIG_WPA_SUPP_WQ_STACK_SIZE);
 
-/* TODO: Debug why wsing system workqueue blocks the driver dedicated
+/* TODO: Debug why using system workqueue blocks the driver dedicated
  * workqueue?
  */
-static struct k_work_q z_wpas_iface_wq;
+struct k_work_q z_wpas_wq;
 static K_WORK_DEFINE(z_wpas_iface_work,
 	z_wpas_iface_work_handler);
 
@@ -84,6 +84,9 @@ static const struct wifi_mgmt_ops wpa_supp_ops = {
 	.set_twt = z_wpa_supplicant_set_twt,
 	.get_power_save_config = z_wpa_supplicant_get_power_save_config,
 	.reg_domain = z_wpa_supplicant_reg_domain,
+	.mode = z_wpa_supplicant_mode,
+	.filter = z_wpa_supplicant_filter,
+	.channel = z_wpa_supplicant_channel,
 };
 
 DEFINE_WIFI_NM_INSTANCE(wpa_supplicant, &wpa_supp_ops);
@@ -262,6 +265,8 @@ static int z_wpas_remove_interface(const char *ifname)
 		goto err;
 	}
 
+	z_wpa_ctrl_deinit(wpa_s);
+
 	ret = z_wpa_cli_global_cmd_v("interface_remove %s", ifname);
 	if (ret) {
 		wpa_printf(MSG_ERROR, "Failed to remove interface: %s", ifname);
@@ -276,6 +281,7 @@ static int z_wpas_remove_interface(const char *ifname)
 			ifname, ret);
 		goto err;
 	}
+
 
 	if (z_wpas_get_iface_count() == 0) {
 		generate_supp_state_event(ifname, NET_EVENT_WPA_SUPP_CMD_NOT_READY, 0);
@@ -460,17 +466,17 @@ static void z_wpas_start(void)
 	struct wpa_params params;
 	int exitcode = -1;
 
-#if defined(CONFIG_WPA_SUPP_CRYPTO) && !defined(CONFIG_MBEDTLS_ENABLE_HEAP)
+#if !defined(CONFIG_WPA_SUPP_CRYPTO_NONE) && !defined(CONFIG_MBEDTLS_ENABLE_HEAP)
 	/* Needed for crypto operation as default is no-op and fails */
 	mbedtls_platform_set_calloc_free(calloc, free);
-#endif /* CONFIG_WPA_CRYPTO */
+#endif /* !CONFIG_WPA_SUPP_CRYPTO_NONE && !CONFIG_MBEDTLS_ENABLE_HEAP */
 
-	k_work_queue_init(&z_wpas_iface_wq);
+	k_work_queue_init(&z_wpas_wq);
 
-	k_work_queue_start(&z_wpas_iface_wq,
-					   z_wpas_iface_wq_stack,
-					   K_THREAD_STACK_SIZEOF(z_wpas_iface_wq_stack),
-					   7,
+	k_work_queue_start(&z_wpas_wq,
+					   z_wpas_wq_stack,
+					   K_THREAD_STACK_SIZEOF(z_wpas_wq_stack),
+					   CONFIG_WPA_SUPP_WQ_PRIORITY,
 					   NULL);
 
 	os_memset(&params, 0, sizeof(params));
@@ -502,7 +508,7 @@ static void z_wpas_start(void)
 
 	register_wpa_event_sock();
 
-	k_work_submit_to_queue(&z_wpas_iface_wq, &z_wpas_iface_work);
+	k_work_submit_to_queue(&z_wpas_wq, &z_wpas_iface_work);
 
 #ifdef CONFIG_MATCH_IFACE
 	if (exitcode == 0) {
@@ -518,7 +524,6 @@ static void z_wpas_start(void)
 	generate_supp_state_event(DEFAULT_IFACE_NAME, NET_EVENT_WPA_SUPP_CMD_NOT_READY, 0);
 	eloop_unregister_read_sock(z_wpas_event_sockpair[0]);
 
-	z_wpa_ctrl_deinit();
 	z_global_wpa_ctrl_deinit();
 	wpa_supplicant_deinit(global);
 

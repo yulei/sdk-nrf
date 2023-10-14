@@ -17,6 +17,7 @@ enum link_ncellmeas_modes {
 #define LINK_APN_STR_MAX_LENGTH 100
 
 #define LINK_FUNMODE_NONE 99
+#define LINK_SYSMODE_NONE 99
 #define LINK_REDMOB_NONE 99
 #define LTE_LC_FACTORY_RESET_INVALID 99
 
@@ -36,5 +37,6 @@ int link_func_mode_get(void);
 void link_rai_read(void);
 int link_rai_enable(bool enable);
 int link_setdnsaddr(const char *ip_address);
+void link_propripsm_read(void);
 
 #endif /* MOSH_LINK_H */

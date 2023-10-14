@@ -62,13 +62,11 @@ DEFINE_FAKE_VALUE_FUNC(int, lte_lc_lte_mode_get, enum lte_lc_lte_mode *);
 DEFINE_FAKE_VALUE_FUNC(int, lte_lc_ptw_set, enum lte_lc_lte_mode, const char *);
 DEFINE_FAKE_VALUE_FUNC(int, lte_lc_psm_param_set, const char *, const char *);
 DEFINE_FAKE_VALUE_FUNC(int, lte_lc_psm_req, bool);
-DEFINE_FAKE_VALUE_FUNC(int, lte_lc_rai_param_set, const char *);
-DEFINE_FAKE_VALUE_FUNC(int, lte_lc_rai_req, bool);
 DEFINE_FAKE_VALUE_FUNC(int, lte_lc_edrx_param_set, enum lte_lc_lte_mode, const char *);
 DEFINE_FAKE_VALUE_FUNC(int, lte_lc_edrx_req, bool);
 DEFINE_FAKE_VALUE_FUNC(int, lte_lc_neighbor_cell_measurement, struct lte_lc_ncellmeas_params *);
 DEFINE_FAKE_VOID_FUNC(lte_lc_register_handler, lte_lc_evt_handler_t);
-DEFINE_FAKE_VALUE_FUNC(int, nrf_cloud_agps_process, const char *, size_t);
+DEFINE_FAKE_VALUE_FUNC(int, nrf_cloud_agnss_process, const char *, size_t);
 DEFINE_FAKE_VALUE_FUNC(int, nrf_cloud_pgps_begin_update);
 DEFINE_FAKE_VALUE_FUNC(int, nrf_cloud_pgps_process_update, uint8_t *, size_t);
 DEFINE_FAKE_VALUE_FUNC(int, nrf_cloud_pgps_finish_update);
@@ -108,3 +106,4 @@ DEFINE_FAKE_VALUE_FUNC(int, at_params_unsigned_short_get, const struct at_param_
 DEFINE_FAKE_VALUE_FUNC_VARARG(int, nrf_modem_at_cmd_async, nrf_modem_at_resp_handler_t,
 			      const char *, ...);
 DEFINE_FAKE_VALUE_FUNC(int, at_params_list_init, struct at_param_list *, size_t);
+DEFINE_FAKE_VALUE_FUNC(int, z_impl_zsock_setsockopt, int, int, int, const void *, socklen_t);

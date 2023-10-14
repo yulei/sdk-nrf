@@ -24,21 +24,22 @@ Programming the AT Client sample
 ********************************
 
 You must program the :ref:`at_client_sample` sample to your device to control the security tags in the modem.
-See `nRF91 AT Commands Reference Guide <AT Commands Reference Guide_>`_ for documentation on each AT command.
-Also, you must provision the bootstrap credentials for the security tag (that you have specified in :kconfig:option:`CONFIG_LWM2M_CLIENT_UTILS_BOOTSTRAP_TLS_TAG` Kconfig option) to the nRF9160 modem.
+See the `nRF91x1 AT Commands Reference Guide`_  or `nRF9160 AT Commands Reference Guide`_ for documentation on each AT command.
+Also, you must provision the bootstrap credentials for the security tag (that you have specified in :kconfig:option:`CONFIG_LWM2M_CLIENT_UTILS_BOOTSTRAP_TLS_TAG` Kconfig option) to the cellular modem.
 
 Provisioning the identity and security credentials
 **************************************************
 
 To provision the credentials, complete the following steps:
 
-1. Ensure that you have removed the previous security tags from the modem by issuing the `AT%CMNG <Credential storage management %CMNG_>`_ command:
+1. Ensure that you have removed the previous security tags from the modem by issuing the ``AT%CMNG`` command:
 
    .. code-block:: none
 
       AT%CMNG=3,<TAG>,3
       AT%CMNG=3,<TAG>,4
 
+   See the `Credential storage management %CMNG`_ section in the nRF9160 AT Commands Reference Guide or the same section in the `nRF91x1 AT Commands Reference Guide`_ depending on the SiP you are using.
 
 #. Identify the device IMEI by issuing the command ``AT+CGSN``:
 
@@ -65,7 +66,7 @@ Automated provisioning
 ----------------------
 
 For automated provisioning of credentials, you can use the script :file:`provision.py` that is available in the :file:`samples/cellular/lwm2m_client/scripts/` folder.
-To set up the script, you must set your username and password for the AVSystem's Coiote Device Management server as environment variables and pass the device serial port as a parameter when you run the script.
+If you use AVSystem's Coiote Device Management server, you must set your username and password for the server as environment variables when you run the script.
 See the following code:
 
 .. code-block:: console
@@ -74,14 +75,8 @@ See the following code:
    [nrf@dev]:~/scripts# export COIOTE_PASSWD='my-password'
    [nrf@dev]:~/scripts# export COIOTE_USER='my-username'
 
-   # Find the serial port
-   [nrf@dev]:~/scripts# nrfjprog -f NRF91 --com
-   960033095    /dev/ttyACM0    VCOM0
-   960033095    /dev/ttyACM1    VCOM1
-   960033095    /dev/ttyACM2    VCOM2
-
    # Run
-   [nrf@dev]:~/scripts# ./provision.py /dev/ttyACM0
+   [nrf@dev]:~/scripts# ./provision.py
    AT interface ready
    Identity: urn:imei:352656100394546
    Security tag 35724862 cleared
@@ -90,6 +85,16 @@ See the following code:
    Coiote: Deleted device urn:imei:352656100394546-bs
    Coiote: Created device urn:imei:352656100394546 to domain /IoT/NordicSemi/Interop/
 
+When Leshan demo server is used, script does not require password:
+
+.. code-block:: console
+
+   # Run
+   [nrf@dev]:~/scripts# ./provision.py --leshan
+   [INFO] provision.py - Identity: urn:imei:351358814369747
+   [INFO] device.py - Security tag 35724861 cleared
+   [INFO] device.py - Security tag 35724862 cleared
+   [INFO] device.py - PSK credentials stored to sec_tag 35724862
 
 You can now program the device with the final sample image.
 
@@ -99,7 +104,7 @@ Configuring and programing the sample
 To configure and program the sample, complete the following steps:
 
 1. Make the sample programmable to multiple devices by removing all hard coded credentials. This can be done by setting the :ref:`CONFIG_APP_LWM2M_PSK <CONFIG_APP_LWM2M_PSK>` Kconfig option to empty value.
-#. Enable bootstrapping using the configuration overlay file :file:`overlay-avsystem-bootstrap.conf`.
+#. Enable bootstrapping using the configuration overlay file :file:`overlay-avsystem-bootstrap.conf` or :file:`overlay-leshan-bootstrap.conf`.
    Bootstrapping is required for an LwM2M client to rotate security credentials.
-#. Prepare the production script or steps for your nRF9160-based device.
+#. Prepare the production script or steps for your nRF91 Series device.
 #. Program the sample.

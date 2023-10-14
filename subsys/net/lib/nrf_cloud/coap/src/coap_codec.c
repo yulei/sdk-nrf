@@ -19,8 +19,8 @@
 #include "ground_fix_encode.h"
 #include "ground_fix_decode_types.h"
 #include "ground_fix_decode.h"
-#include "agps_encode_types.h"
-#include "agps_encode.h"
+#include "agnss_encode_types.h"
+#include "agnss_encode.h"
 #include "pgps_encode_types.h"
 #include "pgps_encode.h"
 #include "pgps_decode_types.h"
@@ -37,10 +37,7 @@ LOG_MODULE_REGISTER(coap_codec, CONFIG_NRF_CLOUD_COAP_LOG_LEVEL);
  */
 #define DEFAULT_MASK_ANGLE 5
 
-static int encode_message(const char *app_id, const char *str,
-			  const struct nrf_cloud_gnss_pvt *pvt,
-			  double float_val, int int_val,
-			  int64_t ts, uint8_t *buf, size_t *len,
+static int encode_message(struct nrf_cloud_obj_coap_cbor *msg, uint8_t *buf, size_t *len,
 			  enum coap_content_format fmt)
 {
 	int err;
@@ -50,37 +47,46 @@ static int encode_message(const char *app_id, const char *str,
 		size_t out_len;
 
 		memset(&input, 0, sizeof(struct message_out));
-		input._message_out_appId.value = app_id;
-		input._message_out_appId.len = strlen(app_id);
-		if (str) {
+		input._message_out_appId.value = msg->app_id;
+		input._message_out_appId.len = strlen(msg->app_id);
+
+		switch (msg->type) {
+		case NRF_CLOUD_DATA_TYPE_NONE:
+			LOG_ERR("Cannot encode unknown type.");
+			return -EINVAL;
+		case NRF_CLOUD_DATA_TYPE_STR:
 			input._message_out_data_choice = _message_out_data_tstr;
-			input._message_out_data_tstr.value = str;
-			input._message_out_data_tstr.len = strlen(str);
-		} else if (pvt) {
+			input._message_out_data_tstr.value = msg->str_val;
+			input._message_out_data_tstr.len = strlen(msg->str_val);
+			break;
+		case NRF_CLOUD_DATA_TYPE_PVT:
 			input._message_out_data_choice = _message_out_data__pvt;
-			input._message_out_data__pvt._pvt_lat = pvt->lat;
-			input._message_out_data__pvt._pvt_lng = pvt->lon;
-			input._message_out_data__pvt._pvt_acc = pvt->accuracy;
-			if (pvt->has_speed) {
-				input._message_out_data__pvt._pvt_spd._pvt_spd = pvt->speed;
+			input._message_out_data__pvt._pvt_lat = msg->pvt->lat;
+			input._message_out_data__pvt._pvt_lng = msg->pvt->lon;
+			input._message_out_data__pvt._pvt_acc = msg->pvt->accuracy;
+			if (msg->pvt->has_speed) {
+				input._message_out_data__pvt._pvt_spd._pvt_spd = msg->pvt->speed;
 				input._message_out_data__pvt._pvt_spd_present = true;
 			}
-			if (pvt->has_heading) {
-				input._message_out_data__pvt._pvt_hdg._pvt_hdg = pvt->heading;
+			if (msg->pvt->has_heading) {
+				input._message_out_data__pvt._pvt_hdg._pvt_hdg = msg->pvt->heading;
 				input._message_out_data__pvt._pvt_hdg_present = true;
 			}
-			if (pvt->has_alt) {
-				input._message_out_data__pvt._pvt_alt._pvt_alt = pvt->alt;
+			if (msg->pvt->has_alt) {
+				input._message_out_data__pvt._pvt_alt._pvt_alt = msg->pvt->alt;
 				input._message_out_data__pvt._pvt_alt_present = true;
 			}
-		} else if (!isnan(float_val)) {
-			input._message_out_data_choice = _message_out_data_float;
-			input._message_out_data_float = float_val;
-		} else {
+			break;
+		case NRF_CLOUD_DATA_TYPE_INT:
 			input._message_out_data_choice = _message_out_data_int;
-			input._message_out_data_int = int_val;
+			input._message_out_data_int = msg->int_val;
+			break;
+		case NRF_CLOUD_DATA_TYPE_DOUBLE:
+			input._message_out_data_choice = _message_out_data_float;
+			input._message_out_data_float = msg->double_val;
+			break;
 		}
-		input._message_out_ts._message_out_ts = ts;
+		input._message_out_ts._message_out_ts = msg->ts;
 		input._message_out_ts_present = true;
 		err = cbor_encode_message_out(buf, *len, &input, &out_len);
 		if (err) {
@@ -93,7 +99,8 @@ static int encode_message(const char *app_id, const char *str,
 	} else if (fmt == COAP_CONTENT_FORMAT_APP_JSON) {
 		struct nrf_cloud_data out;
 
-		err = nrf_cloud_encode_message(app_id, float_val, str, NULL, ts, &out);
+		err = nrf_cloud_encode_message(msg->app_id, msg->double_val, msg->str_val, NULL,
+					       msg->ts, &out);
 		if (err) {
 			*len = 0;
 		} else if (*len <= out.len) {
@@ -112,15 +119,15 @@ static int encode_message(const char *app_id, const char *str,
 	return err;
 }
 
-int coap_codec_message_encode(const char *app_id,
-			      const char *str_val, double float_val, int int_val,
-			      int64_t ts, uint8_t *buf, size_t *len, enum coap_content_format fmt)
+int coap_codec_message_encode(struct nrf_cloud_obj_coap_cbor *msg, uint8_t *buf, size_t *len,
+			      enum coap_content_format fmt)
 {
-	__ASSERT_NO_MSG(app_id != NULL);
+	__ASSERT_NO_MSG(msg != NULL);
+	__ASSERT_NO_MSG(msg->app_id != NULL);
 	__ASSERT_NO_MSG(buf != NULL);
 	__ASSERT_NO_MSG(len != NULL);
 
-	return encode_message(app_id, str_val, NULL, float_val, int_val, ts, buf, len, fmt);
+	return encode_message(msg, buf, len, fmt);
 }
 
 int coap_codec_sensor_encode(const char *app_id, double float_val,
@@ -130,7 +137,14 @@ int coap_codec_sensor_encode(const char *app_id, double float_val,
 	__ASSERT_NO_MSG(buf != NULL);
 	__ASSERT_NO_MSG(len != NULL);
 
-	return encode_message(app_id, NULL, NULL, float_val, 0, ts, buf, len, fmt);
+	struct nrf_cloud_obj_coap_cbor msg = {
+		.app_id		= (char *)app_id,
+		.type		= NRF_CLOUD_DATA_TYPE_DOUBLE,
+		.double_val	= float_val,
+		.ts		= ts
+	};
+
+	return encode_message(&msg, buf, len, fmt);
 }
 
 int coap_codec_pvt_encode(const char *app_id, const struct nrf_cloud_gnss_pvt *pvt,
@@ -141,7 +155,14 @@ int coap_codec_pvt_encode(const char *app_id, const struct nrf_cloud_gnss_pvt *p
 	__ASSERT_NO_MSG(buf != NULL);
 	__ASSERT_NO_MSG(len != NULL);
 
-	return encode_message(app_id, NULL, pvt, 0, 0, ts, buf, len, fmt);
+	struct nrf_cloud_obj_coap_cbor msg = {
+		.app_id		= (char *)app_id,
+		.type		= NRF_CLOUD_DATA_TYPE_PVT,
+		.pvt		= (struct nrf_cloud_gnss_pvt *)pvt,
+		.ts		= ts
+	};
+
+	return encode_message(&msg, buf, len, fmt);
 }
 
 static void copy_cell(struct cell *dst, struct lte_lc_cell const *const src)
@@ -370,8 +391,8 @@ int coap_codec_ground_fix_resp_decode(struct nrf_cloud_location_result *result,
 	return err;
 }
 
-#if defined(CONFIG_NRF_CLOUD_AGPS)
-int coap_codec_agps_encode(struct nrf_cloud_rest_agps_request const *const request,
+#if defined(CONFIG_NRF_CLOUD_AGNSS)
+int coap_codec_agnss_encode(struct nrf_cloud_rest_agnss_request const *const request,
 			   uint8_t *buf, size_t *len, enum coap_content_format fmt)
 {
 	__ASSERT_NO_MSG(request != NULL);
@@ -379,51 +400,51 @@ int coap_codec_agps_encode(struct nrf_cloud_rest_agps_request const *const reque
 	__ASSERT_NO_MSG(len != NULL);
 
 	if (fmt != COAP_CONTENT_FORMAT_APP_CBOR) {
-		LOG_ERR("Invalid format for A-GPS: %d", fmt);
+		LOG_ERR("Invalid format for A-GNSS: %d", fmt);
 		return -ENOTSUP;
 	}
 
 	int ret;
-	struct agps_req input;
-	struct agps_req_types_ *t = &input._agps_req_types;
+	struct agnss_req input;
+	struct agnss_req_types_ *t = &input._agnss_req_types;
 	size_t out_len;
-	enum nrf_cloud_agps_type types[ARRAY_SIZE(t->_agps_req_types_int)];
+	enum nrf_cloud_agnss_type types[ARRAY_SIZE(t->_agnss_req_types_int)];
 	int cnt;
 
-	memset(&input, 0, sizeof(struct agps_req));
-	input._agps_req_eci = request->net_info->current_cell.id;
-	input._agps_req_mcc = request->net_info->current_cell.mcc;
-	input._agps_req_mnc = request->net_info->current_cell.mnc;
-	input._agps_req_tac = request->net_info->current_cell.tac;
-	if (request->type == NRF_CLOUD_REST_AGPS_REQ_CUSTOM) {
-		cnt = nrf_cloud_agps_type_array_get(request->agps_req, types, ARRAY_SIZE(types));
-		t->_agps_req_types_int_count = cnt;
-		input._agps_req_types_present = true;
+	memset(&input, 0, sizeof(struct agnss_req));
+	input._agnss_req_eci = request->net_info->current_cell.id;
+	input._agnss_req_mcc = request->net_info->current_cell.mcc;
+	input._agnss_req_mnc = request->net_info->current_cell.mnc;
+	input._agnss_req_tac = request->net_info->current_cell.tac;
+	if (request->type == NRF_CLOUD_REST_AGNSS_REQ_CUSTOM) {
+		cnt = nrf_cloud_agnss_type_array_get(request->agnss_req, types, ARRAY_SIZE(types));
+		t->_agnss_req_types_int_count = cnt;
+		input._agnss_req_types_present = true;
 		LOG_DBG("num elements: %d", cnt);
 		for (int i = 0; i < cnt; i++) {
 			LOG_DBG("  %d: %d", i, types[i]);
-			t->_agps_req_types_int[i] = (int)types[i];
+			t->_agnss_req_types_int[i] = (int)types[i];
 		}
 	} else {
-		input._agps_req_requestType._agps_req_requestType._type_choice =
+		input._agnss_req_requestType._agnss_req_requestType._type_choice =
 			_type__rtAssistance;
-		input._agps_req_requestType_present = true;
+		input._agnss_req_requestType_present = true;
 	}
 	if (request->filtered) {
-		input._agps_req_filtered_present = true;
-		input._agps_req_filtered._agps_req_filtered = true;
+		input._agnss_req_filtered_present = true;
+		input._agnss_req_filtered._agnss_req_filtered = true;
 		if (request->mask_angle != DEFAULT_MASK_ANGLE) {
-			input._agps_req_mask_present = true;
-			input._agps_req_mask._agps_req_mask = request->mask_angle;
+			input._agnss_req_mask_present = true;
+			input._agnss_req_mask._agnss_req_mask = request->mask_angle;
 		}
 	}
 	if (request->net_info->current_cell.rsrp != NRF_CLOUD_LOCATION_CELL_OMIT_RSRP) {
-		input._agps_req_rsrp._agps_req_rsrp = request->net_info->current_cell.rsrp;
-		input._agps_req_rsrp_present = true;
+		input._agnss_req_rsrp._agnss_req_rsrp = request->net_info->current_cell.rsrp;
+		input._agnss_req_rsrp_present = true;
 	}
-	ret = cbor_encode_agps_req(buf, *len, &input, &out_len);
+	ret = cbor_encode_agnss_req(buf, *len, &input, &out_len);
 	if (ret) {
-		LOG_ERR("Error %d encoding A-GPS req", ret);
+		LOG_ERR("Error %d encoding A-GNSS req", ret);
 		ret = -EINVAL;
 		*len = 0;
 	} else {
@@ -432,7 +453,7 @@ int coap_codec_agps_encode(struct nrf_cloud_rest_agps_request const *const reque
 	return ret;
 }
 
-int coap_codec_agps_resp_decode(struct nrf_cloud_rest_agps_result *result,
+int coap_codec_agnss_resp_decode(struct nrf_cloud_rest_agnss_result *result,
 				const uint8_t *buf, size_t len, enum coap_content_format fmt)
 {
 	__ASSERT_NO_MSG(result != NULL);
@@ -442,18 +463,18 @@ int coap_codec_agps_resp_decode(struct nrf_cloud_rest_agps_result *result,
 		enum nrf_cloud_error nrf_err;
 		int err;
 
-		/* Check for a potential A-GPS JSON error message from nRF Cloud */
+		/* Check for a potential A-GNSS JSON error message from nRF Cloud */
 		err = nrf_cloud_error_msg_decode(buf, NRF_CLOUD_JSON_APPID_VAL_AGPS,
 						 NRF_CLOUD_JSON_MSG_TYPE_VAL_DATA, &nrf_err);
 		if (!err) {
-			LOG_ERR("nRF Cloud returned A-GPS error: %d", nrf_err);
+			LOG_ERR("nRF Cloud returned A-GNSS error: %d", nrf_err);
 			return -EFAULT;
 		}
-		LOG_ERR("Invalid A-GPS response format");
+		LOG_ERR("Invalid A-GNSS response format");
 		return -EPROTO;
 	}
 	if (fmt != COAP_CONTENT_FORMAT_APP_OCTET_STREAM) {
-		LOG_ERR("Invalid format for A-GPS data: %d", fmt);
+		LOG_ERR("Invalid format for A-GNSS data: %d", fmt);
 		return -ENOTSUP;
 	}
 	if (!result) {
@@ -461,14 +482,14 @@ int coap_codec_agps_resp_decode(struct nrf_cloud_rest_agps_result *result,
 	}
 
 	if (result->buf_sz < len) {
-		LOG_WRN("A-GPS buffer is too small; expected: %zd, got:%zd; truncated",
+		LOG_WRN("A-GNSS buffer is too small; expected: %zd, got:%zd; truncated",
 			len, result->buf_sz);
 	}
-	result->agps_sz = MIN(result->buf_sz, len);
-	memcpy(result->buf, buf, result->agps_sz);
+	result->agnss_sz = MIN(result->buf_sz, len);
+	memcpy(result->buf, buf, result->agnss_sz);
 	return 0;
 }
-#endif /* CONFIG_NRF_CLOUD_AGPS */
+#endif /* CONFIG_NRF_CLOUD_AGNSS */
 
 #if defined(CONFIG_NRF_CLOUD_PGPS)
 int coap_codec_pgps_encode(struct nrf_cloud_rest_pgps_request const *const request,

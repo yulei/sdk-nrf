@@ -62,7 +62,7 @@ int cloud_codec_encode_cloud_location(
 	struct cloud_codec_data *output,
 	struct cloud_data_cloud_location *cloud_location)
 {
-	int err;
+	int err = -ENODATA;
 	char *buffer;
 
 	__ASSERT_NO_MSG(output != NULL);
@@ -75,25 +75,23 @@ int cloud_codec_encode_cloud_location(
 		return -ENOMEM;
 	}
 
-	if (!cloud_location->neighbor_cells_valid) {
-		err = -ENODATA;
-		goto exit;
-	}
-
-	err = json_common_neighbor_cells_data_add(root_obj, &cloud_location->neighbor_cells,
-						  JSON_COMMON_ADD_DATA_TO_OBJECT);
-	if (err) {
-		goto exit;
+	if (cloud_location->neighbor_cells_valid) {
+		err = json_common_neighbor_cells_data_add(root_obj, &cloud_location->neighbor_cells,
+							  JSON_COMMON_ADD_DATA_TO_OBJECT);
+		if (err) {
+			goto exit;
+		}
 	}
 
 #if defined(CONFIG_LOCATION_METHOD_WIFI)
-	err = json_common_wifi_ap_data_add(root_obj, &cloud_location->wifi_access_points,
-					   JSON_COMMON_ADD_DATA_TO_OBJECT);
-	if (err) {
-		goto exit;
+	if (cloud_location->wifi_access_points_valid) {
+		err = json_common_wifi_ap_data_add(root_obj, &cloud_location->wifi_access_points,
+						   JSON_COMMON_ADD_DATA_TO_OBJECT);
+		if (err) {
+			goto exit;
+		}
 	}
 #endif
-
 
 	buffer = cJSON_PrintUnformatted(root_obj);
 	if (buffer == NULL) {
@@ -115,14 +113,20 @@ exit:
 	return err;
 }
 
-int cloud_codec_encode_agps_request(struct cloud_codec_data *output,
-				    struct cloud_data_agps_request *agps_request)
+int cloud_codec_decode_cloud_location(const char *input, size_t input_len,
+				      struct location_data *location)
+{
+	return -ENOTSUP;
+}
+
+int cloud_codec_encode_agnss_request(struct cloud_codec_data *output,
+				     struct cloud_data_agnss_request *agnss_request)
 {
 	int err;
 	char *buffer;
 
 	__ASSERT_NO_MSG(output != NULL);
-	__ASSERT_NO_MSG(agps_request != NULL);
+	__ASSERT_NO_MSG(agnss_request != NULL);
 
 	cJSON *root_obj = cJSON_CreateObject();
 
@@ -130,8 +134,8 @@ int cloud_codec_encode_agps_request(struct cloud_codec_data *output,
 		return -ENOMEM;
 	}
 
-	err = json_common_agps_request_data_add(root_obj, agps_request,
-						JSON_COMMON_ADD_DATA_TO_OBJECT);
+	err = json_common_agnss_request_data_add(root_obj, agnss_request,
+						 JSON_COMMON_ADD_DATA_TO_OBJECT);
 	if (err) {
 		goto exit;
 	}

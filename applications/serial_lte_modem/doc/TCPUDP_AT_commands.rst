@@ -10,7 +10,7 @@ TCP and UDP AT commands
 The following commands list contains TCP-related and UDP-related AT commands.
 When native TLS is used, you must store the credentials using the ``AT#XCMNG`` AT command.
 
-For more information on the networking services, visit the `BSD Networking Services Spec Reference`_.
+For more information on the networking services, see the `Zephyr Network APIs`_.
 
 TCP server #XTCPSVR
 ===================
@@ -42,6 +42,7 @@ Syntax
 * The ``<sec_tag>`` parameter is an integer.
   If it is given, a TLS server will be started.
   It indicates to the modem the credential of the security tag used for establishing a secure connection.
+  Can only be used when the :file:`overlay-native_tls.conf` configuration file is used.
 
 Response syntax
 ~~~~~~~~~~~~~~~
@@ -57,13 +58,40 @@ Response syntax
 * The ``<error>`` value is an integer.
   It represents the error value according to the standard POSIX *errno*.
 
-Examples
+Unsolicited notification
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+::
+
+   #XTCPSVR: "<peer ip>","connected"
+
+This is emitted when a new connection has been created to the server.
+
+* The ``<peer_ip>`` value is the IPv4 or IPv6 address of the peer.
+
+.. tcpsvr_disconnect_notif_start
+
+::
+
+   #XTCPSVR: <error>,"disconnected"
+
+This is emitted when the client has been disconnected.
+
+* The ``<error>`` value is an integer.
+  It is either ``0`` when the client is disconnected normally, or an *-errno* code.
+
+.. tcpsvr_disconnect_notif_end
+
+
+Example
 ~~~~~~~~
 
 ::
 
    AT#XTCPSVR=1,3442,600
    #XTCPSVR: 2,"started"
+   #XTCPSVR: "123.456.789.123","connected"
+   #XTCPSVR: 0,"disconnected"
    OK
 
 Read command
@@ -319,11 +347,9 @@ Syntax
 Response syntax
 ~~~~~~~~~~~~~~~
 
-::
-
-   #XTCPSVR: <cause>,"disconnected"
-
-* The ``<cause>`` value is an integer of -111 or ECONNREFUSED.
+.. include:: TCPUDP_AT_commands.rst
+   :start-after: tcpsvr_disconnect_notif_start
+   :end-before: tcpsvr_disconnect_notif_end
 
 Examples
 ~~~~~~~~
@@ -334,7 +360,7 @@ Examples
    #XTCPSVR: 1,2,1
    OK
    AT#XTCPHANGUP=2
-   #XTCPSVR: -111,"disconnected"
+   #XTCPSVR: 0,"disconnected"
    OK
 
 Read command
@@ -376,11 +402,12 @@ TCP receive data
 
 ::
 
-   <data>
    #XTCPDATA: <size>
+   <data>
 
+* The ``<size>`` parameter is an integer that indicates the size of the received data.
+  This notification comes only when SLM is not operating in :ref:`data mode <slm_data_mode>`.
 * The ``<data>`` parameter is a string that contains the data received.
-* The ``<size>`` parameter is the size of the string, which is present only when SLM is not operating in ``slm_data_mode``.
 
 UDP server #XUDPSVR
 ===================
@@ -388,7 +415,7 @@ UDP server #XUDPSVR
 The ``#XUDPSVR`` command allows you to start and stop the UDP server.
 
 .. note::
-   DTLS server functionality is not supported by the nRF9160.
+   DTLS server functionality is not supported by nRF91 Series devices.
 
 Set command
 -----------
@@ -505,7 +532,7 @@ Syntax
 
 ::
 
-   #XUDPCLI=<op>[,<url>,<port>[,<sec_tag>[,<cid>]]]
+   #XUDPCLI=<op>[,<url>,<port>[,<sec_tag>[,<use_dtls_cid>]]]
 
 * The ``<op>`` parameter can accept one of the following values:
 
@@ -522,7 +549,7 @@ Syntax
 * The ``<sec_tag>`` parameter is an integer.
   If it is given, a DTLS client will be started.
   It indicates to the modem the credential of the security tag used for establishing a secure connection.
-* The ``<cid>`` parameter is an integer.
+* The ``<use_dtls_cid>`` parameter is an integer.
   It indicates whether to use DTLS's connection identifier.
   This parameter is only supported with modem firmware 1.3.5 and newer.
   See :ref:`SLM_AT_SSOCKETOPT` for more details regarding the allowed values.
@@ -589,7 +616,7 @@ Syntax
 
 ::
 
-   #XUDPCLI: <list of ops>,<url>,<port>,<sec_tag>,<cid>
+   #XUDPCLI: <list of ops>,<url>,<port>,<sec_tag>,<use_dtls_cid>
 
 Examples
 ~~~~~~~~
@@ -597,7 +624,7 @@ Examples
 ::
 
    AT#XUDPCLI=?
-   #XUDPCLI: (0,1,2),<url>,<port>,<sec_tag>,<cid>
+   #XUDPCLI: (0,1,2),<url>,<port>,<sec_tag>,<use_dtls_cid>
    OK
 
 UDP send data #XUDPSEND
@@ -655,8 +682,9 @@ UDP receive data
 
 ::
 
-   <data>
    #XUDPDATA: <size>
+   <data>
 
+* The ``<size>`` parameter is an integer that indicates the size of the received data.
+  This notification comes only when SLM is not operating in :ref:`data mode <slm_data_mode>`.
 * The ``<data>`` parameter is a string that contains the data received.
-* The ``<size>`` parameter is the size of the string, which is present only when SLM is not operating in ``slm_data_mode``.

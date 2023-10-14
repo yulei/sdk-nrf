@@ -138,9 +138,24 @@ config MBEDTLS_CIPHER_MODE_XTS
 	bool
 	default n
 
+if !(OPENTHREAD_BORDER_AGENT || OPENTHREAD_COMMISSIONER || OPENTHREAD_COAPS)
+
+config MBEDTLS_SSL_SRV_C
+	bool
+	default n
+
+config MBEDTLS_SSL_COOKIE_C
+	bool
+	default n
+
+endif # !(OPENTHREAD_BORDER_AGENT || OPENTHREAD_COMMISSIONER || OPENTHREAD_COAPS)
+
+# Note: MBEDTLS_HEAP_SIZE value for OPENTHREAD_NRF_SECURITY_PSA is experimental.
+# It might be changed in the future.
 config MBEDTLS_HEAP_SIZE
 	int
-	default 12440
+	default 15360 if OPENTHREAD_NRF_SECURITY_PSA
+	default 12440 if !OPENTHREAD_NRF_SECURITY_PSA
 
 config OPENTHREAD_PING_SENDER
 	bool
@@ -196,11 +211,11 @@ config OPENTHREAD_CSL_TIMEOUT
 	int
 	default 20
 
-endif
+endif # OPENTHREAD_CSL_RECEIVER
 
-endif
+endif # !OPENTHREAD_THREAD_VERSION_1_1
 
 config OPENTHREAD_TCP_ENABLE
 	select EXPERIMENTAL
 
-endif
+endif # NET_L2_OPENTHREAD

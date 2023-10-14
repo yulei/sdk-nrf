@@ -44,35 +44,83 @@ target_sources(app PRIVATE
     src/main.cpp
     src/bridge_shell.cpp
     ${COMMON_ROOT}/src/bridge/bridge_manager.cpp
-    ${COMMON_ROOT}/src/bridge/bridged_device.cpp
+    ${COMMON_ROOT}/src/bridge/matter_bridged_device.cpp
+    ${COMMON_ROOT}/src/bridge/bridge_storage_manager.cpp
+    ${COMMON_ROOT}/src/bridge/bridged_device_data_provider.cpp
     src/zap-generated/IMClusterCommandHandler.cpp
     src/zap-generated/callback-stub.cpp
     ${COMMON_ROOT}/src/led_widget.cpp
+    ${COMMON_ROOT}/src/persistent_storage_util.cpp
 )
 
-if(CONFIG_CHIP_OTA_REQUESTOR)
-    target_sources(app PRIVATE ${COMMON_ROOT}/src/ota_util.cpp)
-endif()
+if(CONFIG_BRIDGED_DEVICE_BT)
+    target_sources(app PRIVATE
+        ${COMMON_ROOT}/src/bridge/ble_connectivity_manager.cpp
+        src/ble_providers/ble_bridged_device_factory.cpp
+    )
+    target_include_directories(app PRIVATE src/ble_providers)
 
 if(CONFIG_BRIDGE_ONOFF_LIGHT_BRIDGED_DEVICE)
     target_sources(app PRIVATE
         src/bridged_device_types/onoff_light.cpp
-        src/bridged_device_types/onoff_light_data_provider.cpp
+        src/ble_providers/ble_onoff_light_data_provider.cpp
     )
-endif()
-
-if(CONFIG_BRIDGE_TEMPERATURE_SENSOR_BRIDGED_DEVICE)
-    target_sources(app PRIVATE
-            src/bridged_device_types/temperature_sensor.cpp
-            src/bridged_device_types/temperature_sensor_data_provider.cpp
-    )
-endif()
+endif() # CONFIG_BRIDGE_ONOFF_LIGHT_BRIDGED_DEVICE
 
 if(CONFIG_BRIDGE_HUMIDITY_SENSOR_BRIDGED_DEVICE)
     target_sources(app PRIVATE
         src/bridged_device_types/humidity_sensor.cpp
-        src/bridged_device_types/humidity_sensor_data_provider.cpp
     )
+endif() # CONFIG_BRIDGE_HUMIDITY_SENSOR_BRIDGED_DEVICE
+
+if(CONFIG_BRIDGE_TEMPERATURE_SENSOR_BRIDGED_DEVICE)
+    target_sources(app PRIVATE
+        src/bridged_device_types/temperature_sensor.cpp
+    )
+endif() # CONFIG_BRIDGE_TEMPERATURE_SENSOR_BRIDGED_DEVICE
+
+# Assume it makes no sense to support BLE environmental sensor without all Matter counterparts
+if(CONFIG_BRIDGE_TEMPERATURE_SENSOR_BRIDGED_DEVICE AND CONFIG_BRIDGE_HUMIDITY_SENSOR_BRIDGED_DEVICE)
+    target_sources(app PRIVATE
+        src/ble_providers/ble_environmental_data_provider.cpp
+    )
+endif() # CONFIG_BRIDGE_TEMPERATURE_SENSOR_BRIDGED_DEVICE AND CONFIG_BRIDGE_HUMIDITY_SENSOR_BRIDGED_DEVICE
+
+else()
+    target_sources(app PRIVATE
+        src/simulated_providers/simulated_bridged_device_factory.cpp
+    )
+    target_include_directories(app PRIVATE src/simulated_providers)
+
+if(CONFIG_BRIDGE_ONOFF_LIGHT_BRIDGED_DEVICE)
+    target_sources(app PRIVATE
+        src/bridged_device_types/onoff_light.cpp
+        src/simulated_providers/simulated_onoff_light_data_provider.cpp
+    )
+endif() # CONFIG_BRIDGE_ONOFF_LIGHT_BRIDGED_DEVICE
+
+if(CONFIG_BRIDGE_TEMPERATURE_SENSOR_BRIDGED_DEVICE)
+    target_sources(app PRIVATE
+            src/bridged_device_types/temperature_sensor.cpp
+            src/simulated_providers/simulated_temperature_sensor_data_provider.cpp
+    )
+endif() # CONFIG_BRIDGE_TEMPERATURE_SENSOR_BRIDGED_DEVICE
+
+if(CONFIG_BRIDGE_HUMIDITY_SENSOR_BRIDGED_DEVICE)
+    target_sources(app PRIVATE
+        src/bridged_device_types/humidity_sensor.cpp
+        src/simulated_providers/simulated_humidity_sensor_data_provider.cpp
+    )
+endif() # CONFIG_BRIDGE_HUMIDITY_SENSOR_BRIDGED_DEVICE
+
+endif() # CONFIG_BRIDGED_DEVICE_BT
+
+if(CONFIG_CHIP_OTA_REQUESTOR OR CONFIG_MCUMGR_TRANSPORT_BT)
+    target_sources(app PRIVATE ${COMMON_ROOT}/src/ota_util.cpp)
+endif()
+
+if(CONFIG_MCUMGR_TRANSPORT_BT)
+    target_sources(app PRIVATE ${COMMON_ROOT}/src/dfu_over_smp.cpp)
 endif()
 
 chip_configure_data_model(app

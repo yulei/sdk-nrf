@@ -780,6 +780,8 @@ enum op_band {
 	BAND_24G
 };
 
+#define TWT_EXTEND_SP_EDCA  0x1
+
 /**
  * @brief This structure defines the command responsible for initializing the UMAC.
  *  After the host driver brings up, the host sends NRF_WIFI_CMD_INIT to the RPU.
@@ -813,6 +815,12 @@ struct nrf_wifi_cmd_sys_init {
 	struct nrf_wifi_tx_pwr_ctrl_params tx_pwr_ctrl_params;
 	/** Offload mgmt buffer refill to UMAC when enabled */
 	unsigned char mgmt_buff_offload;
+	/** Enable features from driver config */
+	unsigned int feature_flags;
+	/** To deactivate beamforming, By default the RPU enables the beamforming feature.
+	 *  If a user wishes to turn it off, they should set this parameter to 1.
+	 */
+	unsigned int disable_beamforming;
 } __NRF_WIFI_PKD;
 
 /**

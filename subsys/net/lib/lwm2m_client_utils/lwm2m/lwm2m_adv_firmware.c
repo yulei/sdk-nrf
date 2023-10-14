@@ -25,7 +25,7 @@ LOG_MODULE_REGISTER(LOG_MODULE_NAME);
 #define FIRMWARE_VERSION_MAJOR 1
 #define FIRMWARE_VERSION_MINOR 0
 
-#define MAX_INSTANCE_COUNT 2
+#define MAX_INSTANCE_COUNT CONFIG_LWM2M_CLIENT_UTILS_ADV_FOTA_INSTANCE_COUNT
 
 /* Firmware resource IDs */
 #define FIRMWARE_PACKAGE_ID			0
@@ -69,8 +69,8 @@ static uint8_t delivery_method[MAX_INSTANCE_COUNT];
 static time_t last_change[MAX_INSTANCE_COUNT];
 static char package_uri[MAX_INSTANCE_COUNT][PACKAGE_URI_LEN];
 static char component_version[MAX_INSTANCE_COUNT][PACKAGE_URI_LEN];
-static struct lwm2m_objlnk linked_instances[MAX_INSTANCE_COUNT * (MAX_INSTANCE_COUNT - 1)];
-static struct lwm2m_objlnk conflict_instances[MAX_INSTANCE_COUNT * (MAX_INSTANCE_COUNT - 1)];
+static struct lwm2m_objlnk linked_instances[MAX_INSTANCE_COUNT * LINKED_INSTANCES_LEN];
+static struct lwm2m_objlnk conflict_instances[MAX_INSTANCE_COUNT * LINKED_INSTANCES_LEN];
 
 /* A varying number of firmware object instances exists */
 static struct lwm2m_engine_obj firmware;
@@ -114,6 +114,7 @@ void lwm2m_adv_firmware_set_update_state(uint16_t obj_inst_id, uint8_t state)
 		LOG_DBG("Already at state %d", state);
 		return;
 	}
+	lwm2m_registry_lock();
 
 	path = LWM2M_OBJ(LWM2M_OBJECT_ADV_FIRMWARE_ID, obj_inst_id, FIRMWARE_UPDATE_RESULT_ID);
 
@@ -147,6 +148,7 @@ void lwm2m_adv_firmware_set_update_state(uint16_t obj_inst_id, uint8_t state)
 		break;
 	default:
 		LOG_ERR("Unhandled state: %u", state);
+		lwm2m_registry_unlock();
 		return;
 	}
 
@@ -161,6 +163,7 @@ void lwm2m_adv_firmware_set_update_state(uint16_t obj_inst_id, uint8_t state)
 	now = time(NULL);
 	path.res_id = FIRMWARE_LAST_STATE_CHANGE_TIME_ID;
 	lwm2m_set_time(&path, now);
+	lwm2m_registry_unlock();
 }
 
 uint8_t lwm2m_adv_firmware_get_update_result(uint16_t obj_inst_id)
@@ -173,6 +176,7 @@ void lwm2m_adv_firmware_set_update_result(uint16_t obj_inst_id, uint8_t result)
 	uint8_t state;
 	bool error = false;
 	struct lwm2m_obj_path path;
+	lwm2m_registry_lock();
 
 	switch (result) {
 	case RESULT_DEFAULT:
@@ -228,6 +232,7 @@ void lwm2m_adv_firmware_set_update_result(uint16_t obj_inst_id, uint8_t result)
 		break;
 	default:
 		LOG_ERR("Unhandled result: %u", result);
+		lwm2m_registry_unlock();
 		return;
 	}
 
@@ -237,6 +242,7 @@ void lwm2m_adv_firmware_set_update_result(uint16_t obj_inst_id, uint8_t result)
 
 	path = LWM2M_OBJ(LWM2M_OBJECT_ADV_FIRMWARE_ID, obj_inst_id, FIRMWARE_UPDATE_RESULT_ID);
 	lwm2m_set_u8(&path, result);
+	lwm2m_registry_unlock();
 
 	LOG_DBG("Update result = %d", result);
 }
@@ -249,18 +255,18 @@ static int package_write_cb(uint16_t obj_inst_id, uint16_t res_id, uint16_t res_
 	lwm2m_engine_set_data_cb_t callback;
 
 	state = lwm2m_adv_firmware_get_update_state(obj_inst_id);
-	if (state == STATE_IDLE) {
-		lwm2m_adv_firmware_set_update_state(obj_inst_id, STATE_DOWNLOADING);
-	} else if (data_len == 0U || (data_len == 1U && data[0] == '\0')) {
-		if (state == STATE_DOWNLOADED || STATE_DOWNLOADING) {
-			/* reset to state idle and result default */
-			lwm2m_adv_firmware_set_update_result(obj_inst_id, RESULT_DEFAULT);
-			LOG_DBG("Update canceled by writing %d bytes", data_len);
-			return 0;
+	if (data_len == 0U || (data_len == 1U && data[0] == '\0')) {
+		if (state == STATE_UPDATING) {
+			/* Cancel at Updating state is not accepted */
+			LOG_WRN("Download has already completed");
+			return -EPERM;
 		}
-		LOG_WRN("Download has already completed");
-		return -EPERM;
 
+		lwm2m_adv_firmware_set_update_result(obj_inst_id, RESULT_DEFAULT);
+		return 0;
+
+	} else if (state == STATE_IDLE) {
+		lwm2m_adv_firmware_set_update_state(obj_inst_id, STATE_DOWNLOADING);
 	} else if (state != STATE_DOWNLOADING) {
 		LOG_WRN("Cannot download: state = %d", state);
 		return -EPERM;

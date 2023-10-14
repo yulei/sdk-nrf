@@ -442,7 +442,7 @@ Bluetooth samples
 
   * Updated the sample by improving the scalability when it is used with multiple devices.
 
-* :ref:`peripheral_fast_pair` sample:
+* Bluetooth: Fast Pair sample:
 
   * Added the default Fast Pair provisioning data that is used when no other provisioning data is specified.
   * Updated the documentation to align it with the new way of displaying notifications for the Fast Pair debug Model IDs.
@@ -543,7 +543,7 @@ Multicore samples
 nRF9160 samples
 ---------------
 
-* :ref:`http_full_modem_update_sample` sample:
+* :ref:`http_modem_full_update_sample` sample:
 
   * The sample now uses modem firmware versions 1.3.3 and 1.3.4.
   * Enabled external flash in the nRF9160 DK devicetree overlays for v0.14.0 or later versions, as it is now disabled in the Zephyr board definition.
@@ -589,7 +589,7 @@ nRF9160 samples
 
   * Updated the sample to show how to get interface address information using the :c:func:`nrf_getifaddrs` function.
 
-* :ref:`nrf_cloud_mqtt_multi_service` sample:
+* :ref:`nrf_cloud_multi_service` sample:
 
   * Updated:
 

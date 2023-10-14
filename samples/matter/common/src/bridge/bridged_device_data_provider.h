@@ -6,6 +6,8 @@
 
 #pragma once
 
+#include <app-common/zap-generated/ids/Attributes.h>
+#include <app-common/zap-generated/ids/Clusters.h>
 #include <app/util/attribute-storage.h>
 
 class BridgedDeviceDataProvider {
@@ -21,6 +23,14 @@ public:
 				       size_t dataSize) = 0;
 	virtual CHIP_ERROR UpdateState(chip::ClusterId clusterId, chip::AttributeId attributeId, uint8_t *buffer) = 0;
 
+	CHIP_ERROR NotifyReachableStatusChange(bool isReachable);
+
 protected:
 	UpdateAttributeCallback mUpdateAttributeCallback;
+
+private:
+	struct ReachableContext {
+		bool mIsReachable;
+		BridgedDeviceDataProvider *mProvider;
+	};
 };

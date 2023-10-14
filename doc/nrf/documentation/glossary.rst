@@ -38,10 +38,10 @@ Glossary
    Application Programming Interface (API)
       A language and message format used by an application program to communicate with an operating system, application, or other services.
 
-   Assisted GPS (A-GPS)
+   Assisted GNSS (A-GNSS)
       A form of assistance provided to devices trying to obtain a :term:`Global Navigation Satellite System (GNSS)` fix.
-      It improves the :term:`Time to First Fix (TTFF)` by utilizing a connection (for example, over cellular) to the internet to retrieve the :term:`Almanac data` and :term:`Ephemeris data`.
-      A connection to an internet server that has the Almanac and Ephemeris data is several times quicker than using the data link to the GPS satellites.
+      It improves the :term:`Time to First Fix (TTFF)` by utilizing a connection (for example, over cellular) to the internet to retrieve the :term:`almanac data` and :term:`ephemeris data`.
+      A connection to an internet server that has the almanac and ephemeris data is several times quicker than using the data link to the GNSS satellites.
 
    Association
       The process of adding a provisioned device to a cloud account using the device ID.
@@ -103,6 +103,7 @@ Glossary
       A sequence of properties identifying the trustworthiness of each layer in the system, all the way back to a property in the system referred to as :term:`Root of Trust (RoT)`.
       A secure system depends on building and maintaining a chain of trust through all the layers in the system.
       Each step in this chain guarantees that the next step can be trusted to have certain properties because any unauthorized modification of a subsequent step will be detected and the process halted.
+      You can read more about this concept in the :ref:`bootloader documentation <ug_bootloader_chain_of_trust>`.
 
    Clear to Send (CTS)
       In :term:`flow control <Hardware Flow Control (HWFC)>`, the receiving end is ready and telling the far end to start sending.
@@ -203,6 +204,9 @@ Glossary
 
    Evolved Node B (eNB)
       Base stations connected to the network that communicate wirelessly with mobile handsets in a 4G LTE network or 5G non-standalone (NSA) mode.
+
+   Expansion Board (EB)
+      A printed circuit board assembly that you can connect to other development hardware to give it added functionalities and features.
 
    Extended Discontinuous Reception (eDRX)
       A method to conserve the battery of an Internet of Things (IoT) device by allowing it to remain inactive for extended periods.
@@ -604,10 +608,11 @@ Glossary
    Revision
       A tracked state in time of a Git repository.
       It can always be represented by a Git SHA, but can also be a Git tag.
-      For more information, see :ref:`intro_vers_revs` and `Git revisions`_.
+      For more information, see :ref:`dm-revisions` and `Git revisions`_.
 
    Root of Trust (RoT)
       The property or component in a secure system that provides the foundation of a :term:`Chain of Trust`.
+      You can read more about this concept in the :ref:`bootloader documentation <ug_bootloader_chain_of_trust>`.
 
    Sample
       An implementation example that showcases a single feature or library.

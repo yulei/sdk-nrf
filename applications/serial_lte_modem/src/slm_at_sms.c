@@ -24,9 +24,6 @@ enum slm_sms_operation {
 
 static int sms_handle;
 
-/* global variable defined in different files */
-extern struct at_param_list at_param_list;
-
 static void sms_callback(struct sms_data *const data, void *context)
 {
 	static uint16_t ref_number;
@@ -175,11 +172,7 @@ static int do_sms_send(const char *number, const char *message)
 }
 
 
-/**@brief handle AT#XSMS commands
- *  AT#XSMS=<op>,[<number>,<message>]
- *  AT#XSMS? READ command not supported
- *  AT#XSMS=?
- */
+/* Handles AT#XSMS commands. */
 int handle_at_sms(enum at_cmd_type cmd_type)
 {
 	int err = -EINVAL;
@@ -187,7 +180,7 @@ int handle_at_sms(enum at_cmd_type cmd_type)
 
 	switch (cmd_type) {
 	case AT_CMD_TYPE_SET_COMMAND:
-		err = at_params_unsigned_short_get(&at_param_list, 1, &op);
+		err = at_params_unsigned_short_get(&slm_at_param_list, 1, &op);
 		if (err) {
 			return err;
 		}
@@ -201,12 +194,12 @@ int handle_at_sms(enum at_cmd_type cmd_type)
 			int size;
 
 			size = SMS_MAX_ADDRESS_LEN_CHARS + 1;
-			err = util_string_get(&at_param_list, 2, number, &size);
+			err = util_string_get(&slm_at_param_list, 2, number, &size);
 			if (err) {
 				return err;
 			}
 			size = MAX_CONCATENATED_MESSAGE * SMS_MAX_PAYLOAD_LEN_CHARS;
-			err = util_string_get(&at_param_list, 3, message, &size);
+			err = util_string_get(&slm_at_param_list, 3, message, &size);
 			if (err) {
 				return err;
 			}

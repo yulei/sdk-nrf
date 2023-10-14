@@ -17,10 +17,17 @@
 #include <platform/nrfconnect/DeviceInstanceInfoProviderImpl.h>
 #endif
 
+#ifdef CONFIG_MCUMGR_TRANSPORT_BT
+#include "dfu_over_smp.h"
+#endif
+
 struct k_timer;
+class AppFabricTableDelegate;
 
 class AppTask {
 public:
+	friend class AppFabricTableDelegate;
+
 	static AppTask &Instance()
 	{
 		static AppTask sAppTask;
@@ -48,6 +55,7 @@ private:
 	static void LEDStateUpdateHandler(LEDWidget &ledWidget);
 	static void FunctionTimerTimeoutCallback(k_timer *timer);
 	static void UpdateStatusLED();
+	static CHIP_ERROR RestoreBridgedDevices();
 
 	FunctionEvent mFunction = FunctionEvent::NoneSelected;
 	bool mFunctionTimerActive = false;

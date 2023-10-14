@@ -32,23 +32,6 @@
 #include <nrfx_timer.h>
 #include <nrf_erratas.h>
 
-#define DTM_UART DT_CHOSEN(ncs_dtm_uart)
-
-#if DT_NODE_HAS_PROP(DTM_UART, current_speed)
-/* UART Baudrate used to communicate with the DTM library. */
-#define DTM_UART_BAUDRATE DT_PROP(DTM_UART, current_speed)
-
-/* The UART poll cycle in micro seconds.
- * A baud rate of e.g. 19200 bits / second, and 8 data bits, 1 start/stop bit,
- * no flow control, give the time to transmit a byte:
- * 10 bits * 1/19200 = approx: 520 us. To ensure no loss of bytes,
- * the UART should be polled every 260 us.
- */
-#define DTM_UART_POLL_CYCLE ((uint32_t) (10 * 1e6 / DTM_UART_BAUDRATE / 2))
-#else
-#error "DTM UART node not found"
-#endif /* DT_NODE_HAS_PROP(DTM_UART, currrent_speed) */
-
 /* Default timer used for timing. */
 #define DEFAULT_TIMER_INSTANCE     0
 #define DEFAULT_TIMER_IRQ          NRFX_CONCAT_3(TIMER,			 \
@@ -57,14 +40,9 @@
 #define DEFAULT_TIMER_IRQ_HANDLER  NRFX_CONCAT_3(nrfx_timer_,		 \
 						 DEFAULT_TIMER_INSTANCE, \
 						 _irq_handler)
-/* Timer used for measuring UART poll cycle wait time. */
-#define WAIT_TIMER_INSTANCE        1
-#define WAIT_TIMER_IRQ             NRFX_CONCAT_3(TIMER,			 \
-						 WAIT_TIMER_INSTANCE,    \
-						 _IRQn)
-#define WAIT_TIMER_IRQ_HANDLER     NRFX_CONCAT_3(nrfx_timer_,		 \
-						 WAIT_TIMER_INSTANCE,    \
-						 _irq_handler)
+
+/* Note that the timer instance 1 can be used in the communication module. */
+
 /* Note that the timer instance 2 is used in the FEM driver. */
 
 #if NRF52_ERRATA_172_PRESENT
@@ -83,8 +61,6 @@
 
 BUILD_ASSERT(NRFX_TIMER_CONFIG_LABEL(DEFAULT_TIMER_INSTANCE) == 1,
 	     "Core DTM timer needs additional KConfig configuration");
-BUILD_ASSERT(NRFX_TIMER_CONFIG_LABEL(WAIT_TIMER_INSTANCE) == 1,
-	     "Wait DTM timer needs additional KConfig configuration");
 #if NRF52_ERRATA_172_PRESENT
 BUILD_ASSERT(NRFX_TIMER_CONFIG_LABEL(ANOMALY_172_TIMER_INSTANCE) == 1,
 	     "Anomaly DTM timer needs additional KConfig configuration");
@@ -102,19 +78,9 @@ BUILD_ASSERT(NRFX_TIMER_CONFIG_LABEL(ANOMALY_172_TIMER_INSTANCE) == 1,
 #define RFPHY_TEST_0X0F_REF_PATTERN  0x0F
 #define RFPHY_TEST_0X55_REF_PATTERN  0x55
 #define RFPHY_TEST_0XFF_REF_PATTERN  0xFF
-
-/* Event status response bits for Read Supported variant of LE Test Setup
- * command.
- */
-#define LE_TEST_SETUP_DLE_SUPPORTED         BIT(1)
-#define LE_TEST_SETUP_2M_PHY_SUPPORTED      BIT(2)
-#define LE_TEST_STABLE_MODULATION_SUPPORTED BIT(3)
-#define LE_TEST_CODED_PHY_SUPPORTED         BIT(4)
-#define LE_TEST_CTE_SUPPORTED               BIT(5)
-#define DTM_LE_ANTENNA_SWITCH               BIT(6)
-#define DTM_LE_AOD_1US_TANSMISSION          BIT(7)
-#define DTM_LE_AOD_1US_RECEPTION            BIT(8)
-#define DTM_LE_AOA_1US_RECEPTION            BIT(9)
+#define RFPHY_TEST_0X00_REF_PATTERN  0x00
+#define RFPHY_TEST_0XF0_REF_PATTERN  0xF0
+#define RFPHY_TEST_0XAA_REF_PATTERN  0xAA
 
 /* Time between start of TX packets (in us). */
 #define TX_INTERVAL 625
@@ -172,13 +138,12 @@ BUILD_ASSERT(NRFX_TIMER_CONFIG_LABEL(ANOMALY_172_TIMER_INSTANCE) == 1,
 /* Base address length in bytes. */
 #define PACKET_BA_LEN             3
 /* CTE IQ sample data size. */
-#define DTM_CTE_SAMPLE_DATA_SIZE  128
+#define DTM_CTE_SAMPLE_DATA_SIZE  0x52
 /* Vendor specific packet type for internal use. */
 #define DTM_PKT_TYPE_VENDORSPECIFIC  0xFE
 /* 1111111 bit pattern packet type for internal use. */
 #define DTM_PKT_TYPE_0xFF            0xFF
-/* Response event data shift. */
-#define DTM_RESPONSE_EVENT_SHIFT 0x01
+
 /* Maximum number of payload octets that the local Controller supports for
  * transmission of a single Link Layer Data Physical Channel PDU.
  */
@@ -200,6 +165,24 @@ BUILD_ASSERT(NRFX_TIMER_CONFIG_LABEL(ANOMALY_172_TIMER_INSTANCE) == 1,
 #define PHYS_CH_MAX 39
 
 #define FEM_USE_DEFAULT_GAIN 0xFF
+
+/* Minimum supported CTE length in 8 us units. */
+#define CTE_LENGTH_MIN 0x02
+
+/* Maximum supported CTE length in 8 us units. */
+#define CTE_LENGTH_MAX 0x14
+
+/* Mask of the Type in the CTEInfo. */
+#define CTEINFO_TYPE_MASK 0x03
+
+/* Position of the Type in the CTEInfo. */
+#define CTEINFO_TYPE_POS 0x06
+
+/* Mask of the Time in the CTEInfo. */
+#define CTEINFO_TIME_MASK 0x1F
+
+/* Maximimum channel number */
+#define DTM_MAX_CHAN_NR 0x27
 
 /* States used for the DTM test implementation */
 enum dtm_state {
@@ -240,17 +223,6 @@ enum dtm_cte_slot {
 	DTM_CTE_SLOT_1US = 0x02,
 };
 
-/* Constatnt Tone Extension antenna switch pattern. */
-enum dtm_antenna_pattern {
-	/* Constant Tone Extension: Antenna switch pattern 1, 2, 3 ...N. */
-	DTM_ANTENNA_PATTERN_123N123N = 0x00,
-
-	/* Constant Tone Extension: Antenna switch pattern
-	 * 1, 2, 3 ...N, N - 1, N - 2, ..., 1, ...
-	 */
-	DTM_ANTENNA_PATTERN_123N2123 = 0x01
-};
-
 /* The PDU payload type for each bit pattern. Identical to the PKT value
  * except pattern 0xFF which is 0x04.
  */
@@ -264,8 +236,51 @@ enum dtm_pdu_type {
 	/* 10101010 bit pattern (LSB is the leftmost bit). */
 	DTM_PDU_TYPE_0X55 = 0x02,
 
-	/* 11111111 bit pattern (Used only for coded PHY). */
+	/* PRBS15 bit pattern */
+	DTM_PDU_TYPE_PRBS15 = 0x03,
+
+	/* 11111111 bit pattern */
 	DTM_PDU_TYPE_0XFF = 0x04,
+
+	/* 00000000 bit pattern */
+	DTM_PDU_TYPE_0X00 = 0x05,
+
+	/* 00001111 bit pattern  (LSB is the leftmost bit). */
+	DTM_PDU_TYPE_0XF0 = 0x06,
+
+	/* 01010101 bit pattern (LSB is the leftmost bit). */
+	DTM_PDU_TYPE_0XAA = 0x07
+};
+
+/* Vendor Specific DTM subcommand for Transmitter Test command.
+ * It replaces Frequency field and must be combined with DTM_PKT_0XFF_OR_VS
+ * packet type.
+ */
+enum dtm_vs_subcmd {
+	/* Length=0 indicates a constant, unmodulated carrier until LE_TEST_END
+	 * or LE_RESET
+	 */
+	CARRIER_TEST = 0,
+
+	/* nRFgo Studio uses value 1 in length field, to indicate a constant,
+	 * unmodulated carrier until LE_TEST_END or LE_RESET
+	 */
+	CARRIER_TEST_STUDIO = 1,
+
+	/* Set transmission power, value -40..+4 dBm in steps of 4 */
+	SET_TX_POWER = 2,
+
+	/* Switch front-end module (FEM) antenna. */
+	FEM_ANTENNA_SELECT = 3,
+
+	/* Set front-end module (FEM) gain value. */
+	FEM_GAIN_SET = 4,
+
+	/* Set FEM ramp-up time. */
+	FEM_RAMP_UP_SET = 5,
+
+	/* Restore front-end module (FEM) default parameters (antenna, gain, delay). */
+	FEM_DEFAULT_PARAMS_SET = 6
 };
 
 /* Structure holding the PDU used for transmitting/receiving a PDU. */
@@ -282,7 +297,10 @@ struct dtm_cte_info {
 	enum dtm_cte_slot slot;
 
 	/* Antenna switch pattern. */
-	enum dtm_antenna_pattern antenna_pattern;
+	uint8_t *antenna_pattern;
+
+	/* Antenna switch pattern length. */
+	uint8_t antenna_pattern_len;
 
 	/* Received CTE IQ sample data. */
 	uint32_t data[DTM_CTE_SAMPLE_DATA_SIZE];
@@ -295,6 +313,9 @@ struct dtm_cte_info {
 
 	/* CTEInfo. */
 	uint8_t info;
+
+	/* IQ Report callback */
+	dtm_iq_report_callback_t iq_rep_cb;
 };
 
 struct fem_parameters {
@@ -316,16 +337,6 @@ static struct dtm_instance {
 	/* Current machine state. */
 	enum dtm_state state;
 
-	/* Current command status - initially "ok", may be set if error
-	 * detected, or to packet count.
-	 */
-	uint16_t event;
-
-	/* Command has been processed - number of not yet reported event
-	 * bytes.
-	 */
-	bool new_event;
-
 	/* Number of valid packets received. */
 	uint16_t rx_pkt_count;
 
@@ -338,12 +349,10 @@ static struct dtm_instance {
 	/* Payload length of TX PDU, bits 2:7 of 16-bit dtm command. */
 	uint32_t packet_len;
 
-	/* Bits 0..1 of 16-bit transmit command, or 0xFFFFFFFF. */
-	uint32_t packet_type;
+	/* Type of test packet. */
+	enum dtm_packet packet_type;
 
-	/* 0..39 physical channel number (base 2402 MHz, Interval 2 MHz),
-	 * bits 8:13 of 16-bit dtm command.
-	 */
+	/* 0..39 physical channel number (base 2402 MHz, Interval 2 MHz) */
 	uint32_t phys_ch;
 
 	/* Length of the preamble. */
@@ -354,12 +363,6 @@ static struct dtm_instance {
 
 	/* Timer to be used for scheduling TX packets. */
 	const nrfx_timer_t timer;
-
-	/* Timer to be used for measuring UART poll cycle wait time. */
-	const nrfx_timer_t wait_timer;
-
-	/* Semaphore for synchronizing UART poll cycle wait time.*/
-	struct k_sem wait_sem;
 
 #if NRF52_ERRATA_172_PRESENT
 	/* Timer to be used to handle Anomaly 172. */
@@ -391,8 +394,6 @@ static struct dtm_instance {
 	.packet_hdr_plen = NRF_RADIO_PREAMBLE_LENGTH_8BIT,
 	.address = DTM_RADIO_ADDRESS,
 	.timer = NRFX_TIMER_INSTANCE(DEFAULT_TIMER_INSTANCE),
-	.wait_timer = NRFX_TIMER_INSTANCE(WAIT_TIMER_INSTANCE),
-	.wait_sem = Z_SEM_INITIALIZER(dtm_inst.wait_sem, 0, 1),
 #if NRF52_ERRATA_172_PRESENT
 	.anomaly_timer = NRFX_TIMER_INSTANCE(ANOMALY_172_TIMER_INSTANCE),
 #endif /* NRF52_ERRATA_172_PRESENT */
@@ -406,7 +407,7 @@ static struct dtm_instance {
  * in the array is reverse of that found by running the PRBS9 algorithm.
  * This is because of the endianness of the nRF5 radio.
  */
-static uint8_t const dtm_prbs_content[] = {
+static uint8_t const dtm_prbs9_content[] = {
 	0xFF, 0xC1, 0xFB, 0xE8, 0x4C, 0x90, 0x72, 0x8B,
 	0xE7, 0xB3, 0x51, 0x89, 0x63, 0xAB, 0x23, 0x23,
 	0x02, 0x84, 0x18, 0x72, 0xAA, 0x61, 0x2F, 0x3B,
@@ -441,6 +442,61 @@ static uint8_t const dtm_prbs_content[] = {
 	0x8A, 0x84, 0x39, 0xF4, 0x36, 0x0B, 0xF7
 };
 
+static uint8_t const dtm_prbs15_content[] = {
+	0xFF, 0x7F, 0x00, 0x20, 0x00, 0x18, 0x00, 0x0A,
+	0x80, 0x07, 0x20, 0x02, 0x98, 0x01, 0xAA, 0x80,
+	0x7F, 0x20, 0x20, 0x18, 0x18, 0x0A, 0x8A, 0x87,
+	0x27, 0x22, 0x9A, 0x99, 0xAB, 0x2A, 0xFF, 0x5F,
+	0x00, 0x38, 0x00, 0x12, 0x80, 0x0D, 0xA0, 0x05,
+	0xB8, 0x03, 0x32, 0x81, 0xD5, 0xA0, 0x5F, 0x38,
+	0x38, 0x12, 0x92, 0x8D, 0xAD, 0xA5, 0xBD, 0xBB,
+	0x31, 0xB3, 0x54, 0x75, 0xFF, 0x67, 0x00, 0x2A,
+	0x80, 0x1F, 0x20, 0x08, 0x18, 0x06, 0x8A, 0x82,
+	0xE7, 0x21, 0x8A, 0x98, 0x67, 0x2A, 0xAA, 0x9F,
+	0x3F, 0x28, 0x10, 0x1E, 0x8C, 0x08, 0x65, 0xC6,
+	0xAB, 0x12, 0xFF, 0x4D, 0x80, 0x35, 0xA0, 0x17,
+	0x38, 0x0E, 0x92, 0x84, 0x6D, 0xA3, 0x6D, 0xB9,
+	0xED, 0xB2, 0xCD, 0xB5, 0x95, 0xB7, 0x2F, 0x36,
+	0x9C, 0x16, 0xE9, 0xCE, 0xCE, 0xD4, 0x54, 0x5F,
+	0x7F, 0x78, 0x20, 0x22, 0x98, 0x19, 0xAA, 0x8A,
+	0xFF, 0x27, 0x00, 0x1A, 0x80, 0x0B, 0x20, 0x07,
+	0x58, 0x02, 0xBA, 0x81, 0xB3, 0x20, 0x75, 0xD8,
+	0x27, 0x1A, 0x9A, 0x8B, 0x2B, 0x27, 0x5F, 0x5A,
+	0xB8, 0x3B, 0x32, 0x93, 0x55, 0xAD, 0xFF, 0x3D,
+	0x80, 0x11, 0xA0, 0x0C, 0x78, 0x05, 0xE2, 0x83,
+	0x09, 0xA1, 0xC6, 0xF8, 0x52, 0xC2, 0xBD, 0x91,
+	0xB1, 0xAC, 0x74, 0x7D, 0xE7, 0x61, 0x8A, 0xA8,
+	0x67, 0x3E, 0xAA, 0x90, 0x7F, 0x2C, 0x20, 0x1D,
+	0xD8, 0x09, 0x9A, 0x86, 0xEB, 0x22, 0xCF, 0x59,
+	0x94, 0x3A, 0xEF, 0x53, 0x0C, 0x3D, 0xC5, 0xD1,
+	0x93, 0x1C, 0x6D, 0xC9, 0xED, 0x96, 0xCD, 0xAE,
+	0xD5, 0xBC, 0x5F, 0x31, 0xF8, 0x14, 0x42, 0x8F,
+	0x71, 0xA4, 0x24, 0x7B, 0x5B, 0x63, 0x7B, 0x69,
+	0xE3, 0x6E, 0xC9, 0xEC, 0x56, 0xCD, 0xFE, 0xD5,
+	0x80, 0x5F, 0x20, 0x38, 0x18, 0x12, 0x8A, 0x8D,
+	0xA7, 0x25, 0xBA, 0x9B, 0x33, 0x2B, 0x55
+};
+
+static const struct dtm_supp_features supported_features = {
+	.data_len_ext = true,
+	.phy_2m = true,
+	.stable_mod = false,
+	.coded_phy = IS_ENABLED(CONFIG_HAS_HW_NRF_RADIO_BLE_CODED),
+#if DIRECTION_FINDING_SUPPORTED
+	.cte = true,
+	.ant_switching = true,
+	.aod_1us_tx = true,
+	.aod_1us_rx = true,
+	.aoa_1us_rx = true,
+#else
+	.cte = false,
+	.ant_switching = false,
+	.aod_1us_tx = false,
+	.aod_1us_rx = false,
+	.aoa_1us_rx = false,
+#endif /* DIRECTION_FINDING_SUPPORTED */
+};
+
 #if DIRECTION_FINDING_SUPPORTED
 
 static void radio_gpio_pattern_clear(void)
@@ -471,30 +527,8 @@ static void switch_pattern_set(void)
 	NRF_RADIO->SWITCHPATTERN = pdu_antenna;
 	NRF_RADIO->SWITCHPATTERN = pdu_antenna;
 
-	switch (dtm_inst.cte_info.antenna_pattern) {
-	case DTM_ANTENNA_PATTERN_123N123N:
-		for (uint16_t i = 1;
-		     i <= dtm_inst.cte_info.antenna_number;
-		     i++) {
-			NRF_RADIO->SWITCHPATTERN = i;
-		}
-
-		break;
-
-	case DTM_ANTENNA_PATTERN_123N2123:
-		for (uint16_t i = 1;
-		     i <= dtm_inst.cte_info.antenna_number;
-		     i++) {
-			NRF_RADIO->SWITCHPATTERN = i;
-		}
-
-		for (uint16_t i = dtm_inst.cte_info.antenna_number - 1;
-		     i > 0;
-		     i--) {
-			NRF_RADIO->SWITCHPATTERN = i;
-		}
-
-		break;
+	for (size_t i = 0; i <= dtm_inst.cte_info.antenna_pattern_len; i++) {
+		NRF_RADIO->SWITCHPATTERN = dtm_inst.cte_info.antenna_pattern[i];
 	}
 }
 
@@ -561,7 +595,6 @@ static void radio_cte_prepare(bool rx)
 static void anomaly_timer_handler(nrf_timer_event_t event_type, void *context);
 #endif /* NRF52_ERRATA_172_PRESENT */
 
-static void wait_timer_handler(nrf_timer_event_t event_type, void *context);
 static void dtm_timer_handler(nrf_timer_event_t event_type, void *context);
 static void radio_handler(const void *context);
 
@@ -614,32 +647,6 @@ static int timer_init(void)
 
 	IRQ_CONNECT(DEFAULT_TIMER_IRQ, CONFIG_DTM_TIMER_IRQ_PRIORITY,
 		    DEFAULT_TIMER_IRQ_HANDLER, NULL, 0);
-
-	return 0;
-}
-
-static int wait_timer_init(void)
-{
-	nrfx_err_t err;
-	nrfx_timer_config_t timer_cfg = {
-		.frequency = NRFX_MHZ_TO_HZ(1),
-		.mode = NRF_TIMER_MODE_TIMER,
-		.bit_width = NRF_TIMER_BIT_WIDTH_16,
-	};
-
-	err = nrfx_timer_init(&dtm_inst.wait_timer, &timer_cfg, wait_timer_handler);
-	if (err != NRFX_SUCCESS) {
-		printk("nrfx_timer_init failed with: %d\n", err);
-		return -EAGAIN;
-	}
-
-	IRQ_CONNECT(WAIT_TIMER_IRQ, CONFIG_DTM_TIMER_IRQ_PRIORITY,
-		    WAIT_TIMER_IRQ_HANDLER, NULL, 0);
-
-	nrfx_timer_compare(&dtm_inst.wait_timer,
-		NRF_TIMER_CC_CHANNEL0,
-		nrfx_timer_us_to_ticks(&dtm_inst.wait_timer, DTM_UART_POLL_CYCLE),
-		true);
 
 	return 0;
 }
@@ -828,8 +835,6 @@ static int radio_init(void)
 	if ((!dtm_hw_radio_validate(dtm_inst.txpower, dtm_inst.radio_mode)) &&
 	    (!IS_ENABLED(CONFIG_DTM_POWER_CONTROL_AUTOMATIC))) {
 		printk("Incorrect settings for radio mode and TX power\n");
-
-		dtm_inst.event = LE_TEST_STATUS_EVENT_ERROR;
 		return -EINVAL;
 	}
 
@@ -838,6 +843,7 @@ static int radio_init(void)
 
 	radio_tx_power_set(dtm_inst.phys_ch, dtm_inst.txpower);
 	nrf_radio_mode_set(NRF_RADIO, dtm_inst.radio_mode);
+	nrf_radio_fast_ramp_up_enable_set(NRF_RADIO, IS_ENABLED(CONFIG_DTM_FAST_RAMP_UP));
 
 	/* Set the access address, address0/prefix0 used for both Rx and Tx
 	 * address.
@@ -880,7 +886,7 @@ static int radio_init(void)
 	return 0;
 }
 
-int dtm_init(void)
+int dtm_init(dtm_iq_report_callback_t callback)
 {
 	int err;
 
@@ -890,11 +896,6 @@ int dtm_init(void)
 	}
 
 	err = timer_init();
-	if (err) {
-		return err;
-	}
-
-	err = wait_timer_init();
 	if (err) {
 		return err;
 	}
@@ -941,23 +942,57 @@ int dtm_init(void)
 	}
 
 	dtm_inst.state = STATE_IDLE;
-	dtm_inst.new_event = false;
 	dtm_inst.packet_len = 0;
+	dtm_inst.cte_info.iq_rep_cb = callback;
 
 	return 0;
 }
 
-void dtm_wait(void)
+#if DIRECTION_FINDING_SUPPORTED
+static void report_iq(void)
 {
-	int err;
+	struct dtm_iq_data iq_data;
 
-	nrfx_timer_enable(&dtm_inst.wait_timer);
+	iq_data.channel = dtm_inst.phys_ch;
+	iq_data.rssi = -nrf_radio_rssi_sample_get(NRF_RADIO);
 
-	err = k_sem_take(&dtm_inst.wait_sem, K_FOREVER);
-	if (err) {
-		printk("DTM wait error: %d\n", err);
+	nrf_radio_event_clear(NRF_RADIO, NRF_RADIO_EVENT_RSSIEND);
+
+	iq_data.rssi_ant = dtm_hw_radio_pdu_antenna_get();
+
+	if (dtm_inst.cte_info.mode == DTM_CTE_MODE_AOD) {
+		if (dtm_inst.cte_info.slot == DTM_CTE_SLOT_1US) {
+			iq_data.type = DTM_CTE_TYPE_AOD_1US;
+		} else if (dtm_inst.cte_info.slot == DTM_CTE_SLOT_2US) {
+			iq_data.type = DTM_CTE_TYPE_AOD_2US;
+		} else {
+			/* Not possible - invalid value */
+			__ASSERT_NO_MSG(false);
+		}
+	} else if (dtm_inst.cte_info.mode == DTM_CTE_MODE_AOA) {
+		iq_data.type = DTM_CTE_TYPE_AOA;
+	} else {
+		/* Not possible - invalid value */
+		__ASSERT_NO_MSG(false);
 	}
+
+	if (dtm_inst.cte_info.slot == DTM_CTE_SLOT_1US) {
+		iq_data.slot = DTM_CTE_SLOT_DURATION_1US;
+	} else if (dtm_inst.cte_info.slot == DTM_CTE_SLOT_2US) {
+		iq_data.slot = DTM_CTE_SLOT_DURATION_2US;
+	} else {
+		/* Not possible - invalid value */
+		__ASSERT_NO_MSG(false);
+	}
+
+	/* There is no requirement to report iq samples with invalid CRC */
+	iq_data.status = DTM_PACKET_STATUS_CRC_OK;
+	iq_data.sample_cnt = nrf_radio_dfe_amount_get(NRF_RADIO);
+	iq_data.samples = (struct dtm_iq_sample *)dtm_inst.cte_info.data;
+
+	dtm_inst.cte_info.iq_rep_cb(&iq_data);
 }
+#endif /* DIRECTION_FINDING_SUPPORTED */
 
 /* Function for verifying that a received PDU has the expected structure and
  * content.
@@ -970,6 +1005,7 @@ static bool check_pdu(const struct dtm_pdu *pdu)
 	uint32_t pdu_packet_type;
 	uint32_t length = 0;
 	uint8_t header_len;
+	const uint8_t *payload;
 
 	pdu_packet_type = (uint32_t)
 			  (pdu->content[DTM_HEADER_OFFSET] & 0x0F);
@@ -977,6 +1013,8 @@ static bool check_pdu(const struct dtm_pdu *pdu)
 
 	header_len = (dtm_inst.cte_info.mode != DTM_CTE_MODE_OFF) ?
 		     DTM_HEADER_WITH_CTE_SIZE : DTM_HEADER_SIZE;
+
+	payload = pdu->content + header_len;
 
 	/* Check that the length is valid. */
 	if (length > DTM_PAYLOAD_MAX_SIZE) {
@@ -1000,25 +1038,37 @@ static bool check_pdu(const struct dtm_pdu *pdu)
 		return false;
 	}
 
-	if (pdu_packet_type == DTM_PDU_TYPE_PRBS9) {
-		/* Payload does not consist of one repeated octet; must
-		 * compare it with entire block.
-		 */
-		const uint8_t *payload = pdu->content + header_len;
-
-		return (memcmp(payload, dtm_prbs_content, length) == 0);
-	}
-
 	switch (pdu_packet_type) {
+	case DTM_PDU_TYPE_PRBS9:
+		return (memcmp(payload, dtm_prbs9_content, length) == 0);
+
 	case DTM_PDU_TYPE_0X0F:
 		pattern = RFPHY_TEST_0X0F_REF_PATTERN;
 		break;
+
 	case DTM_PDU_TYPE_0X55:
 		pattern = RFPHY_TEST_0X55_REF_PATTERN;
 		break;
+
+	case DTM_PDU_TYPE_PRBS15:
+		return (memcmp(payload, dtm_prbs15_content, length) == 0);
+
 	case DTM_PDU_TYPE_0XFF:
 		pattern = RFPHY_TEST_0XFF_REF_PATTERN;
 		break;
+
+	case DTM_PDU_TYPE_0X00:
+		pattern = RFPHY_TEST_0X00_REF_PATTERN;
+		break;
+
+	case DTM_PDU_TYPE_0XF0:
+		pattern = RFPHY_TEST_0XF0_REF_PATTERN;
+		break;
+
+	case DTM_PDU_TYPE_0XAA:
+		pattern = RFPHY_TEST_0XAA_REF_PATTERN;
+		break;
+
 	default:
 		/* No valid packet type set. */
 		return false;
@@ -1045,6 +1095,10 @@ static bool check_pdu(const struct dtm_pdu *pdu)
 			((dtm_inst.cte_info.time * 8)) /
 			((dtm_inst.cte_info.slot == DTM_CTE_SLOT_1US) ? 2 : 4);
 		cte_sample_cnt = NRF_RADIO->DFEPACKET.AMOUNT;
+
+		if (dtm_inst.cte_info.iq_rep_cb) {
+			report_iq();
+		}
 
 		memset(dtm_inst.cte_info.data, 0,
 		       sizeof(dtm_inst.cte_info.data));
@@ -1166,8 +1220,7 @@ static void errata_191_handle(bool enable)
 static void radio_ppi_clear(void)
 {
 	nrfx_gppi_channels_disable(BIT(dtm_inst.ppi_radio_start));
-	nrf_egu_event_clear(DTM_EGU,
-			    nrf_egu_event_address_get(DTM_EGU, DTM_EGU_EVENT));
+	nrf_egu_event_clear(DTM_EGU, DTM_EGU_EVENT);
 
 	/* Break connection from timer to radio to stop transmit loop */
 	nrfx_gppi_event_endpoint_clear(dtm_inst.ppi_radio_start,
@@ -1250,10 +1303,8 @@ static void dtm_test_done(void)
 static void radio_start(bool rx, bool force_egu)
 {
 	if (IS_ENABLED(CONFIG_FEM) || force_egu) {
-		nrf_egu_event_clear(DTM_EGU,
-			    nrf_egu_event_address_get(DTM_EGU, DTM_EGU_EVENT));
-		nrf_egu_task_trigger(DTM_EGU,
-			     nrf_egu_task_address_get(DTM_EGU, DTM_EGU_TASK));
+		nrf_egu_event_clear(DTM_EGU, DTM_EGU_EVENT);
+		nrf_egu_task_trigger(DTM_EGU, DTM_EGU_TASK);
 	} else {
 		/* Shorts will start radio in RX mode when it is ready */
 		nrf_radio_task_trigger(NRF_RADIO, rx ? NRF_RADIO_TASK_RXEN : NRF_RADIO_TASK_TXEN);
@@ -1284,6 +1335,8 @@ static void radio_prepare(bool rx)
 #if DIRECTION_FINDING_SUPPORTED
 	nrf_radio_shorts_set(NRF_RADIO,
 		NRF_RADIO_SHORT_READY_START_MASK |
+		(dtm_inst.cte_info.iq_rep_cb ?
+		 NRF_RADIO_SHORT_ADDRESS_RSSISTART_MASK : 0) |
 		(dtm_inst.cte_info.mode == DTM_CTE_MODE_OFF ?
 		 NRF_RADIO_SHORT_END_DISABLE_MASK :
 		 NRF_RADIO_SHORT_PHYEND_DISABLE_MASK));
@@ -1309,6 +1362,7 @@ static void radio_prepare(bool rx)
 	nrf_radio_int_enable(NRF_RADIO,
 			NRF_RADIO_INT_READY_MASK |
 			NRF_RADIO_INT_ADDRESS_MASK |
+			NRF_RADIO_INT_RSSIEND_MASK |
 			NRF_RADIO_INT_END_MASK);
 
 	if (rx) {
@@ -1380,8 +1434,7 @@ static bool dtm_set_txpower(uint32_t new_tx_power)
 }
 #endif /* !CONFIG_DTM_POWER_CONTROL_AUTOMATIC */
 
-static enum dtm_err_code  dtm_vendor_specific_pkt(uint32_t vendor_cmd,
-						  uint32_t vendor_option)
+static int dtm_vendor_specific_pkt(uint32_t vendor_cmd, uint32_t vendor_option)
 {
 	switch (vendor_cmd) {
 	/* nRFgo Studio uses CARRIER_TEST_STUDIO to indicate a continuous
@@ -1394,7 +1447,7 @@ static enum dtm_err_code  dtm_vendor_specific_pkt(uint32_t vendor_cmd,
 		 */
 		radio_prepare(TX_MODE);
 
-		nrf_radio_modecnf0_set(NRF_RADIO, false,
+		nrf_radio_modecnf0_set(NRF_RADIO, IS_ENABLED(CONFIG_DTM_FAST_RAMP_UP),
 				       RADIO_MODECNF0_DTX_Center);
 
 		/* Shortcut between READY event and START task */
@@ -1405,8 +1458,7 @@ static enum dtm_err_code  dtm_vendor_specific_pkt(uint32_t vendor_cmd,
 		if ((dtm_inst.fem.gain != FEM_USE_DEFAULT_GAIN) &&
 		    (!IS_ENABLED(CONFIG_DTM_POWER_CONTROL_AUTOMATIC))) {
 			if (fem_tx_gain_set(dtm_inst.fem.gain) != 0) {
-				dtm_inst.event = LE_TEST_STATUS_EVENT_ERROR;
-				return DTM_ERROR_ILLEGAL_CONFIGURATION;
+				return -EINVAL;
 			}
 		}
 
@@ -1423,8 +1475,7 @@ static enum dtm_err_code  dtm_vendor_specific_pkt(uint32_t vendor_cmd,
 #if !CONFIG_DTM_POWER_CONTROL_AUTOMATIC
 	case SET_TX_POWER:
 		if (!dtm_set_txpower(vendor_option)) {
-			dtm_inst.event = LE_TEST_STATUS_EVENT_ERROR;
-			return DTM_ERROR_ILLEGAL_CONFIGURATION;
+			return -EINVAL;
 		}
 		break;
 #endif /* !CONFIG_DTM_POWER_CONTROL_AUTOMATIC */
@@ -1432,8 +1483,7 @@ static enum dtm_err_code  dtm_vendor_specific_pkt(uint32_t vendor_cmd,
 #if CONFIG_FEM
 	case FEM_ANTENNA_SELECT:
 		if (fem_antenna_select(vendor_option) != 0) {
-			dtm_inst.event = LE_TEST_STATUS_EVENT_ERROR;
-			return DTM_ERROR_ILLEGAL_CONFIGURATION;
+			return -EINVAL;
 		}
 
 		break;
@@ -1455,16 +1505,16 @@ static enum dtm_err_code  dtm_vendor_specific_pkt(uint32_t vendor_cmd,
 		dtm_inst.fem.vendor_ramp_up_time = 0;
 
 		if (fem_antenna_select(FEM_ANTENNA_1) != 0) {
-			dtm_inst.event = LE_TEST_STATUS_EVENT_ERROR;
-			return DTM_ERROR_ILLEGAL_CONFIGURATION;
+			return -EINVAL;
 		}
 
 		break;
 #endif /* CONFIG_FEM */
+	default:
+		return -EINVAL;
 	}
 
-	/* Event code is unchanged, successful */
-	return DTM_SUCCESS;
+	return 0;
 }
 
 static uint32_t dtm_packet_interval_calculate(uint32_t test_payload_length,
@@ -1572,377 +1622,301 @@ static uint32_t dtm_packet_interval_calculate(uint32_t test_payload_length,
 	return packet_interval;
 }
 
-static enum dtm_err_code phy_set(uint8_t phy)
+void dtm_setup_prepare(void)
 {
-	if ((phy >= LE_PHY_1M_MIN_RANGE) &&
-	    (phy <= LE_PHY_1M_MAX_RANGE)) {
+	dtm_test_done();
+}
+
+int dtm_setup_reset(void)
+{
+	/* Reset the packet length upper bits. */
+	dtm_inst.packet_len = 0;
+
+	/* Reset the selected PHY to 1Mbit */
+	dtm_inst.radio_mode = NRF_RADIO_MODE_BLE_1MBIT;
+	dtm_inst.packet_hdr_plen = NRF_RADIO_PREAMBLE_LENGTH_8BIT;
+
+#if DIRECTION_FINDING_SUPPORTED
+	memset(&dtm_inst.cte_info, 0, sizeof(dtm_inst.cte_info));
+#endif /* DIRECTION_FINDING_SUPPORTED */
+
+	errata_191_handle(false);
+	errata_172_handle(false);
+	errata_117_handle(false);
+
+	return radio_init();
+}
+
+int dtm_setup_set_phy(enum dtm_phy phy)
+{
+	switch (phy) {
+	case DTM_PHY_1M:
 		dtm_inst.radio_mode = NRF_RADIO_MODE_BLE_1MBIT;
-		dtm_inst.packet_hdr_plen =
-			NRF_RADIO_PREAMBLE_LENGTH_8BIT;
+		dtm_inst.packet_hdr_plen = NRF_RADIO_PREAMBLE_LENGTH_8BIT;
 
 		errata_191_handle(false);
 		errata_172_handle(false);
 		errata_117_handle(false);
+		break;
 
-		return radio_init();
-	} else if ((phy >= LE_PHY_2M_MIN_RANGE) &&
-		   (phy <= LE_PHY_2M_MAX_RANGE)) {
+	case DTM_PHY_2M:
 		dtm_inst.radio_mode = NRF_RADIO_MODE_BLE_2MBIT;
-		dtm_inst.packet_hdr_plen =
-			NRF_RADIO_PREAMBLE_LENGTH_16BIT;
+		dtm_inst.packet_hdr_plen = NRF_RADIO_PREAMBLE_LENGTH_16BIT;
 
 		errata_191_handle(false);
 		errata_172_handle(false);
 		errata_117_handle(true);
+		break;
 
-		return radio_init();
-	} else if ((phy >= LE_PHY_LE_CODED_S8_MIN_RANGE) &&
-		   (phy <= LE_PHY_LE_CODED_S8_MAX_RANGE)) {
 #if CONFIG_HAS_HW_NRF_RADIO_BLE_CODED
-		dtm_inst.radio_mode =
-			NRF_RADIO_MODE_BLE_LR125KBIT;
-		dtm_inst.packet_hdr_plen =
-			NRF_RADIO_PREAMBLE_LENGTH_LONG_RANGE;
+	case DTM_PHY_CODED_S8:
+		dtm_inst.radio_mode = NRF_RADIO_MODE_BLE_LR125KBIT;
+		dtm_inst.packet_hdr_plen = NRF_RADIO_PREAMBLE_LENGTH_LONG_RANGE;
 
 		errata_191_handle(true);
 		errata_172_handle(true);
 		errata_117_handle(false);
+		break;
 
-		return radio_init();
-#else
-		dtm_inst.event = LE_TEST_STATUS_EVENT_ERROR;
-		return DTM_ERROR_ILLEGAL_CONFIGURATION;
-#endif /* CONFIG_HAS_HW_NRF_RADIO_BLE_CODED */
-	} else if ((phy >= LE_PHY_LE_CODED_S2_MIN_RANGE) &&
-		   (phy <= LE_PHY_LE_CODED_S2_MAX_RANGE)) {
-#if CONFIG_HAS_HW_NRF_RADIO_BLE_CODED
-		dtm_inst.radio_mode =
-			NRF_RADIO_MODE_BLE_LR500KBIT;
-		dtm_inst.packet_hdr_plen =
-			NRF_RADIO_PREAMBLE_LENGTH_LONG_RANGE;
+	case DTM_PHY_CODED_S2:
+		dtm_inst.radio_mode = NRF_RADIO_MODE_BLE_LR500KBIT;
+		dtm_inst.packet_hdr_plen = NRF_RADIO_PREAMBLE_LENGTH_LONG_RANGE;
 
 		errata_191_handle(true);
 		errata_172_handle(true);
 		errata_117_handle(false);
-
-		return radio_init();
+		break;
 #else
-		dtm_inst.event = LE_TEST_STATUS_EVENT_ERROR;
-		return DTM_ERROR_ILLEGAL_CONFIGURATION;
+	case DTM_PHY_CODED_S8:
+	case DTM_PHY_CODED_S2:
+		return -ENOTSUP;
 #endif /* CONFIG_HAS_HW_NRF_RADIO_BLE_CODED */
+
+	default:
+		return -EINVAL;
 	}
 
-	dtm_inst.event = LE_TEST_STATUS_EVENT_ERROR;
-	return DTM_ERROR_ILLEGAL_CONFIGURATION;
+	return radio_init();
 }
 
-static enum dtm_err_code modulation_set(uint8_t modulation)
+int dtm_setup_set_modulation(enum dtm_modulation modulation)
 {
 	/* Only standard modulation is supported. */
-	if (modulation > LE_MODULATION_INDEX_STANDARD_MAX_RANGE) {
-		dtm_inst.event = LE_TEST_STATUS_EVENT_ERROR;
-		return DTM_ERROR_ILLEGAL_CONFIGURATION;
+	if (modulation != DTM_MODULATION_STANDARD) {
+		return -ENOTSUP;
 	}
 
-	return DTM_SUCCESS;
+	return 0;
 }
 
-static enum dtm_err_code feature_read(uint8_t cmd)
+struct dtm_supp_features dtm_setup_read_features(void)
 {
-	if (cmd > LE_TEST_FEATURE_READ_MAX_RANGE) {
-		dtm_inst.event = LE_TEST_STATUS_EVENT_ERROR;
-		return DTM_ERROR_ILLEGAL_CONFIGURATION;
+	return supported_features;
+}
+
+int dtm_setup_read_max_supported_value(enum dtm_max_supported parameter, uint16_t *max_val)
+{
+	if (!max_val) {
+		return -EINVAL;
 	}
 
-	/* 0XXXXXXXXXXX0110 indicate that 2Mbit and DLE is
-	 * supported and stable modulation is not supported
-	 * (No nRF5 device supports this).
-	 */
-	dtm_inst.event =
-		LE_TEST_STATUS_EVENT_SUCCESS |
-#if defined(RADIO_MODE_MODE_Ble_LR125Kbit) || defined(RADIO_MODE_MODE_Ble_LR500Kbit)
-		LE_TEST_CODED_PHY_SUPPORTED |
-#endif /* defined(RADIO_MODE_MODE_Ble_LR125Kbit) || defined(RADIO_MODE_MODE_Ble_LR500Kbit) */
+	switch (parameter) {
+	case DTM_MAX_SUPPORTED_TX_OCTETS:
+		*max_val = NRF_MAX_PAYLOAD_OCTETS;
+		break;
+
+	case DTM_MAX_SUPPORTED_TX_TIME:
+		*max_val = NRF_MAX_RX_TX_TIME;
+		break;
+
+	case DTM_MAX_SUPPORTED_RX_OCTETS:
+		*max_val = NRF_MAX_PAYLOAD_OCTETS;
+		break;
+
+	case DTM_MAX_SUPPORTED_RX_TIME:
+		*max_val = NRF_MAX_RX_TX_TIME;
+		break;
+
 #if DIRECTION_FINDING_SUPPORTED
-		LE_TEST_CTE_SUPPORTED |
-		DTM_LE_ANTENNA_SWITCH |
-		DTM_LE_AOD_1US_TANSMISSION |
-		DTM_LE_AOD_1US_RECEPTION |
-		DTM_LE_AOA_1US_RECEPTION |
+	case DTM_MAX_SUPPORTED_CTE_LENGTH:
+		*max_val = NRF_CTE_MAX_LENGTH;
+		break;
+#else
+	case DTM_MAX_SUPPORTED_CTE_LENGTH:
+		return -ENOTSUP;
 #endif /* DIRECTION_FINDING_SUPPORTED */
-		LE_TEST_SETUP_DLE_SUPPORTED |
-		LE_TEST_SETUP_2M_PHY_SUPPORTED;
 
-	return DTM_SUCCESS;
-}
-
-static enum dtm_err_code maximum_supported_value_read(uint8_t parameter)
-{
-	/* Read supportedMaxTxOctets */
-	if (parameter <= LE_TEST_SUPPORTED_TX_OCTETS_MAX_RANGE) {
-		dtm_inst.event =
-			NRF_MAX_PAYLOAD_OCTETS << DTM_RESPONSE_EVENT_SHIFT;
-	}
-	/* Read supportedMaxTxTime */
-	else if ((parameter >= LE_TEST_SUPPORTED_TX_TIME_MIN_RANGE) &&
-		 (parameter <= LE_TEST_SUPPORTED_TX_TIME_MAX_RANGE)) {
-		dtm_inst.event = NRF_MAX_RX_TX_TIME << DTM_RESPONSE_EVENT_SHIFT;
-	}
-	/* Read supportedMaxRxOctets */
-	else if ((parameter >= LE_TEST_SUPPORTED_RX_OCTETS_MIN_RANGE) &&
-		 (parameter <= LE_TEST_SUPPORTED_RX_OCTETS_MAX_RANGE)) {
-		dtm_inst.event =
-			NRF_MAX_PAYLOAD_OCTETS << DTM_RESPONSE_EVENT_SHIFT;
-	}
-	/* Read supportedMaxRxTime */
-	else if ((parameter >= LE_TEST_SUPPORTED_RX_TIME_MIN_RANGE) &&
-		 (parameter <= LE_TEST_SUPPORTED_RX_TIME_MAX_RANGE)) {
-		dtm_inst.event = NRF_MAX_RX_TX_TIME << DTM_RESPONSE_EVENT_SHIFT;
-	}
-#if DIRECTION_FINDING_SUPPORTED
-	/* Read maximum length of Constant Tone Extension */
-	else if (parameter == LE_TEST_SUPPORTED_CTE_LENGTH) {
-		dtm_inst.event = NRF_CTE_MAX_LENGTH << DTM_RESPONSE_EVENT_SHIFT;
-	}
-#endif /* DIRECTION_FINDING_SUPPORTED */
-	else {
-		dtm_inst.event = LE_TEST_STATUS_EVENT_ERROR;
-		return DTM_ERROR_ILLEGAL_CONFIGURATION;
+	default:
+		return -EINVAL;
 	}
 
-	return DTM_SUCCESS;
+	return 0;
 }
 
 #if DIRECTION_FINDING_SUPPORTED
-static uint32_t constant_tone_setup(uint8_t cte_info)
+int dtm_setup_set_cte_mode(enum dtm_cte_type type, uint8_t time)
 {
-	uint8_t type = (cte_info >> LE_CTE_TYPE_POS) & LE_CTE_TYPE_MASK;
+	uint8_t cte_info = time & CTEINFO_TIME_MASK;
 
-	if (cte_info == 0) {
+	if (type == DTM_CTE_TYPE_NONE) {
 		dtm_inst.cte_info.mode = DTM_CTE_MODE_OFF;
-		return DTM_SUCCESS;
+		return 0;
 	}
 
-	dtm_inst.cte_info.time = cte_info & LE_CTE_CTETIME_MASK;
-	dtm_inst.cte_info.info = cte_info;
-
-
-	if ((dtm_inst.cte_info.time < LE_CTE_LENGTH_MIN) ||
-	    (dtm_inst.cte_info.time > LE_CTE_LENGTH_MAX)) {
-		dtm_inst.event = LE_TEST_STATUS_EVENT_ERROR;
-		return DTM_ERROR_ILLEGAL_CONFIGURATION;
+	if ((time < CTE_LENGTH_MIN) ||
+	    (time > CTE_LENGTH_MAX)) {
+		return -EINVAL;
 	}
+
+	dtm_inst.cte_info.time = time;
 
 	switch (type) {
-	case LE_CTE_TYPE_AOA:
+	case DTM_CTE_TYPE_AOA:
 		dtm_inst.cte_info.mode = DTM_CTE_MODE_AOA;
-
 		break;
 
-	case LE_CTE_TYPE_AOD_1US:
+	case DTM_CTE_TYPE_AOD_1US:
 		dtm_inst.cte_info.mode = DTM_CTE_MODE_AOD;
 		dtm_inst.cte_info.slot = DTM_CTE_SLOT_1US;
-
 		break;
 
-	case LE_CTE_TYPE_AOD_2US:
+	case DTM_CTE_TYPE_AOD_2US:
 		dtm_inst.cte_info.mode = DTM_CTE_MODE_AOD;
-		dtm_inst.cte_info.slot = DTM_CTE_SLOT_2US;
-
-		break;
-
-	default:
-		dtm_inst.event = LE_TEST_STATUS_EVENT_ERROR;
-		return DTM_ERROR_ILLEGAL_CONFIGURATION;
-	}
-
-	return DTM_SUCCESS;
-}
-
-static uint32_t constant_tone_slot_set(uint8_t cte_slot)
-{
-	switch (cte_slot) {
-	case LE_CTE_TYPE_AOD_1US:
-		dtm_inst.cte_info.slot = DTM_CTE_SLOT_1US;
-		break;
-
-	case LE_CTE_TYPE_AOD_2US:
 		dtm_inst.cte_info.slot = DTM_CTE_SLOT_2US;
 		break;
 
 	default:
-		dtm_inst.event = LE_TEST_STATUS_EVENT_ERROR;
-		return DTM_ERROR_ILLEGAL_CONFIGURATION;
+		return -EINVAL;
 	}
 
-	return DTM_SUCCESS;
+	cte_info |= ((dtm_inst.cte_info.mode & CTEINFO_TYPE_MASK) << CTEINFO_TYPE_POS);
+	dtm_inst.cte_info.info = cte_info;
+
+	return 0;
 }
 
-static uint32_t antenna_set(uint8_t antenna)
+int dtm_setup_set_cte_slot(enum dtm_cte_slot_duration slot)
 {
-	dtm_inst.cte_info.antenna_number = antenna & LE_ANTENNA_NUMBER_MASK;
-	dtm_inst.cte_info.antenna_pattern =
-		(enum dtm_antenna_pattern)(antenna &
-					   LE_ANTENNA_SWITCH_PATTERN_MASK);
+	switch (slot) {
+	case DTM_CTE_SLOT_DURATION_1US:
+		dtm_inst.cte_info.slot = DTM_CTE_SLOT_1US;
+		break;
 
-	if ((dtm_inst.cte_info.antenna_number < LE_TEST_ANTENNA_NUMBER_MIN) ||
-	    (dtm_inst.cte_info.antenna_number > LE_TEST_ANTENNA_NUMBER_MAX) ||
-	    (dtm_inst.cte_info.antenna_number > dtm_hw_radio_antenna_number_get())) {
-		dtm_inst.event = LE_TEST_STATUS_EVENT_ERROR;
-		return DTM_ERROR_ILLEGAL_CONFIGURATION;
+	case DTM_CTE_SLOT_DURATION_2US:
+		dtm_inst.cte_info.slot = DTM_CTE_SLOT_2US;
+		break;
+
+	default:
+		return -EINVAL;
 	}
 
-	return DTM_SUCCESS;
+	return 0;
+}
+
+int dtm_setup_set_antenna_params(uint8_t count, uint8_t *pattern, uint8_t pattern_len)
+{
+	if (count > dtm_hw_radio_antenna_number_get()) {
+		return -ENOTSUP;
+	}
+
+	if (!pattern) {
+		return -EINVAL;
+	}
+
+	if (!pattern_len) {
+		return -EINVAL;
+	}
+
+	dtm_inst.cte_info.antenna_number = count;
+	dtm_inst.cte_info.antenna_pattern = pattern;
+	dtm_inst.cte_info.antenna_pattern_len = pattern_len;
+
+	return 0;
 }
 
 #else
-static uint32_t constant_tone_setup(uint8_t cte_info)
+int dtm_setup_set_cte_mode(enum dtm_cte_type type, uint8_t time)
 {
-	if (cte_info != 0) {
-		dtm_inst.event = LE_TEST_STATUS_EVENT_ERROR;
+	ARG_UNUSED(time);
+
+	if (type != DTM_CTE_TYPE_NONE) {
+		return -ENOTSUP;
 	}
 
-	return ((cte_info == 0) ? DTM_SUCCESS : DTM_ERROR_ILLEGAL_CONFIGURATION);
+	return 0;
+}
+
+int dtm_setup_set_cte_slot(enum dtm_cte_slot_duration slot)
+{
+	ARG_UNUSED(slot);
+
+	return -ENOTSUP;
+}
+
+int dtm_setup_set_antenna_params(uint8_t count, uint8_t *pattern, uint8_t pattern_len)
+{
+	ARG_UNUSED(count);
+	ARG_UNUSED(pattern);
+	ARG_UNUSED(pattern_len);
+
+	return -ENOTSUP;
 }
 #endif /* DIRECTION_FINDING_SUPPORTED */
 
-static uint32_t transmit_power_set(int8_t parameter)
+struct dtm_tx_power dtm_setup_set_transmit_power(enum dtm_tx_power_request power, int8_t val,
+						 uint8_t channel)
 {
-	static const uint8_t channel;
-
-	uint32_t dtm_err = DTM_SUCCESS;
-	const uint16_t frequency = radio_frequency_get(channel);
+	uint16_t frequency = radio_frequency_get(channel);
 	const int8_t tx_power_min = dtm_radio_min_power_get(frequency);
 	const int8_t tx_power_max = dtm_radio_max_power_get(frequency);
+	struct dtm_tx_power tmp = {
+		.power = 0,
+		.min = false,
+		.max = false,
+	};
 
-	if ((parameter == LE_TRANSMIT_POWER_LVL_SET_MIN) ||
-	    (parameter <= tx_power_min)) {
+	switch (power) {
+	case DTM_TX_POWER_REQUEST_MIN:
 		dtm_inst.txpower = tx_power_min;
-		dtm_inst.event = LE_TRANSMIT_POWER_MIN_LVL_BIT;
-	} else if ((parameter == LE_TRANSMIT_POWER_LVL_SET_MAX) ||
-		   (parameter >= tx_power_max))  {
+		break;
+
+	case DTM_TX_POWER_REQUEST_MAX:
 		dtm_inst.txpower = tx_power_max;
-		dtm_inst.event = LE_TRANSMIT_POWER_MAX_LVL_BIT;
-	} else if ((parameter < LE_TRANSMIT_POWER_LVL_MIN) ||
-		   (parameter > LE_TRANSMIT_POWER_LVL_MAX)) {
-		dtm_inst.event = LE_TEST_STATUS_EVENT_ERROR;
+		break;
 
-		if (dtm_inst.txpower == tx_power_min) {
-			dtm_inst.event |= LE_TRANSMIT_POWER_MIN_LVL_BIT;
-		} else if (dtm_inst.txpower == tx_power_max) {
-			dtm_inst.event |= LE_TRANSMIT_POWER_MAX_LVL_BIT;
+	case DTM_TX_POWER_REQUEST_VAL:
+		if (val <= tx_power_min) {
+			dtm_inst.txpower = tx_power_min;
+		} else if (val >= tx_power_max) {
+			dtm_inst.txpower = tx_power_max;
 		} else {
-			/* Do nothing. */
+			dtm_inst.txpower = dtm_radio_nearest_power_get(val, frequency);
 		}
-
-		dtm_err = DTM_ERROR_ILLEGAL_CONFIGURATION;
-	} else {
-		/* Look for the nearest tansmit power level and set it. */
-		dtm_inst.txpower = dtm_radio_nearest_power_get(parameter, frequency);
-	}
-
-	dtm_inst.event |= (dtm_inst.txpower << LE_TRANSMIT_POWER_RESPONSE_LVL_POS) &
-			  LE_TRANSMIT_POWER_RESPONSE_LVL_MASK;
-
-	return dtm_err;
-}
-
-static enum dtm_err_code on_test_setup_cmd(enum dtm_ctrl_code control,
-					   uint8_t parameter)
-{
-	/* Note that timer will continue running after a reset */
-	dtm_test_done();
-
-	switch (control) {
-	case LE_TEST_SETUP_RESET:
-		if (parameter > LE_RESET_MAX_RANGE) {
-			dtm_inst.event = LE_TEST_STATUS_EVENT_ERROR;
-			return DTM_ERROR_ILLEGAL_CONFIGURATION;
-		}
-
-		/* Reset the packet length upper bits. */
-		dtm_inst.packet_len = 0;
-
-		/* Reset the selected PHY to 1Mbit */
-		dtm_inst.radio_mode = NRF_RADIO_MODE_BLE_1MBIT;
-		dtm_inst.packet_hdr_plen =
-			NRF_RADIO_PREAMBLE_LENGTH_8BIT;
-
-#if DIRECTION_FINDING_SUPPORTED
-		memset(&dtm_inst.cte_info, 0, sizeof(dtm_inst.cte_info));
-#endif /* DIRECTION_FINDING_SUPPORTED */
-
-		errata_191_handle(false);
-		errata_172_handle(false);
-		errata_117_handle(false);
-
-		radio_init();
-
-		break;
-
-	case LE_TEST_SETUP_SET_UPPER:
-		if (parameter > LE_SET_UPPER_BITS_MAX_RANGE) {
-			dtm_inst.event = LE_TEST_STATUS_EVENT_ERROR;
-			return DTM_ERROR_ILLEGAL_CONFIGURATION;
-		}
-
-		dtm_inst.packet_len =
-			(parameter & LE_UPPER_BITS_MASK) << LE_UPPER_BITS_POS;
-
-		break;
-
-	case LE_TEST_SETUP_SET_PHY:
-		return phy_set(parameter);
-
-	case LE_TEST_SETUP_SELECT_MODULATION:
-		return modulation_set(parameter);
-
-	case LE_TEST_SETUP_READ_SUPPORTED:
-		return feature_read(parameter);
-
-	case LE_TEST_SETUP_READ_MAX:
-		return maximum_supported_value_read(parameter);
-
-	case LE_TEST_SETUP_TRANSMIT_POWER:
-		return transmit_power_set(parameter);
-
-	case LE_TEST_SETUP_CONSTANT_TONE_EXTENSION:
-		return constant_tone_setup(parameter);
-
-#if DIRECTION_FINDING_SUPPORTED
-	case LE_TEST_SETUP_CONSTANT_TONE_EXTENSION_SLOT:
-		return constant_tone_slot_set(parameter);
-
-	case LE_TEST_SETUP_ANTENNA_ARRAY:
-		return antenna_set(parameter);
-#endif /* DIRECTION_FINDING_SUPPORTED */
 
 	default:
-		dtm_inst.event = LE_TEST_STATUS_EVENT_ERROR;
-		return DTM_ERROR_ILLEGAL_CONFIGURATION;
+		return tmp;
 	}
 
-	return DTM_SUCCESS;
-}
-
-static enum dtm_err_code on_test_end_cmd(void)
-{
-	if (dtm_inst.state == STATE_IDLE) {
-		/* Sequencing error, only rx or tx test may be ended */
-		dtm_inst.event = LE_TEST_STATUS_EVENT_ERROR;
-		return DTM_ERROR_INVALID_STATE;
+	if (dtm_inst.txpower == tx_power_min) {
+		tmp.min = true;
+	} else if (dtm_inst.txpower == tx_power_max) {
+		tmp.max = true;
 	}
 
-	dtm_inst.event = LE_PACKET_REPORTING_EVENT |
-			 dtm_inst.rx_pkt_count;
-	dtm_test_done();
+	tmp.power = dtm_inst.txpower;
 
-	return DTM_SUCCESS;
+	return tmp;
 }
 
-static enum dtm_err_code on_test_receive_cmd(void)
+int dtm_test_receive(uint8_t channel)
 {
+	if (channel > PHYS_CH_MAX) {
+		return -EINVAL;
+	}
+
 	dtm_inst.current_pdu = dtm_inst.pdu;
+	dtm_inst.phys_ch = channel;
+	dtm_inst.rx_pkt_count = 0;
 
 	/* Zero fill all pdu fields to avoid stray data from earlier
 	 * test run.
@@ -1953,14 +1927,39 @@ static enum dtm_err_code on_test_receive_cmd(void)
 	radio_prepare(RX_MODE);
 
 	dtm_inst.state = STATE_RECEIVER_TEST;
-	return DTM_SUCCESS;
+	return 0;
 }
 
-static enum dtm_err_code on_test_transmit_cmd(uint32_t length, uint32_t freq)
+int dtm_test_transmit(uint8_t channel, uint8_t length, enum dtm_packet pkt)
 {
 	uint8_t header_len;
 
+	if (dtm_inst.state != STATE_IDLE) {
+		return -EBUSY;
+	}
+
+	if (pkt == DTM_PACKET_FF_OR_VENDOR) {
+		if ((dtm_inst.radio_mode == NRF_RADIO_MODE_BLE_1MBIT ||
+		     dtm_inst.radio_mode == NRF_RADIO_MODE_BLE_2MBIT)) {
+			pkt = DTM_PACKET_VENDOR;
+		} else {
+			pkt = DTM_PACKET_FF;
+		}
+	}
+
+	dtm_inst.packet_type = pkt;
+	dtm_inst.packet_len = length;
+	dtm_inst.phys_ch = channel;
 	dtm_inst.current_pdu = dtm_inst.pdu;
+
+	/* Check for illegal values of m_phys_ch. Skip the check if the
+	 * packet is vendor specific.
+	 */
+	if (pkt != DTM_PACKET_VENDOR && dtm_inst.phys_ch > PHYS_CH_MAX) {
+		/* Parameter error */
+		/* Note: State is unchanged; ongoing test not affected */
+		return -EINVAL;
+	}
 
 	/* Check for illegal values of packet_len. Skip the check
 	 * if the packet is vendor spesific.
@@ -1968,9 +1967,10 @@ static enum dtm_err_code on_test_transmit_cmd(uint32_t length, uint32_t freq)
 	if (dtm_inst.packet_type != DTM_PKT_TYPE_VENDORSPECIFIC &&
 	    dtm_inst.packet_len > DTM_PAYLOAD_MAX_SIZE) {
 		/* Parameter error */
-		dtm_inst.event = LE_TEST_STATUS_EVENT_ERROR;
-		return DTM_ERROR_ILLEGAL_LENGTH;
+		return -EINVAL;
 	}
+
+	dtm_inst.rx_pkt_count = 0;
 
 	header_len = (dtm_inst.cte_info.mode != DTM_CTE_MODE_OFF) ?
 		     DTM_HEADER_WITH_CTE_SIZE : DTM_HEADER_SIZE;
@@ -1980,15 +1980,15 @@ static enum dtm_err_code on_test_transmit_cmd(uint32_t length, uint32_t freq)
 	 * (the HCI SDU uses all 4)
 	 */
 	switch (dtm_inst.packet_type) {
-	case DTM_PKT_PRBS9:
+	case DTM_PACKET_PRBS9:
 		dtm_inst.current_pdu->content[DTM_HEADER_OFFSET] =
 			DTM_PDU_TYPE_PRBS9;
 		/* Non-repeated, must copy entire pattern to PDU */
 		memcpy(dtm_inst.current_pdu->content + header_len,
-		       dtm_prbs_content, dtm_inst.packet_len);
+		       dtm_prbs9_content, dtm_inst.packet_len);
 		break;
 
-	case DTM_PKT_0X0F:
+	case DTM_PACKET_0F:
 		dtm_inst.current_pdu->content[DTM_HEADER_OFFSET] =
 			DTM_PDU_TYPE_0X0F;
 		/* Bit pattern 00001111 repeated */
@@ -1997,7 +1997,7 @@ static enum dtm_err_code on_test_transmit_cmd(uint32_t length, uint32_t freq)
 		       dtm_inst.packet_len);
 		break;
 
-	case DTM_PKT_0X55:
+	case DTM_PACKET_55:
 		dtm_inst.current_pdu->content[DTM_HEADER_OFFSET] =
 			DTM_PDU_TYPE_0X55;
 		/* Bit pattern 01010101 repeated */
@@ -2006,28 +2006,61 @@ static enum dtm_err_code on_test_transmit_cmd(uint32_t length, uint32_t freq)
 		       dtm_inst.packet_len);
 		break;
 
-	case DTM_PKT_TYPE_0xFF:
+	case DTM_PACKET_PRBS15:
+		dtm_inst.current_pdu->content[DTM_HEADER_OFFSET] =
+			DTM_PDU_TYPE_PRBS15;
+		/* Non-repeated, must copy entire pattern to PDU */
+		memcpy(dtm_inst.current_pdu->content + header_len,
+		       dtm_prbs15_content, dtm_inst.packet_len);
+		break;
+		break;
+
+	case DTM_PACKET_FF:
 		dtm_inst.current_pdu->content[DTM_HEADER_OFFSET] =
 			DTM_PDU_TYPE_0XFF;
-		/* Bit pattern 11111111 repeated. Only available in
-		 * coded PHY (Long range).
-		 */
+		/* Bit pattern 11111111 repeated. */
 		memset(dtm_inst.current_pdu->content + header_len,
 		       RFPHY_TEST_0XFF_REF_PATTERN,
 		       dtm_inst.packet_len);
 		break;
 
-	case DTM_PKT_TYPE_VENDORSPECIFIC:
+	case DTM_PACKET_00:
+		dtm_inst.current_pdu->content[DTM_HEADER_OFFSET] =
+			DTM_PDU_TYPE_0X00;
+		/* Bit pattern 00000000 repeated */
+		memset(dtm_inst.current_pdu->content + header_len,
+		       RFPHY_TEST_0X00_REF_PATTERN,
+		       dtm_inst.packet_len);
+		break;
+
+	case DTM_PACKET_F0:
+		dtm_inst.current_pdu->content[DTM_HEADER_OFFSET] =
+			DTM_PDU_TYPE_0XF0;
+		/* Bit pattern 11110000 repeated */
+		memset(dtm_inst.current_pdu->content + header_len,
+		       RFPHY_TEST_0XF0_REF_PATTERN,
+		       dtm_inst.packet_len);
+		break;
+
+	case DTM_PACKET_AA:
+		dtm_inst.current_pdu->content[DTM_HEADER_OFFSET] =
+			DTM_PDU_TYPE_0XAA;
+		/* Bit pattern 10101010 repeated */
+		memset(dtm_inst.current_pdu->content + header_len,
+		       RFPHY_TEST_0XAA_REF_PATTERN,
+		       dtm_inst.packet_len);
+		break;
+
+	case DTM_PACKET_VENDOR:
 		/* The length field is for indicating the vendor
-		 * specific command to execute. The frequency field
+		 * specific command to execute. The channel field
 		 * is used for vendor specific options to the command.
 		 */
-		return dtm_vendor_specific_pkt(length, freq);
+		return dtm_vendor_specific_pkt(length, channel);
 
 	default:
 		/* Parameter error */
-		dtm_inst.event = LE_TEST_STATUS_EVENT_ERROR;
-		return DTM_ERROR_ILLEGAL_CONFIGURATION;
+		return -EINVAL;
 	}
 
 	if (dtm_inst.cte_info.mode != DTM_CTE_MODE_OFF) {
@@ -2052,8 +2085,7 @@ static enum dtm_err_code on_test_transmit_cmd(uint32_t length, uint32_t freq)
 	if ((dtm_inst.fem.gain != FEM_USE_DEFAULT_GAIN) &&
 	    (!IS_ENABLED(CONFIG_DTM_POWER_CONTROL_AUTOMATIC))) {
 		if (fem_tx_gain_set(dtm_inst.fem.gain) != 0) {
-			dtm_inst.event = LE_TEST_STATUS_EVENT_ERROR;
-			return DTM_ERROR_ILLEGAL_CONFIGURATION;
+			return -EINVAL;
 		}
 	}
 
@@ -2074,114 +2106,19 @@ static enum dtm_err_code on_test_transmit_cmd(uint32_t length, uint32_t freq)
 
 	dtm_inst.state = STATE_TRANSMITTER_TEST;
 
-	return DTM_SUCCESS;
+	return 0;
 }
 
-enum dtm_err_code dtm_cmd_put(uint16_t cmd)
+int dtm_test_end(uint16_t *pack_cnt)
 {
-	enum dtm_cmd_code cmd_code = (cmd >> 14) & 0x03;
-	uint32_t freq = (cmd >> 8) & 0x3F;
-	uint32_t length = (cmd >> 2) & 0x3F;
-	enum dtm_pkt_type payload = cmd & 0x03;
-
-	/* Clean out any non-retrieved event that might linger from an earlier
-	 * test.
-	 */
-	dtm_inst.new_event = true;
-
-	/* Set default event; any error will set it to
-	 * LE_TEST_STATUS_EVENT_ERROR
-	 */
-	dtm_inst.event = LE_TEST_STATUS_EVENT_SUCCESS;
-
-	if (dtm_inst.state == STATE_UNINITIALIZED) {
-		/* Application has not explicitly initialized DTM. */
-		return DTM_ERROR_UNINITIALIZED;
+	if (!pack_cnt) {
+		return -EINVAL;
 	}
 
-	if (cmd_code == LE_TEST_SETUP) {
-		enum dtm_ctrl_code control = (cmd >> 8) & 0x3F;
-		uint8_t parameter = cmd;
+	*pack_cnt = dtm_inst.rx_pkt_count;
+	dtm_test_done();
 
-		return on_test_setup_cmd(control, parameter);
-	}
-
-	if (cmd_code == LE_TEST_END) {
-		return on_test_end_cmd();
-	}
-
-	if (dtm_inst.state != STATE_IDLE) {
-		/* Sequencing error - only TEST_END/RESET are legal while
-		 * test is running. Note: State is unchanged;
-		 * ongoing test not affected.
-		 */
-		dtm_inst.event = LE_TEST_STATUS_EVENT_ERROR;
-		return DTM_ERROR_INVALID_STATE;
-	}
-
-	/* Save specified packet in static variable for tx/rx functions to use.
-	 * Note that BLE conformance testers always use full length packets.
-	 */
-	dtm_inst.packet_len = (dtm_inst.packet_len & 0xC0) |
-			      ((uint8_t) length & 0x3F);
-	dtm_inst.packet_type = payload;
-	dtm_inst.phys_ch = freq;
-
-
-	/* If 1 Mbit or 2 Mbit radio mode is in use check for Vendor Specific
-	 * payload.
-	 */
-	if (payload == DTM_PKT_0XFF_OR_VS) {
-		/* Note that in a HCI adaption layer, as well as in the DTM PDU
-		 * format, the value 0x03 is a distinct bit pattern (PRBS15).
-		 * Even though BLE does not support PRBS15, this implementation
-		 * re-maps 0x03 to DTM_PKT_TYPE_VENDORSPECIFIC, to avoid the
-		 * risk of confusion, should the code be extended to greater
-		 * coverage.
-		 */
-		if ((dtm_inst.radio_mode == NRF_RADIO_MODE_BLE_1MBIT ||
-		     dtm_inst.radio_mode == NRF_RADIO_MODE_BLE_2MBIT)) {
-			dtm_inst.packet_type = DTM_PKT_TYPE_VENDORSPECIFIC;
-		} else {
-			dtm_inst.packet_type = DTM_PKT_TYPE_0xFF;
-		}
-	}
-
-
-	/* Check for illegal values of m_phys_ch. Skip the check if the
-	 * packet is vendor spesific.
-	 */
-	if (payload != DTM_PKT_0XFF_OR_VS &&
-	    dtm_inst.phys_ch > PHYS_CH_MAX) {
-		/* Parameter error */
-		/* Note: State is unchanged; ongoing test not affected */
-		dtm_inst.event = LE_TEST_STATUS_EVENT_ERROR;
-		return DTM_ERROR_ILLEGAL_CHANNEL;
-	}
-
-	dtm_inst.rx_pkt_count = 0;
-
-	if (cmd_code == LE_RECEIVER_TEST) {
-		return on_test_receive_cmd();
-	}
-
-	if (cmd_code == LE_TRANSMITTER_TEST) {
-		return on_test_transmit_cmd(length, freq);
-	}
-
-	return DTM_SUCCESS;
-}
-
-bool dtm_event_get(uint16_t *dtm_event)
-{
-	bool was_new = dtm_inst.new_event;
-
-	/* mark the current event as retrieved */
-	dtm_inst.new_event = false;
-	*dtm_event = dtm_inst.event;
-
-	/* return value indicates whether this value was already retrieved. */
-	return was_new;
+	return 0;
 }
 
 static struct dtm_pdu *radio_buffer_swap(void)
@@ -2278,19 +2215,15 @@ static void radio_handler(const void *context)
 		}
 #endif /* NRF52_ERRATA_172_PRESENT */
 	}
+
+	if (nrf_radio_event_check(NRF_RADIO, NRF_RADIO_EVENT_RSSIEND)) {
+		nrf_radio_event_clear(NRF_RADIO, NRF_RADIO_EVENT_RSSIEND);
+	}
 }
 
 static void dtm_timer_handler(nrf_timer_event_t event_type, void *context)
 {
 	// Do nothing
-}
-
-static void wait_timer_handler(nrf_timer_event_t event_type, void *context)
-{
-	nrfx_timer_disable(&dtm_inst.wait_timer);
-	nrfx_timer_clear(&dtm_inst.wait_timer);
-
-	k_sem_give(&dtm_inst.wait_sem);
 }
 
 #if NRF52_ERRATA_172_PRESENT

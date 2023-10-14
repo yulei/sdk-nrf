@@ -23,6 +23,7 @@ LOG_MODULE_REGISTER(scan, CONFIG_LOG_DEFAULT_LEVEL);
 
 #include <zephyr/net/net_if.h>
 #include <zephyr/net/wifi_mgmt.h>
+#include <zephyr/net/wifi_utils.h>
 #include <zephyr/net/net_event.h>
 #include <zephyr/net/ethernet.h>
 #include <zephyr/net/ethernet_mgmt.h>
@@ -42,6 +43,67 @@ LOG_MODULE_REGISTER(scan, CONFIG_LOG_DEFAULT_LEVEL);
 #define SCAN_TIMEOUT_MS 10000
 
 static uint32_t scan_result;
+
+const struct wifi_scan_params tests[] = {
+#ifdef CONFIG_WIFI_SCAN_PROFILE_DEFAULT
+	{
+	},
+#endif
+#ifdef CONFIG_WIFI_SCAN_PROFILE_ACTIVE
+	{
+	.scan_type = WIFI_SCAN_TYPE_ACTIVE,
+	.dwell_time_active = CONFIG_WIFI_MGMT_SCAN_DWELL_TIME_ACTIVE
+	},
+#endif
+#ifdef CONFIG_WIFI_SCAN_PROFILE_PASSIVE
+	{
+	.scan_type = WIFI_SCAN_TYPE_PASSIVE,
+	.dwell_time_passive = CONFIG_WIFI_MGMT_SCAN_DWELL_TIME_PASSIVE
+	},
+#endif
+#ifdef CONFIG_WIFI_SCAN_PROFILE_2_4GHz_ACTIVE
+	{
+	.scan_type = WIFI_SCAN_TYPE_ACTIVE,
+	.bands = 0
+	},
+#endif
+#ifdef CONFIG_WIFI_SCAN_PROFILE_2_4GHz_PASSIVE
+	{
+	.scan_type = WIFI_SCAN_TYPE_PASSIVE,
+	.bands = 0
+	},
+#endif
+#ifdef CONFIG_WIFI_SCAN_PROFILE_5GHz_ACTIVE
+	{
+	.scan_type = WIFI_SCAN_TYPE_ACTIVE,
+	.bands = 0
+	},
+#endif
+#ifdef CONFIG_WIFI_SCAN_PROFILE_5GHz_PASSIVE
+	{
+	.scan_type = WIFI_SCAN_TYPE_PASSIVE,
+	.bands = 0
+	},
+#endif
+#ifdef CONFIG_WIFI_SCAN_PROFILE_2_4GHz_NON_OVERLAP_CHAN
+	{
+	.bands = 0,
+	.chan = { {0, 0} }
+	},
+#endif
+#ifdef CONFIG_WIFI_SCAN_PROFILE_5GHz_NON_DFS_CHAN
+	{
+	.bands = 0,
+	.chan = { {0, 0} }
+	},
+#endif
+#ifdef CONFIG_WIFI_SCAN_PROFILE_2_4GHz_NON_OVERLAP_AND_5GHz_NON_DFS_CHAN
+	{
+	.bands = 0,
+	.chan = { {0, 0} }
+	},
+#endif
+};
 
 static struct net_mgmt_event_callback wifi_shell_mgmt_cb;
 
@@ -181,18 +243,40 @@ static void wifi_mgmt_event_handler(struct net_mgmt_event_callback *cb,
 static int wifi_scan(void)
 {
 	struct net_if *iface = net_if_get_default();
+	int band_str_len;
 
-	struct wifi_scan_params params = {0};
+	struct wifi_scan_params params = tests[0];
 
-	params.scan_type = WIFI_SCAN_TYPE_ACTIVE;
+	band_str_len = sizeof(CONFIG_WIFI_SCAN_BANDS_LIST);
+	if (band_str_len - 1) {
+		char *buf = malloc(band_str_len);
 
-#if defined(CONFIG_WIFI_MGMT_FORCED_PASSIVE_SCAN) || defined(CONFIG_WIFI_SCAN_TYPE_PASSIVE)
-	params.scan_type = WIFI_SCAN_TYPE_PASSIVE;
-#endif
+		if (!buf) {
+			LOG_ERR("Malloc Failed");
+			return -EINVAL;
+		}
+		strcpy(buf, CONFIG_WIFI_SCAN_BANDS_LIST);
+		if (wifi_utils_parse_scan_bands(buf, &params.bands)) {
+			LOG_ERR("Incorrect value(s) in CONFIG_WIFI_SCAN_BANDS_LIST: %s",
+					CONFIG_WIFI_SCAN_BANDS_LIST);
+			free(buf);
+			return -ENOEXEC;
+		}
+		free(buf);
+	}
+
+	if (sizeof(CONFIG_WIFI_SCAN_CHAN_LIST) - 1) {
+		if (wifi_utils_parse_scan_chan(CONFIG_WIFI_SCAN_CHAN_LIST,
+						params.chan)) {
+			LOG_ERR("Incorrect value(s) in CONFIG_WIFI_SCAN_CHAN_LIST: %s",
+					CONFIG_WIFI_SCAN_CHAN_LIST);
+			return -ENOEXEC;
+		}
+	}
+
 	if (net_mgmt(NET_REQUEST_WIFI_SCAN, iface, &params,
-		     sizeof(struct wifi_scan_params))) {
+			sizeof(struct wifi_scan_params))) {
 		LOG_ERR("Scan request failed");
-
 		return -ENOEXEC;
 	}
 
@@ -238,16 +322,27 @@ int main(void)
 	if (!is_mac_addr_set(net_if_get_default())) {
 		struct net_if *iface = net_if_get_default();
 		int ret;
+		struct ethernet_req_params params;
 
 		/* Set a local MAC address with Nordic OUI */
-		ret = net_if_down(iface);
+		if (net_if_is_up(iface)) {
+			ret = net_if_down(iface);
+			if (ret) {
+				LOG_ERR("Cannot bring down iface (%d)", ret);
+				return ret;
+			}
+		}
+
+		ret = net_bytes_from_str(params.mac_address.addr, sizeof(CONFIG_WIFI_MAC_ADDRESS),
+					 CONFIG_WIFI_MAC_ADDRESS);
 		if (ret) {
-			LOG_ERR("Cannot bring down iface (%d)", ret);
+			LOG_ERR("Failed to parse MAC address: %s (%d)",
+				CONFIG_WIFI_MAC_ADDRESS, ret);
 			return ret;
 		}
 
 		net_mgmt(NET_REQUEST_ETHERNET_SET_MAC_ADDRESS, iface,
-			 (void *)CONFIG_WIFI_MAC_ADDRESS, sizeof(CONFIG_WIFI_MAC_ADDRESS));
+			 &params, sizeof(params));
 
 		ret = net_if_up(iface);
 		if (ret) {

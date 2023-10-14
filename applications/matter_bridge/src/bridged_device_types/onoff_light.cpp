@@ -8,6 +8,8 @@
 
 #include <zephyr/logging/log.h>
 
+#include <app-common/zap-generated/ids/Commands.h>
+
 LOG_MODULE_DECLARE(app, CONFIG_CHIP_APP_LOG_LEVEL);
 
 namespace
@@ -38,20 +40,20 @@ DECLARE_DYNAMIC_CLUSTER(Clusters::OnOff::Id, onOffAttrs, onOffIncomingCommands, 
 DECLARE_DYNAMIC_ENDPOINT(bridgedLightEndpoint, bridgedLightClusters);
 
 static constexpr EmberAfDeviceType kBridgedOnOffDeviceTypes[] = {
-	{ static_cast<chip::DeviceTypeId>(BridgedDevice::DeviceType::OnOffLight),
-	  BridgedDevice::kDefaultDynamicEndpointVersion },
-	{ static_cast<chip::DeviceTypeId>(BridgedDevice::DeviceType::BridgedNode),
-	  BridgedDevice::kDefaultDynamicEndpointVersion }
+	{ static_cast<chip::DeviceTypeId>(MatterBridgedDevice::DeviceType::OnOffLight),
+	  MatterBridgedDevice::kDefaultDynamicEndpointVersion },
+	{ static_cast<chip::DeviceTypeId>(MatterBridgedDevice::DeviceType::BridgedNode),
+	  MatterBridgedDevice::kDefaultDynamicEndpointVersion }
 };
 
 static constexpr uint8_t kLightDataVersionSize = ArraySize(bridgedLightClusters);
 
-OnOffLightDevice::OnOffLightDevice(const char *nodeLabel) : BridgedDevice(nodeLabel)
+OnOffLightDevice::OnOffLightDevice(const char *nodeLabel) : MatterBridgedDevice(nodeLabel)
 {
 	mDataVersionSize = kLightDataVersionSize;
 	mEp = &bridgedLightEndpoint;
 	mDeviceTypeList = kBridgedOnOffDeviceTypes;
-	mDeviceTypeListSize = sizeof(kBridgedOnOffDeviceTypes);
+	mDeviceTypeListSize = ARRAY_SIZE(kBridgedOnOffDeviceTypes);
 	mDataVersion = static_cast<DataVersion *>(chip::Platform::MemoryAlloc(sizeof(DataVersion) * mDataVersionSize));
 }
 
@@ -59,12 +61,6 @@ CHIP_ERROR OnOffLightDevice::HandleRead(ClusterId clusterId, AttributeId attribu
 					uint16_t maxReadLength)
 {
 	switch (clusterId) {
-	case Clusters::BridgedDeviceBasicInformation::Id:
-		return HandleReadBridgedDeviceBasicInformation(attributeId, buffer, maxReadLength);
-		break;
-	case Clusters::Descriptor::Id:
-		return HandleReadDescriptor(attributeId, buffer, maxReadLength);
-		break;
 	case Clusters::OnOff::Id:
 		return HandleReadOnOff(attributeId, buffer, maxReadLength);
 		break;
@@ -112,23 +108,31 @@ CHIP_ERROR OnOffLightDevice::HandleWrite(ClusterId clusterId, AttributeId attrib
 CHIP_ERROR OnOffLightDevice::HandleAttributeChange(chip::ClusterId clusterId, chip::AttributeId attributeId, void *data,
 						   size_t dataSize)
 {
-	if (clusterId != Clusters::OnOff::Id || !data) {
+	CHIP_ERROR err = CHIP_NO_ERROR;
+	if (!data) {
 		return CHIP_ERROR_INVALID_ARGUMENT;
 	}
 
-	CHIP_ERROR err;
+	switch (clusterId) {
+	case Clusters::BridgedDeviceBasicInformation::Id:
+		return HandleWriteDeviceBasicInformation(clusterId, attributeId, data, dataSize);
+	case Clusters::OnOff::Id: {
+		switch (attributeId) {
+		case Clusters::OnOff::Attributes::OnOff::Id: {
+			bool value;
 
-	switch (attributeId) {
-	case Clusters::OnOff::Attributes::OnOff::Id: {
-		bool value;
+			err = CopyAttribute(data, dataSize, &value, sizeof(value));
 
-		err = CopyAttribute(data, dataSize, &value, sizeof(value));
+			if (err != CHIP_NO_ERROR) {
+				return err;
+			}
 
-		if (err != CHIP_NO_ERROR) {
-			return err;
+			SetOnOff(value);
+			break;
 		}
-
-		SetOnOff(value);
+		default:
+			return CHIP_ERROR_INVALID_ARGUMENT;
+		}
 		break;
 	}
 	default:

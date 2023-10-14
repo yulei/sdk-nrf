@@ -10,13 +10,13 @@ Cellular: GNSS
    :depth: 2
 
 This sample demonstrates how to use the :ref:`nrfxlib:gnss_interface` to control the `GNSS`_ module.
-It also shows how to improve fix speed and accuracy with the :ref:`lib_nrf_cloud_agps` library and how to use the :ref:`lib_nrf_cloud_pgps` library.
+It also shows how to improve fix speed and accuracy with the :ref:`lib_nrf_cloud_agnss` library and how to use the :ref:`lib_nrf_cloud_pgps` library.
 Assistance data is downloaded from nRF Cloud using `nRF Cloud's REST-based device API <nRF Cloud REST API_>`_.
 
 Requirements
 ************
 
-The sample supports the following development kit:
+The sample supports the following development kits:
 
 .. table-from-sample-yaml::
 
@@ -62,14 +62,14 @@ By default, the sample displays information from both PVT and NMEA strings.
 You can also configure the sample to run in NMEA-only output mode, where only the NMEA strings are displayed in the console.
 In the NMEA-only output mode, you can visualize the data from the GNSS using a third-party tool.
 
-A-GPS and P-GPS
-===============
+A-GNSS and P-GPS
+================
 
-When support for A-GPS or P-GPS, or both, is enabled, a :ref:`Zephyr workqueue <zephyr:workqueues_v2>` is used for downloading the assistance data.
+When support for A-GNSS or P-GPS, or both, is enabled, a :ref:`Zephyr workqueue <zephyr:workqueues_v2>` is used for downloading the assistance data.
 Downloading the data can take some time.
 The workqueue ensures that the main thread is not blocked during the operation.
 
-When assistance support is enabled, the sample receives an A-GPS data request notification from the GNSS module, and it starts downloading the assistance data requested by the GNSS module.
+When assistance support is enabled, the sample receives an A-GNSS data request notification from the GNSS module, and it starts downloading the assistance data requested by the GNSS module.
 The sample then displays the information in the terminal about the download process.
 Finally, after the download completes, the sample switches back to the previous display mode.
 
@@ -107,8 +107,8 @@ CONFIG_GNSS_SAMPLE_NMEA_ONLY - To enable NMEA-only output mode
 
 .. _CONFIG_GNSS_SAMPLE_ASSISTANCE_NRF_CLOUD:
 
-CONFIG_GNSS_SAMPLE_ASSISTANCE_NRF_CLOUD - To use nRF Cloud A-GPS
-   This configuration option enables A-GPS usage.
+CONFIG_GNSS_SAMPLE_ASSISTANCE_NRF_CLOUD - To use nRF Cloud A-GNSS
+   This configuration option enables A-GNSS usage.
 
 .. _CONFIG_GNSS_SAMPLE_ASSISTANCE_MINIMAL:
 
@@ -180,7 +180,7 @@ Testing
 
 After programming the sample and all the prerequisites to the development kit, test it by performing the following steps:
 
-1. Connect your nRF9160 DK to the PC using a USB cable and power on or reset your nRF9160 DK.
+1. Connect your nRF91 Series DK to the PC using a USB cable and power on or reset your nRF91 Series DK.
 #. Open a terminal emulator.
 #. Test the sample by performing the following steps:
 
@@ -299,7 +299,7 @@ After programming the sample and all the prerequisites to the development kit, t
 
    #. Observe that the samples displays the time to fix for each fix.
 
-   If A-GPS and/or P-GPS support is enabled:
+   If A-GNSS and/or P-GPS support is enabled:
 
    a. Observe that the following message is displayed in the terminal emulator immediately after the device boots:
 
@@ -317,7 +317,7 @@ Dependencies
 
 This sample uses the following |NCS| libraries:
 
-* :ref:`lib_nrf_cloud_agps`
+* :ref:`lib_nrf_cloud_agnss`
 * :ref:`lib_nrf_cloud_pgps`
 * :ref:`lib_nrf_cloud_rest`
 * :ref:`supl_client`

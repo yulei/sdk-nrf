@@ -95,7 +95,8 @@ LTE modem
 =========
 
 The LTE modem handles LTE communication.
-It is controlled through `AT commands <AT Commands Reference Guide_>`_.
+It is controlled through AT commands.
+The AT commands are documented in the `nRF9160 AT Commands Reference Guide`_.
 
 The firmware for the modem is available as a precompiled binary.
 You can download the firmware from the `nRF9160 product website (compatible downloads)`_.
@@ -122,7 +123,7 @@ Full upgrade
     Both methods use the Simple Management Protocol (SMP) to provide an interface over UART, which enables the device to perform the update.
 
     * You can use the nRF Connect Programmer to perform the update, regardless of the images that are part of the existing firmware of the device.
-      For example, you can update the modem on an nRF9160 DK using the instructions described in :ref:`nrf9160_gs_updating_fw_modem` in the nRF9160 DK Getting Started guide.
+      For example, you can update the modem on an nRF9160 DK using the instructions described in :ref:`nrf9160_updating_fw_modem` in the Developing with nRF9160 DK documentation.
 
     * You can also use the nRF pynrfjprog Python package to perform the update, as long as a custom application image integrating the ``lib_fmfu_mgmt`` subsystem is included in the existing firmware of the device.
       See the :ref:`fmfu_smp_svr_sample` sample for an example on how to integrate the :ref:`subsystem <lib_fmfu_mgmt>` in your custom application.
@@ -154,9 +155,9 @@ For more information on the integration, see :ref:`nrf_modem_lib_readme`.
 Modem trace
 -----------
 
-The modem traces of the nRF9160 modem can be captured using the nRF Connect Trace Collector.
-For more information on how to collect traces using nRF Connect Trace Collector, see the `Trace Collector`_ documentation.
-When the :kconfig:option:`CONFIG_NRF_MODEM_LIB_TRACE` Kconfig option is enabled, the modem traces are enabled in the modem and are forwarded to the :ref:`modem_trace_module`.
+The modem traces of the nRF9160 modem can be captured using the Cellular Monitor.
+For more information on how to collect traces using Cellular Monitor, see the `Cellular Monitor`_ documentation.
+To enable the modem traces in the modem and to forward them to the :ref:`modem_trace_module` over UART, include the ``nrf91-modem-trace-uart`` snippet while building your application as described in :ref:`nrf91_modem_trace_uart_snippet`.
 
 .. note::
    For the :ref:`serial_lte_modem` application and the :ref:`at_client_sample` sample, you must also run ``AT%xmodemtrace=1,2`` to manually activate the predefined trace set.
@@ -164,9 +165,8 @@ When the :kconfig:option:`CONFIG_NRF_MODEM_LIB_TRACE` Kconfig option is enabled,
 You can set the trace level using the AT command ``%XMODEMTRACE``.
 See `modem trace AT command documentation`_ for more information.
 
+See :ref:`modem_trace_module` for other backend options.
 If the existing trace backends are not sufficient, it is possible to implement custom trace backends.
-You can implement your own custom modem traces to store the traces on an external flash.
-You can then upload the traces to the cloud for remote analysis when needed.
 For more information on the implementation of a custom trace backend, see :ref:`adding_custom_modem_trace_backends`.
 
 .. _nrf9160_fota:
@@ -231,7 +231,7 @@ FOTA upgrades using other cloud services
 
 FOTA upgrades can alternatively be hosted from a customer-developed cloud services such as solutions based on AWS and Azure.
 If you are uploading the files to an Amazon Web Services Simple Storage Service (AWS S3) bucket, see the :ref:`lib_aws_fota` documentation for instructions.
-Samples are provided in |NCS| for AWS (:ref:`aws_iot` sample) and Azure (:ref:`azure_fota_sample` sample).
+Samples are provided in |NCS| for AWS (:ref:`aws_iot` sample) and Azure (:ref:`azure_iot_hub` sample).
 
 Your application must be able to retrieve the host and file name for the binary file.
 See the :ref:`lib_fota_download` library documentation for information about the format of this information, especially when providing two files for a bootloader upgrade.
@@ -240,11 +240,11 @@ You can hardcode the information in the application, or you can use a functional
 Samples and applications implementing FOTA
 ------------------------------------------
 
-* :ref:`http_full_modem_update_sample` sample - performs a full firmware OTA update of the modem.
+* :ref:`http_modem_full_update_sample` sample - performs a full firmware OTA update of the modem.
 * :ref:`http_modem_delta_update_sample` sample - performs a delta OTA update of the modem firmware.
 * :ref:`http_application_update_sample` sample - performs a basic application FOTA update.
 * :ref:`aws_iot` sample - performs a FOTA update using MQTT and HTTP, where the firmware download is triggered through an AWS IoT job.
-* :ref:`azure_fota_sample` sample - performs a FOTA update from the Azure IoT Hub.
+* :ref:`azure_iot_hub` sample - performs a FOTA update from the Azure IoT Hub.
 * :ref:`asset_tracker_v2` application - performs FOTA updates of the application, modem (delta), and boot (if enabled). It also supports nRF Cloud FOTA as well as AWS or Azure FOTA. Only one must be configured at a time.
 
 .. _nrf9160_ug_gnss:
@@ -286,13 +286,13 @@ Following are the various GNSS start modes:
 * Warm start - GNSS has some coarse knowledge of the time, location, or satellite orbits from a previous fix that is more than around 37 minutes old.
 * Hot start - GNSS fix is requested within an interval of around 37 minutes from the last successful fix.
 
-Each satellite transmits its own `Ephemeris`_ data and common `Almanac`_ data:
+Each satellite transmits its own `ephemeris`_ data and common `almanac`_ data:
 
 * Ephemeris data - Provides information about the orbit of the satellite transmitting it. This data is valid for four hours and becomes inaccurate after that.
-* Almanac data - Provides coarse orbit and status information for each satellite in the constellation. Each satellite broadcasts Almanac data for all satellites.
+* Almanac data - Provides coarse orbit and status information for each satellite in the constellation. Each satellite broadcasts almanac data for all satellites.
 
 The data transmission occurs at a slow data rate of 50 bps.
-The orbital data can be received faster using A-GPS.
+The orbital data can be received faster using A-GNSS.
 
 Due to the clock bias on the receiver, there are four unknowns when looking for a GNSS fix - latitude, longitude, altitude, and clock bias.
 This results in solving an equation system with four unknowns, and therefore a minimum of four satellites must be tracked to acquire a fix.
@@ -303,43 +303,46 @@ Enhancements to GNSS
 When GNSS has not been in use for a while or if the device is in relatively weak signaling conditions, it might take longer to acquire a fix.
 To improve this, Nordic Semiconductor has implemented the following methods for acquiring a fix in a shorter time:
 
-•	A-GPS or P-GPS or a combination of both
-•	Low accuracy mode
+* A-GNSS or P-GPS or a combination of both
+* Low accuracy mode
 
-Assisted GPS (A-GPS)
----------------------
+Assisted GNSS (A-GNSS)
+----------------------
 
-A-GPS is commonly used to improve the Time to first fix (TTFF) by utilizing a connection (for example, over cellular) to the internet to retrieve the Almanac and Ephemeris data.
-A connection to an internet server that has the Almanac and Ephemeris data is several times quicker than using the slow 50 bps data link to the GPS satellites.
-There are many options to retrieve this A-GPS data.
+A-GNSS is commonly used to improve the Time to first fix (TTFF) by using a connection (for example, over cellular) to the Internet to retrieve the almanac and ephemeris data.
+A connection to an Internet server that has the almanac and ephemeris data is several times quicker than using the slow 50 bps data link to the GNSS satellites.
+There are many options to retrieve this A-GNSS data.
 Two such options are using `nRF Cloud`_ and SUPL.
 |NCS| provides example implementations for both these options.
-The A-GPS solution available through nRF Cloud has been optimized for embedded devices to reduce protocol overhead and data usage.
+The A-GNSS solution available through nRF Cloud has been optimized for embedded devices to reduce protocol overhead and data usage.
 This, in turn, results in the download of reduced amount of data, thereby reducing data transfer time, power consumption, and data costs.
-See :ref:`nrfxlib:gnss_int_agps_data` for more information about the retrieval of A-GPS data.
+Starting from modem firmware v2.0.0, GNSS supports assistance data also for QZSS satellites.
+nRF Cloud can provide assistance data for both GPS and QZSS.
+See :ref:`nrfxlib:gnss_int_agps_data` for more information about the retrieval of A-GNSS data.
 
 Predicted GPS (P-GPS)
 ---------------------
 
-P-GPS is a form of assistance, where the device can download up to two weeks of predicted satellite Ephemerides data.
-Normally, devices connect to the cellular network approximately every two hours for up-to-date satellite Ephemeris information or they download the Ephemeris data from the acquired satellites.
+P-GPS is a form of assistance, where the device can download up to two weeks of predicted satellite ephemerides data.
+Normally, devices connect to the cellular network approximately every two hours for up-to-date satellite ephemeris information or they download the ephemeris data from the acquired satellites.
 P-GPS enables devices to determine the exact orbital location of the satellite without connecting to the network every two hours with a trade-off of reduced accuracy of the calculated position over time.
-Note that P-GPS requires more memory compared to regular A-GPS.
+Note that P-GPS requires more memory compared to regular A-GNSS.
 
-Also, note that due to satellite clock inaccuracies, not all functional satellites will have Ephemerides data valid for two weeks in the downloaded P-GPS package.
-This means that the number of satellites having valid predicted Ephemerides reduces in number roughly after ten days.
-Hence, the GNSS module needs to download the Ephemeris data from the satellite broadcast if no predicted Ephemeris is found for that satellite to be able to use the satellite.
+Also, note that due to satellite clock inaccuracies, not all functional satellites will have ephemerides data valid for two weeks in the downloaded P-GPS package.
+This means that the number of satellites having valid predicted ephemerides reduces in number roughly after ten days.
+Hence, the GNSS module needs to download the ephemeris data from the satellite broadcast if no predicted ephemeris is found for that satellite to be able to use the satellite.
 
 .. note::
-   |gps_tradeoffs|
+   |gnss_tradeoffs|
 
-nRF Cloud A-GPS compared with SUPL library
-------------------------------------------
+nRF Cloud compared with SUPL library
+------------------------------------
 
-The :ref:`lib_nrf_cloud_agps` library is more efficient to use when compared to the :ref:`SUPL <supl_client>` library, and the latter takes a bit more memory on the device.
-Another advantage of nRF Cloud A-GPS library is that the data is encrypted whereas SUPL uses plain socket.
-Also, no licenses are required from external vendors to use nRF Cloud A-GPS, whereas for commercial use of SUPL, you must obtain a license.
-The :ref:`lib_nrf_cloud_agps` library is also highly integrated into `Nordic Semiconductor's IoT cloud platform`_.
+* The :ref:`lib_nrf_cloud_agnss` library is more efficient to use when compared to the :ref:`SUPL <supl_client>` library, and the latter takes a bit more memory on the device.
+* With nRF Cloud, the data is encrypted, whereas SUPL uses plain socket.
+* nRF Cloud also supports assistance for QZSS satellites, while SUPL is limited to GPS.
+* No licenses are required from external vendors to use nRF Cloud, whereas for commercial use of SUPL, you must obtain a license.
+* The :ref:`lib_nrf_cloud_agnss` library is highly integrated into `Nordic Semiconductor's IoT cloud platform`_.
 
 Low Accuracy Mode
 -----------------
@@ -355,9 +358,12 @@ Samples using GNSS in |NCS|
 There are many examples in |NCS| that use GNSS.
 Following is a list of the samples and applications with some information about the GNSS usage:
 
-* :ref:`asset_tracker_v2` application - Uses nRF Cloud for A-GPS or P-GPS or a combination of both. The application obtains GNSS fixes and transmits them to nRF Cloud along with sensor data.
-* :ref:`serial_lte_modem` application - Uses AT commands to start and stop GNSS and has support for nRF Cloud A-GPS and P-GPS. The application displays tracking and GNSS fix information in the serial console.
-* :ref:`gnss_sample` sample - Does not use assistance by default but can be configured to use nRF Cloud A-GPS or P-GPS or a combination of both. The sample displays tracking and fix information as well as NMEA strings in the serial console.
+* The :ref:`asset_tracker_v2` application uses nRF Cloud for A-GNSS, P-GPS, or a combination of both.
+  The application obtains GNSS fixes and transmits them to nRF Cloud along with sensor data.
+* The :ref:`serial_lte_modem` application uses AT commands to start and stop GNSS and supports nRF Cloud A-GNSS and P-GPS.
+  The application displays tracking and GNSS fix information in the serial console.
+* The :ref:`gnss_sample` sample does not use assistance by default but can be configured to use nRF Cloud A-GNSS, P-GPS, or a combination of both.
+  The sample displays tracking and fix information as well as NMEA strings in the serial console.
 
 .. _nrf9160_gps_lte:
 

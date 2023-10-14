@@ -5,7 +5,6 @@
  */
 
 #include <date_time.h>
-#include <zephyr/posix/time.h>
 #include <zephyr/logging/log.h>
 #include <modem/at_monitor.h>
 #include <modem/lte_lc.h>
@@ -13,6 +12,12 @@
 #include "date_time_core.h"
 #include "date_time_modem.h"
 #include "date_time_ntp.h"
+
+#if defined(CONFIG_ARCH_POSIX) && defined(CONFIG_EXTERNAL_LIBC)
+#include <time.h>
+#else
+#include <zephyr/posix/time.h>
+#endif
 
 LOG_MODULE_DECLARE(date_time, CONFIG_DATE_TIME_LOG_LEVEL);
 
@@ -122,7 +127,6 @@ void date_time_lte_ind_handler(const struct lte_lc_evt *const evt)
 	case LTE_LC_EVT_NW_REG_STATUS:
 
 		switch (evt->nw_reg_status) {
-		case LTE_LC_NW_REG_REGISTERED_EMERGENCY:
 		case LTE_LC_NW_REG_REGISTERED_HOME:
 		case LTE_LC_NW_REG_REGISTERED_ROAMING:
 			if (!date_time_is_valid()) {

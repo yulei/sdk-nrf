@@ -10,7 +10,3 @@ CONFIG_PINCTRL=y
 
 # enable GPIO
 CONFIG_GPIO=y
-
-# additional board options
-CONFIG_GPIO_AS_PINRESET=y
-CONFIG_NFCT_PINS_AS_GPIOS=y

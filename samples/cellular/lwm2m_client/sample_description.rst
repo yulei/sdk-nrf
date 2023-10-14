@@ -7,7 +7,7 @@ Sample description
    :local:
    :depth: 2
 
-The LwM2M Client sample demonstrates the usage of the :term:`Lightweight Machine to Machine (LwM2M)` protocol to connect a Thingy:91 or an nRF9160 DK to an LwM2M server through LTE.
+The LwM2M Client sample demonstrates the usage of the :term:`Lightweight Machine to Machine (LwM2M)` protocol to connect a Thingy:91 or an nRF91 Series DK to an LwM2M server through LTE.
 To achieve this, the sample uses the Zephyr's :ref:`lwm2m_interface` client and |NCS| :ref:`lib_lwm2m_client_utils` library.
 The former provides a device vendor agnostic client implementation, whereas the latter includes all the Nordic specific bits and pieces.
 
@@ -50,7 +50,7 @@ The sample implements the following LwM2M objects:
    *  - LwM2M objects
       - Object ID
       - Thingy:91
-      - nRF9160 DK
+      - nRF91 Series DK
    *  - LwM2M Server
       - 1
       - Yes
@@ -193,12 +193,13 @@ Sensor simulation
 =================
 
 If a sensor simulator is defined in devicetree with the ``sensor_sim`` node label, it will be used over real devices.
-This is useful, for example, on the nRF9160 DK, where only simulated sensor data is available, as it does not have any of the external sensors needed for actual measurements.
+This is useful, for example, on an nRF91 Series DK, where only simulated sensor data is available, as it does not have any of the external sensors needed for actual measurements.
 
 Configuration
 *************
 
 |config|
+You can configure the sample either by editing the :file:`prj.conf` file and the relevant overlay files, or through menuconfig or guiconfig.
 
 Setup
 =====
@@ -285,7 +286,7 @@ To speed up the start up, you can prevent the provisioning by completing the fol
 #. Under **LwM2M objects**, remove the key value next to :guilabel:`LwM2M pre-shared key for communication`.
 #. Save and close the configuration.
 
-The provisioning can also be prevented by setting the :kconfig:option:`CONFIG_APP_LWM2M_PSK` Kocnfig option to an empty string in the :file:`prj.conf` file.
+The provisioning can also be prevented by setting the :kconfig:option:`CONFIG_APP_LWM2M_PSK` Kconfig option to an empty string in the :file:`prj.conf` file.
 You can also edit this configuration using menuconfig.
 |config|
 
@@ -393,7 +394,7 @@ CONFIG_SENSOR_MODULE_LIGHT - Configuration for light reading
 
 .. _CONFIG_SENSOR_MODULE_COLOR:
 
-CONFIG_SENSOR_MODULE_COLOR - Cpnfiguration for color
+CONFIG_SENSOR_MODULE_COLOR - Configuration for color
    This configuration option enables the reading of color values.
 
 Additional configuration
@@ -411,7 +412,8 @@ Check and configure the following LwM2M options that are used by the sample:
 * :kconfig:option:`CONFIG_LWM2M_ENGINE_MAX_REPLIES` - Maximum number of LwM2M reply objects.
   You must increase this value if many notifications will be sent at once.
 * :kconfig:option:`CONFIG_LWM2M_COAP_BLOCK_SIZE` - Increase if you need to add several new LwM2M objects to the sample, as the registration procedure contains information about all the LwM2M objects in one block.
-* :kconfig:option:`CONFIG_LWM2M_ENGINE_DEFAULT_LIFETIME` - Set this option to configure how often the client sends ``I'm alive`` messages to the server.
+* :kconfig:option:`CONFIG_LWM2M_ENGINE_DEFAULT_LIFETIME` - Configure default LwM2M registration lifetime.
+* :kconfig:option:`CONFIG_LWM2M_UPDATE_PERIOD` - Set this option to configure how often the client sends ``I'm alive`` messages to the server.
 * :kconfig:option:`CONFIG_LWM2M_IPSO_TEMP_SENSOR_VERSION_1_0` - Sets the IPSO Temperature sensor object version to 1.0.
   You can use this configuration option for other IPSO objects also by modifying the option accordingly.
   See the `LwM2M Object and Resource Registry`_ for a list of objects and their available versions.
@@ -432,7 +434,7 @@ Check and configure the following LwM2M options that are used by the sample:
 * :kconfig:option:`CONFIG_LTE_LC_TAU_PRE_WARNING_NOTIFICATIONS` - Enables notifications before Tracking Area Update (TAU). Notification triggers LWM2M registration update and TAU will be sent together with the user data. This decreases power consumption.
 
 .. note::
-   The nRF9160 modem negotiates PSM and eDRX modes with the network it is trying to connect.
+   The cellular modem negotiates PSM and eDRX modes with the network it is trying to connect.
    The network can either accept the values, assign different values or reject them.
 
 For Thingy:91, configure the ADXL362 accelerometer sensor range by choosing one of the following options (default value is |plusminus| 2 g):
@@ -456,7 +458,7 @@ Check and configure the following library options that are used by the sample:
   Used with nRF Cloud to estimate the location of the device based on the cell neighborhood and Wi-Fi AP neighborhood.
 * :kconfig:option:`CONFIG_LWM2M_CLIENT_UTILS_GNSS_ASSIST_OBJ_SUPPORT` - Uses GNSS Assistance object (ID 33625).
   Used with nRF Cloud to request assistance data for the GNSS module.
-* :kconfig:option:`CONFIG_LWM2M_CLIENT_UTILS_LOCATION_ASSIST_AGPS` - nRF Cloud provides A-GPS assistance data and the GNSS-module in the device uses the data for obtaining a GNSS fix, which is reported back to the LwM2M server.
+* :kconfig:option:`CONFIG_LWM2M_CLIENT_UTILS_LOCATION_ASSIST_AGNSS` - nRF Cloud provides A-GNSS assistance data and the GNSS-module in the device uses the data for obtaining a GNSS fix, which is reported back to the LwM2M server.
 * :kconfig:option:`CONFIG_LWM2M_CLIENT_UTILS_LOCATION_ASSIST_PGPS` - nRF Cloud provides P-GPS predictions and the GNSS-module in the device uses the data for obtaining a GNSS fix, which is reported back to the LwM2M server.
 * :kconfig:option:`CONFIG_LWM2M_CLIENT_UTILS_NEIGHBOUR_CELL_LISTENER` - Disable this option if you provide your own method of populating the LwM2M objects (ID 10256) containing the cell neighborhood information.
 
@@ -473,13 +475,15 @@ The following files are available:
 * :file:`overlay-avsystem.conf` - Uses `Coiote Device Management`_ server.
 * :file:`overlay-avsystem-bootstrap.conf` - Uses Coiote in bootstrap mode.
 * :file:`overlay-nbiot.conf` - Enables the use of NB-IoT.
-* :file:`overlay-assist-agps.conf` - Enables A-GPS assistance.
+* :file:`overlay-assist-agnss.conf` - Enables A-GNSS assistance.
 * :file:`overlay-assist-cell.conf` - Enables cell-based location assistance.
 * :file:`overlay-assist-pgps.conf` - Enables P-GPS assistance in the sample.
 * :file:`overlay-lowpower.conf` - Disables certain features to bring the power consumption down.
 * :file:`overlay-adv-firmware.conf` - Enables experimental Advanced Firmware Update object.
 * :file:`overlay-dtls-cid.conf` - Enables DTLS Connection Identifier.
   This requires modem firmware version 1.3.5 or newer.
+* :file:`overlay-aggressive-psm.con` - Enables optimized PSM setup and proprietary PSM mode.
+   Proprietary PSM is only supported with modem firmware v2.x.
 
 Moreover, the sample also provides the following files for LwM2M 1.1 features:
 
@@ -489,7 +493,28 @@ Moreover, the sample also provides the following files for LwM2M 1.1 features:
 
 For further information about the test cases, see `Enabler Test Specification (Interoperability) for Lightweight M2M`_.
 
-You can configure the sample either by editing the :file:`prj.conf` file and the relevant overlay files, or through menuconfig or guiconfig.
+Configuration for external FOTA
+-------------------------------
+
+The sample supports UART2 connection on the nRF9160 SoC to onboard the nRF52840 SoC with or without MCUboot recovery mode.
+The nRF9160 SoC needs to enable UART2 on the devicetree using the following configuration files and recovery mode overlay files:
+
+* :file:`overlay-mcumgr_client.conf` - Defines the configuration for external FOTA client.
+  This requires an additional devicetree overlay file :file:`nrf9160dk_mcumgr_client_uart2.overlay`.
+* :file:`overlay-mcumgr_reset.conf` - Enables MCUboot recovery mode.
+  This requires an additional devicetree overlay file :file:`nrf9160dk_recovery.overlay`.
+
+.. _overlay_advanced_fw_object:
+
+To enable the experimental Advanced Firmware Update object for the external FOTA, use the following overlay configuration files:
+
+* :file:`overlay-adv-firmware.conf` - Enables the experimental Advanced Firmware Update object.
+* :file:`overlay-lwm2m-1.1.conf` - Enables the LwM2M version 1.1.
+
+You also need one of the following `Coiote Device Management`_ server configurations:
+
+* :file:`overlay-avsystem.conf` - For the `Coiote Device Management`_ server.
+* :file:`overlay-avsystem-bootstrap.conf` - For Coiote in bootstrap mode.
 
 .. include:: /libraries/modem/nrf_modem_lib/nrf_modem_lib_trace.rst
    :start-after: modem_lib_sending_traces_UART_start
@@ -535,14 +560,62 @@ To successfully run the bootstrap procedure, you must first register the device 
 
 See :ref:`Registering your device to an LwM2M boot strap server <bootstrap_server_reg>` for instructions.
 
-To build the LwM2M Client with LwM2M bootstrap support, build it with the ``-DOVERLAY_CONFIG=overlay-bootstrap.conf`` option:
+To build the LwM2M Client with LwM2M bootstrap support, build it with the :file:`overlay-avsystem-bootstrap.conf` or :file:`overlay-leshan-bootstrap.conf` configuration overlays:
+
+   .. tabs::
+
+      .. group-tab:: nRF9161 DK
+
+         .. code-block:: console
+
+            west build -b nrf9161dk_nrf9161_ns -- -DEXTRA_CONF_FILE=overlay-leshan-bootstrap.conf
+
+      .. group-tab:: nRF9160 DK
+
+         .. code-block:: console
+
+            west build -b nrf9160dk_nrf9160_ns -- -DEXTRA_CONF_FILE=overlay-leshan-bootstrap.conf
+
+See :ref:`cmake_options` for instructions on how to add this option.
+Keep in mind that the used bootstrap URI is set in the aforementioned configuration file.
+In bootstrap mode, application does not overwrite the PSK key from the modem so :ref:`CONFIG_APP_LWM2M_PSK <CONFIG_APP_LWM2M_PSK>` is not used.
+Please refer to :ref:`lwm2m_client_provisioning` for instructions how to provision bootstrap keys.
+
+MCUboot recovery mode with bootstrap
+====================================
+
+To build for MCUboot recovery mode with bootstrap, use the following command:
 
 .. code-block:: console
 
-   west build -b nrf9160dk_nrf9160_ns -- -DOVERLAY_CONFIG=overlay-bootstrap.conf
+   west build  --pristine -b nrf9160dk_nrf9160_ns --  -DOVERLAY_CONFIG="overlay-adv-firmware.conf;overlay-fota_helper.conf;overlay-avsystem-bootstrap.conf;overlay-lwm2m-1.1.conf;overlay-mcumgr_client.conf; overlay-mcumgr_reset.conf" -DEXTRA_DTC_OVERLAY_FILE="nrf9160dk_mcumgr_client_uart2.overlay;nrf9160dk_recovery.overlay"
 
-See :ref:`cmake_options` for instructions on how to add this option.
-Keep in mind that the used bootstrap port is set in the aforementioned configuration file.
+MCUboot recovery mode without bootstrap
+=======================================
+
+To build for MCUboot recovery mode without bootstrap, use the following command:
+
+.. code-block:: console
+
+   west build  --pristine -b nrf9160dk_nrf9160_ns --  -DOVERLAY_CONFIG="overlay-adv-firmware.conf;overlay-fota_helper.conf;overlay-avsystem.conf;overlay-lwm2m-1.1.conf;overlay-mcumgr_client.conf; overlay-mcumgr_reset.conf" -DEXTRA_DTC_OVERLAY_FILE="nrf9160dk_mcumgr_client_uart2.overlay;nrf9160dk_recovery.overlay"
+
+MCUmgr client with bootstrap
+============================
+
+To build for MCUmgr client with bootstrap, use the following command:
+
+.. code-block:: console
+
+   west build  --pristine -b nrf9160dk_nrf9160_ns --  -DOVERLAY_CONFIG="overlay-adv-firmware.conf;overlay-fota_helper.conf;overlay-avsystem-bootstrap.conf;overlay-lwm2m-1.1.conf;overlay-mcumgr_client.conf" -DEXTRA_DTC_OVERLAY_FILE="nrf9160dk_mcumgr_client_uart2.overlay"
+
+MCUmgr client without bootstrap
+===============================
+
+To build for MCUmgr client without bootstrap, use the following command:
+
+.. code-block:: console
+
+   west build  --pristine -b nrf9160dk_nrf9160_ns --  -DOVERLAY_CONFIG="overlay-adv-firmware.conf;overlay-fota_helper.conf;overlay-avsystem.conf;overlay-lwm2m-1.1.conf;overlay-mcumgr_client.conf" -DEXTRA_DTC_OVERLAY_FILE="nrf9160dk_mcumgr_client_uart2.overlay"
 
 Testing
 =======
@@ -553,7 +626,7 @@ Testing
    #. |connect_terminal|
    #. Observe that the sample starts in the terminal window.
    #. Check that the device is connected to the chosen LwM2M server.
-   #. Press **Button 1** on nRF9160 DK or **SW3** on Thingy:91 and confirm that the button event appears in the terminal.
+   #. Press **Button 1** on nRF91 Series DK or **SW3** on Thingy:91 and confirm that the button event appears in the terminal.
    #. Check that the button press event has been registered on the LwM2M server by confirming that the press count has been updated.
    #. Retrieve sensor data from various sensors and check if values are reasonable.
    #. Test GNSS module:

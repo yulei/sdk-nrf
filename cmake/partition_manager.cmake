@@ -339,7 +339,7 @@ endif()
 add_custom_target(partition_manager)
 
 # Make Partition Manager configuration available in CMake
-import_kconfig(PM_ ${pm_out_dotconf_file} pm_var_names)
+import_pm_config(${pm_out_dotconf_file} pm_var_names)
 
 foreach(name ${pm_var_names})
   set_property(
@@ -453,8 +453,27 @@ if (CONFIG_SECURE_BOOT AND CONFIG_BOOTLOADER_MCUBOOT)
   # of the symbols used to generate the offset is only available as a
   # generator expression when MCUBoots cmake code exectues. This because
   # partition manager is performed as the last step in the configuration stage.
-  math(EXPR s0_offset "${PM_MCUBOOT_SECONDARY_ADDRESS} - ${PM_S0_ADDRESS}")
-  math(EXPR s1_offset "${PM_MCUBOOT_SECONDARY_ADDRESS} - ${PM_S1_ADDRESS}")
+  if(CONFIG_PM_EXTERNAL_FLASH_MCUBOOT_SECONDARY AND CONFIG_HAS_HW_NRF_QSPI)
+    if(DEFINED ext_flash_dev)
+      get_filename_component(qspi_node ${ext_flash_dev} DIRECTORY)
+    else()
+      dt_nodelabel(qspi_node NODELABEL "qspi")
+    endif()
+    if(DEFINED qspi_node)
+      dt_reg_addr(xip_addr PATH ${qspi_node} NAME qspi_mm)
+      if(NOT DEFINED xip_addr)
+        message(WARNING "\
+        Could not find memory mapped address for XIP. Generated update hex files will \
+        not have the correct base address. Hence they can not be programmed directly \
+        to the external flash")
+      endif()
+    endif()
+  else()
+    set(xip_addr 0)
+  endif()
+
+  math(EXPR s0_offset "${xip_addr} + ${PM_MCUBOOT_SECONDARY_ADDRESS} - ${PM_S0_ADDRESS}")
+  math(EXPR s1_offset "${xip_addr} + ${PM_MCUBOOT_SECONDARY_ADDRESS} - ${PM_S1_ADDRESS}")
 
   set_property(
     TARGET partition_manager
@@ -510,13 +529,13 @@ else()
       list(APPEND global_hex_depends    ${${d}_PM_DOMAIN_DYNAMIC_PARTITION}_subimage)
 
       # Add domain prefix cmake variables for all partitions
-      # Here, we actually overwrite the already imported kconfig values
+      # Here, we actually overwrite the already imported pm.config values
       # for our own domain. This is not an issue since all of these variables
       # are accessed through the 'partition_manager' target, and most likely
       # through generator expression, as this file is one of the last
       # cmake files executed in the configure stage.
       get_shared(conf_file IMAGE ${d} PROPERTY PM_DOTCONF_FILES)
-      import_kconfig(PM_ ${conf_file} ${d}_pm_var_names)
+      import_pm_config(${conf_file} ${d}_pm_var_names)
 
       foreach(name ${${d}_pm_var_names})
         set_property(

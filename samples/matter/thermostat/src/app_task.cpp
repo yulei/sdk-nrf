@@ -6,6 +6,7 @@
 
 #include "app_task.h"
 #include "app_config.h"
+#include "fabric_table_delegate.h"
 #include "led_util.h"
 #include "temp_sensor_manager.h"
 #include "temperature_manager.h"
@@ -162,6 +163,11 @@ CHIP_ERROR AppTask::Init()
 	k_timer_init(&sFunctionTimer, &AppTask::FunctionTimerTimeoutCallback, nullptr);
 	k_timer_user_data_set(&sFunctionTimer, this);
 
+#ifdef CONFIG_CHIP_OTA_REQUESTOR
+	/* OTA image confirmation must be done before the factory data init. */
+	OtaConfirmNewImage();
+#endif
+
 #ifdef CONFIG_MCUMGR_TRANSPORT_BT
 	/* Initialize DFU over SMP */
 	GetDFUOverSMP().Init();
@@ -185,6 +191,7 @@ CHIP_ERROR AppTask::Init()
 	ReturnErrorOnFailure(chip::Server::GetInstance().Init(initParams));
 	ConfigurationMgr().LogDeviceConfig();
 	PrintOnboardingCodes(chip::RendezvousInformationFlags(chip::RendezvousInformationFlag::kBLE));
+	AppFabricTableDelegate::Init();
 
 	err = TempSensorManager::Instance().Init();
 	if (err != CHIP_NO_ERROR) {

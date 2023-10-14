@@ -348,7 +348,7 @@ Bluetooth samples
   * Added terminal commands for selecting the role.
   * Updated the ASCII art used for showing progress to feature the current Nordic Semiconductor logo.
 
-* :ref:`peripheral_fast_pair` sample:
+* Bluetooth: Fast Pair sample:
 
   * Added:
 
@@ -460,7 +460,7 @@ nRF9160 samples
   * Removed A-GPS and P-GPS processing.
     It is now handled by the :ref:`lib_nrf_cloud` library.
 
-* :ref:`nrf_cloud_mqtt_multi_service` sample:
+* :ref:`nrf_cloud_multi_service` sample:
 
   * Added:
 

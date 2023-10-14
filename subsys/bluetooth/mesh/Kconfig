@@ -50,6 +50,8 @@ endif
 
 config BT_MESH_NLC_PERF_CONF
 	bool "Enable NLC performance configurations"
+	select BT_MESH_V1d1
+	select BT_MESH_COMP_PAGE_2
 	help
 	  Enables performance configurations required for NLC profiles.
 	  When implementing the NLC Basic Lightness Controller profile
@@ -118,6 +120,7 @@ config BT_MESH_USES_TFM_PSA
 	select PSA_WANT_ALG_HMAC
 	select PSA_WANT_ALG_ECDH
 	select PSA_WANT_ECC_SECP_R1_256
+	select PSA_WANT_KEY_TYPE_ECC_KEY_PAIR
 
 choice TFM_PROFILE_TYPE
 	depends on BT_MESH_USES_TFM_PSA

@@ -18,8 +18,6 @@
 
 LOG_MODULE_REGISTER(nrf_modem_lib_trace, CONFIG_NRF_MODEM_LIB_LOG_LEVEL);
 
-NRF_MODEM_LIB_ON_INIT(trace_init, trace_init_callback, NULL);
-
 K_SEM_DEFINE(trace_sem, 0, 1);
 K_SEM_DEFINE(trace_clear_sem, 0, 1);
 K_SEM_DEFINE(trace_done_sem, 1, 1);
@@ -33,6 +31,50 @@ static bool has_space = true;
 
 static int trace_init(void);
 static int trace_deinit(void);
+
+static bool backend_suspended;
+static void backend_suspend_handle(struct k_work *item);
+K_WORK_DELAYABLE_DEFINE(backend_suspend_work, backend_suspend_handle);
+#define BACKEND_SUSPEND_DELAY K_MSEC(CONFIG_NRF_MODEM_LIB_TRACE_BACKEND_SUSPEND_DELAY_MS)
+
+static void backend_suspend(void)
+{
+	int err;
+
+	if (backend_suspended || !trace_backend.suspend) {
+		return;
+	}
+
+	err = trace_backend.suspend();
+	if (err) {
+		LOG_ERR("Could not suspend trace backend");
+	}
+
+	backend_suspended = true;
+}
+
+
+static void backend_resume(void)
+{
+	int err;
+
+	if (!backend_suspended || !trace_backend.resume) {
+		return;
+	}
+
+	err = trace_backend.resume();
+	if (err) {
+		LOG_ERR("Could not resume trace backend");
+	}
+
+	backend_suspended = false;
+}
+
+static void backend_suspend_handle(struct k_work *item)
+{
+	backend_suspend();
+}
+
 
 #if CONFIG_NRF_MODEM_LIB_TRACE_BACKEND_BITRATE
 static uint32_t backend_bps_avg;
@@ -240,7 +282,14 @@ trace_reset:
 	k_sem_take(&trace_sem, K_FOREVER);
 
 	while (true) {
+		if (trace_backend.suspend) {
+			k_work_schedule(&backend_suspend_work, BACKEND_SUSPEND_DELAY);
+		}
+
 		err = nrf_modem_trace_get(&frags, &n_frags, NRF_MODEM_OS_FOREVER);
+		if (trace_backend.suspend) {
+			k_work_cancel_delayable(&backend_suspend_work);
+		}
 		switch (err) {
 		case 0:
 			/* Success */
@@ -258,6 +307,10 @@ trace_reset:
 		default:
 			__ASSERT(0, "Unhandled err %d", err);
 			goto deinit;
+		}
+
+		if (backend_suspended) {
+			backend_resume();
 		}
 
 		for (int i = 0; i < n_frags; i++) {
@@ -329,11 +382,9 @@ static int trace_init(void)
 	return 0;
 }
 
-static void trace_init_callback(int err, void *ctx)
+void nrf_modem_lib_trace_init(void)
 {
-	if (err) {
-		return;
-	}
+	int err;
 
 	err = trace_init();
 	if (err) {

@@ -8,11 +8,13 @@ Modem trace module
    :depth: 2
 
 To enable the tracing functionality, enable the :kconfig:option:`CONFIG_NRF_MODEM_LIB_TRACE` Kconfig in your project configuration.
-The module is implemented in :file:`nrf/lib/nrf_modem_lib/nrf_modem_lib_trace.c` and consists of a thread that initializes, deinitializes, and forwards modem traces to a backend that can be selected by enabling any one of the following Kconfig options:
+The module is implemented in :file:`nrf/lib/nrf_modem_lib/nrf_modem_lib_trace.c` and consists of a thread that initializes, deinitializes, and forwards modem traces to a backend.
+The trace backend can be selected in one of the following ways:
 
-* :kconfig:option:`CONFIG_NRF_MODEM_LIB_TRACE_BACKEND_UART` to send modem traces over UART
-* :kconfig:option:`CONFIG_NRF_MODEM_LIB_TRACE_BACKEND_RTT` to send modem traces over SEGGER RTT
-* :kconfig:option:`CONFIG_NRF_MODEM_LIB_TRACE_BACKEND_FLASH` to write modem traces to external flash
+* Adding the ``nrf91-modem-trace-uart`` snippet to send modem traces over UART.
+  See :ref:`nrf91_modem_trace_uart_snippet` for more details.
+* Enabling the :kconfig:option:`CONFIG_NRF_MODEM_LIB_TRACE_BACKEND_RTT` Kconfig option to send modem traces over SEGGER RTT.
+* Enabling the :kconfig:option:`CONFIG_NRF_MODEM_LIB_TRACE_BACKEND_FLASH` Kconfig option to write modem traces to external flash.
 
 To reduce the amount of trace data sent from the modem, a different trace level can be selected.
 Complete the following steps to configure the modem trace level at compile time:
@@ -91,11 +93,13 @@ If the modem buffer is full, the modem drops modem traces until the buffer has s
 
 .. modem_lib_sending_traces_UART_start
 
-Sending traces over UART on the nRF9160 DK
-==========================================
+Sending traces over UART on an nRF91 Series DK
+==============================================
 
-To send modem traces over UART on the nRF9160 DK, configuration must be added for the UART device in the devicetree and Kconfig.
+To send modem traces over UART on an nRF91 Series DK, configuration must be added for the UART device in the devicetree and Kconfig.
 This is done by adding the :ref:`modem trace UART snippet <nrf91_modem_trace_uart_snippet>` when building and programming.
+
+Use the `Cellular Monitor`_ app for capturing and analyzing modem traces.
 
 .. modem_lib_sending_traces_UART_end
 
@@ -213,19 +217,19 @@ Complete the following steps to add a custom trace backend:
 
       size_t trace_backend_data_size(void)
       {
-         /* If trace data is stored when calling trace_backend_write
+         /* If trace data is stored when calling `trace_backend_write()`
           * this function returns the size of the stored trace data.
           *
-          * If not applicable for the trace backend, set to NULL in the trace_backend struct.
+          * If not applicable for the trace backend, set to NULL in the `trace_backend` struct.
           */
       }
 
       int trace_backend_read(uint8_t *buf, size_t len)
       {
-         /* If trace data is stored when calling trace_backend_write
+         /* If trace data is stored when calling `trace_backend_write()`
           * this function allows the application to read back the trace data.
           *
-          * If not applicable for the trace backend, set to NULL in the trace_backend struct.
+          * If not applicable for the trace backend, set to NULL in the `trace_backend` struct.
           */
       }
 
@@ -234,7 +238,25 @@ Complete the following steps to add a custom trace backend:
          /* This function allows the backend to clear all stored traces in the backend. For instance
           * this can be erasing a flash partition to prepare for writing new data.
           *
-          * If not applicable for the trace backend, set to NULL in the trace_backend struct.
+          * If not applicable for the trace backend, set to NULL in the `trace_backend` struct.
+          */
+      }
+
+      int trace_backend_suspend(void)
+      {
+         /* This function allows the trace module to suspend the trace backend. When suspended,
+          * the backend cannot be used by the trace module until it is resumed by calling
+          * `trace_backend_resume()`.
+          *
+          * If not applicable for the trace backend, set to NULL in the `trace_backend` struct.
+          */
+      }
+
+      int trace_backend_resume(void)
+      {
+         /* This function allows the trace module to resume the trace backend after it is suspended.
+          *
+          * If not applicable for the trace backend, set to NULL in the `trace_backend` struct.
           */
       }
 
@@ -245,6 +267,8 @@ Complete the following steps to add a custom trace backend:
          .data_size = trace_backend_data_size, /* Set to NULL if not applicable. */
          .read = trace_backend_read, /* Set to NULL if not applicable. */
          .clear = trace_backend_clear, /* Set to NULL if not applicable. */
+         .suspend = trace_backend_suspend, /* Set to NULL if not applicable. */
+         .resume = trace_backend_resume, /* Set to NULL if not applicable. */
       };
 
 #. Create or modify a :file:`Kconfig` file to extend the choice :kconfig:option:`NRF_MODEM_LIB_TRACE_BACKEND` with another option.

@@ -8,6 +8,7 @@
 
 #include "battery.h"
 #include "buzzer.h"
+#include "fabric_table_delegate.h"
 #include "led_widget.h"
 #include <platform/CHIPDeviceLayer.h>
 
@@ -217,6 +218,18 @@ CHIP_ERROR AppTask::Init()
 		return chip::System::MapErrorZephyr(ret);
 	}
 
+#ifdef CONFIG_CHIP_OTA_REQUESTOR
+	/* OTA image confirmation must be done before the factory data init. */
+	OtaConfirmNewImage();
+#endif
+
+#ifdef CONFIG_MCUMGR_TRANSPORT_BT
+	/* Initialize DFU over SMP */
+	GetDFUOverSMP().Init();
+	GetDFUOverSMP().ConfirmNewImage();
+	GetDFUOverSMP().StartServer();
+#endif
+
 /* Get factory data */
 #ifdef CONFIG_CHIP_FACTORY_DATA
 	ReturnErrorOnFailure(mFactoryDataProvider.Init());
@@ -233,13 +246,6 @@ CHIP_ERROR AppTask::Init()
 #else
 	SetDeviceInstanceInfoProvider(&DeviceInstanceInfoProviderMgrImpl());
 	SetDeviceAttestationCredentialsProvider(Examples::GetExampleDACProvider());
-#endif
-
-#ifdef CONFIG_MCUMGR_TRANSPORT_BT
-	/* Initialize DFU over SMP */
-	GetDFUOverSMP().Init();
-	GetDFUOverSMP().ConfirmNewImage();
-	GetDFUOverSMP().StartServer();
 #endif
 
 	/* Initialize timers */
@@ -262,6 +268,7 @@ CHIP_ERROR AppTask::Init()
 
 	gExampleDeviceInfoProvider.SetStorageDelegate(&Server::GetInstance().GetPersistentStorage());
 	chip::DeviceLayer::SetDeviceInfoProvider(&gExampleDeviceInfoProvider);
+	AppFabricTableDelegate::Init();
 
 	ConfigurationMgr().LogDeviceConfig();
 	PrintOnboardingCodes(chip::RendezvousInformationFlags(chip::RendezvousInformationFlag::kBLE));

@@ -41,7 +41,7 @@ zephyr_library_compile_definitions(
 	CONFIG_SUITEB192
 	)
 
-zephyr_library_compile_definitions_ifndef(CONFIG_WPA_SUPP_CRYPTO
+zephyr_library_compile_definitions_ifdef(CONFIG_WPA_SUPP_CRYPTO_NONE
 	CONFIG_NO_PBKDF2
 )
 
@@ -163,21 +163,21 @@ zephyr_library_compile_definitions_ifdef(CONFIG_WPA_SUPP_AP
 )
 
 
-zephyr_library_sources_ifndef(CONFIG_WPA_SUPP_CRYPTO
+zephyr_library_sources_ifdef(CONFIG_WPA_SUPP_CRYPTO_NONE
 	${COMMON_SRC_BASE}/crypto/crypto_none.c
 	${COMMON_SRC_BASE}/crypto/tls_none.c
 )
 
-zephyr_library_compile_definitions_ifndef(CONFIG_WPA_SUPP_CRYPTO
+zephyr_library_compile_definitions_ifdef(CONFIG_WPA_SUPP_CRYPTO_NONE
 	CONFIG_NO_WPA
 	CONFIG_CRYPTO_INTERNAL
 )
 
-zephyr_library_compile_definitions_ifdef(CONFIG_WPA_SUPP_CRYPTO
+zephyr_library_compile_definitions_ifdef(CONFIG_WPA_SUPP_CRYPTO_WEP
 	CONFIG_WEP
 )
 
-zephyr_library_sources_ifdef(CONFIG_WPA_SUPP_CRYPTO
+zephyr_library_sources_ifndef(CONFIG_WPA_SUPP_CRYPTO_NONE
 	${COMMON_SRC_BASE}/common/wpa_common.c
 	${COMMON_SRC_BASE}/rsn_supp/wpa.c
 	${COMMON_SRC_BASE}/rsn_supp/preauth.c
@@ -186,7 +186,6 @@ zephyr_library_sources_ifdef(CONFIG_WPA_SUPP_CRYPTO
 	${COMMON_SRC_BASE}/crypto/crypto_mbedtls-bignum.c
 	${COMMON_SRC_BASE}/crypto/crypto_mbedtls-ec.c
 	${COMMON_SRC_BASE}/crypto/crypto_mbedtls.c
-	${COMMON_SRC_BASE}/crypto/tls_mbedtls.c
 	${COMMON_SRC_BASE}/crypto/aes-wrap.c
 	${COMMON_SRC_BASE}/crypto/aes-unwrap.c
 	${COMMON_SRC_BASE}/crypto/rc4.c
@@ -197,6 +196,9 @@ zephyr_library_sources_ifdef(CONFIG_WPA_SUPP_CRYPTO
 	${COMMON_SRC_BASE}/crypto/sha384-prf.c
 )
 
+zephyr_library_sources_ifndef(CONFIG_WPA_SUPP_CRYPTO_ENTERPRISE
+	${COMMON_SRC_BASE}/crypto/tls_none.c
+)
 
 zephyr_library_sources_ifdef(CONFIG_WPA_SUPP_WPA3
 	${COMMON_SRC_BASE}/common/sae.c
@@ -211,7 +213,7 @@ zephyr_library_compile_definitions_ifdef(CONFIG_WPA_SUPP_WPA3
 	CONFIG_ECC
 )
 
-zephyr_library_include_directories_ifdef(CONFIG_WPA_SUPP_CRYPTO
+zephyr_library_include_directories_ifndef(CONFIG_WPA_SUPP_CRYPTO_NONE
 	${CMAKE_SOURCE_DIR}
 )
 
@@ -263,6 +265,8 @@ zephyr_library_compile_definitions_ifdef(CONFIG_WPA_SUPP_WPS
 )
 
 zephyr_library_sources_ifdef(CONFIG_WPA_SUPP_CRYPTO_ENTERPRISE
+	${COMMON_SRC_BASE}/crypto/tls_mbedtls.c
+
 	${COMMON_SRC_BASE}/eap_peer/eap_tls.c
 	${COMMON_SRC_BASE}/eap_peer/eap_tls_common.c
 

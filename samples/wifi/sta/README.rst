@@ -19,12 +19,13 @@ The sample supports the following development kits:
 Overview
 ********
 
-This sample can perform Wi-Fi operations such as connect and disconnect in the 2.4GHz and 5GHz bands depending on the capabilities of an access point.
+The sample can perform Wi-Fi operations such as connect and disconnect in the 2.4GHz and 5GHz bands depending on the capabilities of an access point.
 
 Using this sample, the development kit can connect to the specified access point in :abbr:`STA (Station)` mode.
 
 User interface
 **************
+
 The sample adds LED support to map with connection and disconnection events.
 
 LED 1:
@@ -51,7 +52,7 @@ See :ref:`zephyr:menuconfig` in the Zephyr documentation for instructions on how
 Configuration options
 =====================
 
-The following application-specific Kconfig option is used in this sample (located in :file:`samples/wifi/sta/Kconfig`):
+The following sample-specific Kconfig option is used in this sample (located in :file:`samples/wifi/sta/Kconfig`):
 
 .. _CONFIG_NRF700X_QSPI_ENCRYPTION_KEY:
 
@@ -151,12 +152,12 @@ Testing
     [00:00:07.117,858] <inf> sta: ==================
     [00:00:07.117,858] <inf> sta: State: SCANNING
     [00:00:07.336,730] <inf> wpa_supp: wlan0: SME: Trying to authenticate with aa:bb:cc:dd:ee:ff (SSID='<MySSID>' freq=5785 MHz)
-    [00:00:07.353,027] <inf> wifi_nrf: wifi_nrf_wpa_supp_authenticate:Authentication request sent successfully
+    [00:00:07.353,027] <inf> nrf_wifi: nrf_wifi_wpa_supp_authenticate:Authentication request sent successfully
 
     [00:00:07.417,938] <inf> sta: ==================
     [00:00:07.417,938] <inf> sta: State: AUTHENTICATING
     [00:00:07.606,628] <inf> wpa_supp: wlan0: Trying to associate with aa:bb:cc:dd:ee:ff (SSID='<MySSID>' freq=5785 MHz)
-    [00:00:07.609,680] <inf> wifi_nrf: wifi_nrf_wpa_supp_associate: Association request sent successfully
+    [00:00:07.609,680] <inf> nrf_wifi: nrf_wifi_wpa_supp_associate: Association request sent successfully
 
     [00:00:07.621,978] <inf> wpa_supp: wpa_drv_zep_get_ssid: SSID size: 5
 

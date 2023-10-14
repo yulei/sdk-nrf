@@ -69,7 +69,8 @@ static enum mgmt_cb_return mcumgr_img_mgmt_cb(uint32_t event,
 	k_work_reschedule(&dfu_timeout, DFU_TIMEOUT);
 	if (IS_ENABLED(CONFIG_DESKTOP_DFU_LOCK) && dfu_lock_claim(&mcumgr_owner)) {
 		(void)k_work_cancel_delayable(&dfu_timeout);
-		return MGMT_ERR_EACCESSDENIED;
+		*rc = MGMT_ERR_EACCESSDENIED;
+		return MGMT_CB_ERROR_RC;
 	}
 
 	if (IS_ENABLED(CONFIG_MCUMGR_TRANSPORT_BT) &&
@@ -96,7 +97,8 @@ static enum mgmt_cb_return mcumgr_os_mgmt_reset_cb(uint32_t event,
 	k_work_reschedule(&dfu_timeout, DFU_TIMEOUT);
 	if (IS_ENABLED(CONFIG_DESKTOP_DFU_LOCK) && dfu_lock_claim(&mcumgr_owner)) {
 		(void)k_work_cancel_delayable(&dfu_timeout);
-		return MGMT_ERR_EACCESSDENIED;
+		*rc = MGMT_ERR_EACCESSDENIED;
+		return MGMT_CB_ERROR_RC;
 	}
 
 	return MGMT_CB_OK;
@@ -132,7 +134,7 @@ static bool app_event_handler(const struct app_event_header *aeh)
 				}
 			}
 
-			LOG_INF("MCUboot image version: %s", CONFIG_MCUBOOT_IMAGE_VERSION);
+			LOG_INF("MCUboot image version: %s", CONFIG_MCUBOOT_IMGTOOL_SIGN_VERSION);
 			k_work_init_delayable(&dfu_timeout, dfu_timeout_handler);
 
 			mgmt_callback_register(&img_mgmt_callback);

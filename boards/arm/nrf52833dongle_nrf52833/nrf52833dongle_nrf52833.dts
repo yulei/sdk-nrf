@@ -62,6 +62,11 @@
 	};
 };
 
+&uicr {
+	nfct-pins-as-gpios;
+	gpio-as-nreset;
+};
+
 &gpiote {
 	status = "okay";
 };

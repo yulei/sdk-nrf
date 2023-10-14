@@ -8,7 +8,7 @@
 #include <zephyr/device.h>
 #include <zephyr/types.h>
 #include <zephyr/net/offloaded_netdev.h>
-#include <zephyr/net/conn_mgr_connectivity.h>
+#include <zephyr/net/conn_mgr_connectivity_impl.h>
 #include <zephyr/logging/log.h>
 #include <modem/nrf_modem_lib.h>
 #include <modem/lte_lc.h>
@@ -28,9 +28,9 @@ LOG_MODULE_REGISTER(lte_connectivity, CONFIG_LTE_CONNECTIVITY_LOG_LEVEL);
  */
 BUILD_ASSERT(IS_ENABLED(CONFIG_NET_IPV6) && IS_ENABLED(CONFIG_NET_IPV4), "IPv6 and IPv4 required");
 
-BUILD_ASSERT((CONFIG_NET_CONNECTION_MANAGER_STACK_SIZE >= 1024),
+BUILD_ASSERT((CONFIG_NET_CONNECTION_MANAGER_MONITOR_STACK_SIZE >= 1024),
 	     "Stack size of the connection manager internal thread is too low. "
-	     "Increase CONFIG_NET_CONNECTION_MANAGER_STACK_SIZE to a minimum of 1024");
+	     "Increase CONFIG_NET_CONNECTION_MANAGER_MONITOR_STACK_SIZE to a minimum of 1024");
 
 /* Forward declarations */
 static void connection_timeout_work_fn(struct k_work *work);
@@ -212,48 +212,7 @@ static int modem_init(void)
 {
 	LOG_DBG("Initializing nRF Modem Library");
 
-	int ret = nrf_modem_lib_init();
-
-	/* Handle return values related to modem DFU. */
-	switch (ret) {
-	case 0:
-		/* Initialization successful, no action required. */
-		LOG_DBG("nRF Modem Library initialized successfully");
-		return 0;
-	case NRF_MODEM_DFU_RESULT_OK:
-		LOG_DBG("Modem DFU successful. The modem will run the updated "
-			"firmware after reinitialization.");
-		break;
-	case NRF_MODEM_DFU_RESULT_UUID_ERROR:
-	case NRF_MODEM_DFU_RESULT_AUTH_ERROR:
-		LOG_ERR("Modem DFU error: %d. The modem will automatically run the previous "
-			"(non-updated) firmware after reinitialization.",
-			ret);
-		break;
-	case NRF_MODEM_DFU_RESULT_VOLTAGE_LOW:
-		LOG_ERR("Modem DFU not executed due to low voltage, error: %d. "
-			"The modem will retry the update on reinitialization.",
-			ret);
-		break;
-	case NRF_MODEM_DFU_RESULT_HARDWARE_ERROR:
-	case NRF_MODEM_DFU_RESULT_INTERNAL_ERROR:
-		/* Fall through */
-	default:
-		LOG_ERR("The modem encountered a fatal error during DFU: %d", ret);
-		return ret;
-	}
-
-	LOG_DBG("Reinitializing nRF Modem Library");
-
-	ret = nrf_modem_lib_init();
-	if (ret) {
-		LOG_ERR("Reinitialization of nRF Modem library failed, retval: %d", ret);
-		return ret;
-	}
-
-	LOG_DBG("nRF Modem Library reinitialized");
-
-	return 0;
+	return nrf_modem_lib_init();
 }
 
 static void on_pdn_activated(void)

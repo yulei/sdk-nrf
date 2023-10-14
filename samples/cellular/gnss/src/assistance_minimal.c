@@ -14,7 +14,8 @@
 #include <nrf_modem_gnss.h>
 
 #include "assistance.h"
-#include "factory_almanac.h"
+#include "factory_almanac_v2.h"
+#include "factory_almanac_v3.h"
 #include "mcc_location_table.h"
 
 LOG_MODULE_DECLARE(gnss_sample, CONFIG_GNSS_SAMPLE_LOG_LEVEL);
@@ -31,7 +32,12 @@ LOG_MODULE_DECLARE(gnss_sample, CONFIG_GNSS_SAMPLE_LOG_LEVEL);
 #define DAYS_PER_WEEK			(7UL)
 #define PLMN_STR_MAX_LEN		8 /* MCC + MNC + quotes */
 
-static char almanac_checksum[64];
+enum almanac_version {
+	FACTORY_ALMANAC_V2 = 2,
+	FACTORY_ALMANAC_V3 = 3
+};
+
+static char current_alm_checksum[64];
 
 static int set(const char *key, size_t len_rd, settings_read_cb read_cb, void *cb_arg)
 {
@@ -46,8 +52,8 @@ static int set(const char *key, size_t len_rd, settings_read_cb read_cb, void *c
 	key_len = settings_name_next(key, &next);
 
 	if (!strncmp(key, "almanac_checksum", key_len)) {
-		len = read_cb(cb_arg, &almanac_checksum, sizeof(almanac_checksum));
-		if (len < sizeof(almanac_checksum)) {
+		len = read_cb(cb_arg, &current_alm_checksum, sizeof(current_alm_checksum));
+		if (len < sizeof(current_alm_checksum)) {
 			LOG_ERR("Failed to read almanac checksum from settings");
 		}
 
@@ -62,20 +68,51 @@ static struct settings_handler assistance_settings = {
 	.h_set = set,
 };
 
+static enum almanac_version factory_almanac_version_get(void)
+{
+	char resp[32];
+
+	if (nrf_modem_at_cmd(resp, sizeof(resp), "AT+CGMM") == 0) {
+		/* nRF9160 uses factory almanac file format version 2, while nRF91x1 uses
+		 * version 3.
+		 */
+		if (strstr(resp, "nRF9160") != NULL) {
+			return FACTORY_ALMANAC_V2;
+		}
+	}
+
+	return FACTORY_ALMANAC_V3;
+}
+
 static void factory_almanac_write(void)
 {
 	int err;
+	enum almanac_version alm_version;
+	const char *alm_data;
+	const char *alm_checksum;
+
+	/* Get the supported factory almanac version. */
+	alm_version = factory_almanac_version_get();
+	LOG_DBG("Supported factory almanac version: %d", alm_version);
+
+	if (alm_version == 3) {
+		alm_data = FACTORY_ALMANAC_DATA_V3;
+		alm_checksum = FACTORY_ALMANAC_CHECKSUM_V3;
+	} else {
+		alm_data = FACTORY_ALMANAC_DATA_V2;
+		alm_checksum = FACTORY_ALMANAC_CHECKSUM_V2;
+	}
 
 	/* Check if the same almanac has already been written to prevent unnecessary writes
 	 * to flash memory.
 	 */
-	if (!strncmp(almanac_checksum, FACTORY_ALMANAC_CHECKSUM, sizeof(almanac_checksum))) {
+	if (!strncmp(current_alm_checksum, alm_checksum, sizeof(current_alm_checksum))) {
 		LOG_INF("Factory almanac has already been written, skipping writing");
 		return;
 	}
 
 	err = nrf_modem_at_printf("AT%%XFILEWRITE=1,\"%s\",\"%s\"",
-				  FACTORY_ALMANAC, FACTORY_ALMANAC_CHECKSUM);
+				  alm_data, alm_checksum);
 	if (err != 0) {
 		LOG_ERR("Failed to write factory almanac");
 		return;
@@ -84,8 +121,8 @@ static void factory_almanac_write(void)
 	LOG_INF("Wrote factory almanac");
 
 	err = settings_save_one("assistance/almanac_checksum",
-				FACTORY_ALMANAC_CHECKSUM,
-				sizeof(almanac_checksum));
+				alm_checksum,
+				sizeof(current_alm_checksum));
 	if (err) {
 		LOG_ERR("Failed to write almanac checksum to settings, error %d", err);
 	}
@@ -110,7 +147,7 @@ static void time_inject(void)
 	struct tm date_time;
 	int64_t utc_sec;
 	int64_t gps_sec;
-	struct nrf_modem_gnss_agps_data_system_time_and_sv_tow gps_time = { 0 };
+	struct nrf_modem_gnss_agnss_gps_data_system_time_and_sv_tow gps_time = { 0 };
 
 	/* Read current UTC time from the modem. */
 	ret = nrf_modem_at_scanf("AT+CCLK?",
@@ -138,8 +175,8 @@ static void time_inject(void)
 
 	gps_sec_to_day_time(gps_sec, &gps_time.date_day, &gps_time.time_full_s);
 
-	ret = nrf_modem_gnss_agps_write(&gps_time, sizeof(gps_time),
-					NRF_MODEM_GNSS_AGPS_GPS_SYSTEM_CLOCK_AND_TOWS);
+	ret = nrf_modem_gnss_agnss_write(&gps_time, sizeof(gps_time),
+					 NRF_MODEM_GNSS_AGNSS_GPS_SYSTEM_CLOCK_AND_TOWS);
 	if (ret != 0) {
 		LOG_ERR("Failed to inject time, error %d", ret);
 		return;
@@ -155,7 +192,7 @@ static void location_inject(void)
 	char plmn_str[PLMN_STR_MAX_LEN + 1];
 	uint16_t mcc;
 	const struct mcc_table *mcc_info;
-	struct nrf_modem_gnss_agps_data_location location = { 0 };
+	struct nrf_modem_gnss_agnss_data_location location = { 0 };
 
 	/* Read PLMN string from modem to get the MCC. */
 	err = nrf_modem_at_scanf(
@@ -207,7 +244,8 @@ static void location_inject(void)
 		location.unc_altitude = 255; /* altitude not used */
 	}
 
-	err = nrf_modem_gnss_agps_write(&location, sizeof(location), NRF_MODEM_GNSS_AGPS_LOCATION);
+	err = nrf_modem_gnss_agnss_write(
+		&location, sizeof(location), NRF_MODEM_GNSS_AGNSS_LOCATION);
 	if (err) {
 		LOG_ERR("Failed to inject location for MCC %u, error %d", mcc, err);
 		return;
@@ -245,13 +283,13 @@ int assistance_init(struct k_work_q *assistance_work_q)
 	return 0;
 }
 
-int assistance_request(struct nrf_modem_gnss_agps_data_frame *agps_request)
+int assistance_request(struct nrf_modem_gnss_agnss_data_frame *agnss_request)
 {
-	if (agps_request->data_flags & NRF_MODEM_GNSS_AGPS_SYS_TIME_AND_SV_TOW_REQUEST) {
+	if (agnss_request->data_flags & NRF_MODEM_GNSS_AGNSS_GPS_SYS_TIME_AND_SV_TOW_REQUEST) {
 		time_inject();
 	}
 
-	if (agps_request->data_flags & NRF_MODEM_GNSS_AGPS_POSITION_REQUEST) {
+	if (agnss_request->data_flags & NRF_MODEM_GNSS_AGNSS_POSITION_REQUEST) {
 		location_inject();
 	}
 

@@ -507,6 +507,9 @@ static int nct_provision(void)
 	nct.tls_config.hostname = NRF_CLOUD_HOSTNAME;
 
 #if defined(CONFIG_NRF_CLOUD_PROVISION_CERTIFICATES)
+	LOG_WRN("CONFIG_NRF_CLOUD_PROVISION_CERTIFICATES is not secure and should be used only for "
+		"testing purposes");
+
 #if defined(CONFIG_NRF_MODEM_LIB)
 	{
 		int err;
@@ -708,6 +711,17 @@ static void nrf_cloud_fota_cb_handler(const struct nrf_cloud_fota_evt
 	}
 	case NRF_CLOUD_FOTA_EVT_DL_PROGRESS: {
 		LOG_DBG("NRF_CLOUD_FOTA_EVT_DL_PROGRESS");
+		break;
+	}
+	case NRF_CLOUD_FOTA_EVT_JOB_RCVD: {
+		struct nrf_cloud_evt cloud_evt = {
+			.type = NRF_CLOUD_EVT_FOTA_JOB_AVAILABLE
+		};
+
+		LOG_DBG("NRF_CLOUD_EVT_FOTA_JOB_AVAILABLE");
+		cloud_evt.data.ptr = (const void *)&evt->type;
+		cloud_evt.data.len = sizeof(evt->type);
+		nct_send_event(&cloud_evt);
 		break;
 	}
 	default: {
@@ -1191,8 +1205,10 @@ int nct_cc_send(const struct nct_cc_data *cc_data)
 
 	publish.message_id = get_message_id(cc_data->message_id);
 
-	LOG_DBG("mqtt_publish: id = %d opcode = %d len = %d", publish.message_id,
-		cc_data->opcode, cc_data->data.len);
+	LOG_DBG("mqtt_publish: id = %d opcode = %d len = %d, topic: %*s", publish.message_id,
+		cc_data->opcode, cc_data->data.len,
+		publish.message.topic.topic.size,
+		publish.message.topic.topic.utf8);
 
 	int err = mqtt_publish(&nct.client, &publish);
 
