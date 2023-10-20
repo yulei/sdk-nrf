@@ -241,11 +241,11 @@ Serial LTE modem
   * Support for the Binary App Data Container object as an alternative to the App Data Container object.
     This can be used through the ``app_data`` operation in the ``#XCARRIER`` carrier command.
   * ``#XNRFCLOUDPOS`` AT command to send location requests to nRF Cloud using cellular or Wi-Fi positioning, or both.
-  * Support for using A-GPS and P-GPS at the same time.
+  * ``#XGPS`` AT command to control the GNSS module with support for A-GNSS and P-GPS at the same time.
 
 * Updated:
 
-  * The configuration to enable support for nRF Cloud A-GPS service and nRF Cloud Location service by default.
+  * The configuration to enable support for nRF Cloud A-GNSS service and nRF Cloud Location service by default.
   * UART receive refactored to utilize hardware flow control (HWFC) instead of disabling and enabling UART receiving between commands.
   * UART transmit has been refactored to utilize buffering.
     Multiple responses can now be received in a single transmission.
@@ -264,22 +264,26 @@ Serial LTE modem
   * AT commands ``#XCELLPOS`` and ``#XWIFIPOS``.
     They are replaced by the ``#XNRFCLOUDPOS`` command that allows to combine cellular and Wi-Fi data to determine the device location.
   * The AT commands ``#XAGPS`` and ``#XPGPS``.
-    Their functionality is merged into the ``#XGPS`` AT command that now allows using A-GPS and P-GPS at the same time.
+    Their functionality is merged into the ``#XGPS`` AT command that now allows using A-GNSS and P-GPS at the same time.
   * The AT command ``#XSLMUART``.
     UART is now configured using only devicetree.
+  * Socket option``SO_BINDTODEVICE``. It is replaced by ``SO_BINDTOPDN``.
 
 nRF5340 Audio
 -------------
 
-* The whole application architecture for handling Bluetooth LE Audio has changed. New modules have been added:
+* Modified the entire application architecture for handling Bluetooth LE Audio. The following new modules have been added:
 
   * Management - This module handles scanning and advertising, in addition to general initialization, controller configuration, and transfer of DFU images.
+    The new architecture makes it possible to make connections and handle periodic advertising sync independently of the Bluetooth LE Audio setup.
   * Stream - This module handles the setup and transfer of audio in the Bluetooth LE Audio context.
+    The new architecture makes it possible to have more than one Bluetooth LE Audio role in one device.
   * Renderer - This module handles rendering, such as volume up and down.
   * Content Control - This module handles content control, such as play and pause.
 
 * Added back the QDID number for the :ref:`lib_bt_ll_acs_nrf53_readme` to the documentation.
 * Updated the :ref:`application documentation <nrf53_audio_app>` by splitting it into several pages.
+* Fixed a compatibility issue when using Google Pixel 7/7A.
 
 nRF Machine Learning (Edge Impulse)
 -----------------------------------
@@ -301,6 +305,12 @@ nRF Desktop
   * Kconfig option to configure a motion generated per second during a button press (:ref:`CONFIG_DESKTOP_MOTION_BUTTONS_MOTION_PER_SEC <config_desktop_app_options>`) in the :ref:`nrf_desktop_motion`.
     The implementation relies on the hardware clock instead of system uptime to improve accuracy of the motion data generated when pressing a button.
   * The :ref:`nrf_desktop_measuring_hid_report_rate` section in the nRF Desktop documentation.
+  * A new :ref:`nrf_desktop_config_channel` request (``CONFIG_STATUS_GET_PEERS_CACHE``).
+    The request is handled by the :ref:`nrf_desktop_hid_forward` and can be used to detect changes in the set of connected Bluetooth® LE peripherals.
+    For details, see the :ref:`nrf_desktop_config_channel` documentation.
+  * The forced scan state to :ref:`nrf_desktop_ble_scan`.
+    The new state prevents interrupting scanning when a connected peripheral is in use.
+    The forced scan speeds up establishing new connections with peripherals, but it also negatively impacts the performance of already connected peripherals.
 
 * Updated:
 
@@ -316,6 +326,10 @@ nRF Desktop
   * The :ref:`nrf_desktop_ble_scan` no longer stops Bluetooth LE scanning when it receives :c:struct:`hid_report_event` related to a HID output report.
     Sending HID output report is triggered by a HID host.
     Scanning stop may lead to an edge case where the scanning is stopped, but there are no peripherals connected to the dongle.
+  * Increased heap memory pool size (:kconfig:option:`CONFIG_HEAP_MEM_POOL_SIZE`) in nRF5340 Development Kit configurations.
+    This is done to prevent Event Manger out of memory (OOM) error.
+  * Increased the stack size of a thread responsible for loading settings (:kconfig:option:`CONFIG_CAF_SETTINGS_LOADER_THREAD_STACK_SIZE`) to ``1200`` (default value) in the ``nrf52kbd_nrf52832`` configurations.
+    This is needed to prevent stack overflows on the initial boot right after programming the device.
 
 Thingy:53: Matter weather station
 ---------------------------------
@@ -361,6 +375,7 @@ Bluetooth samples
   * Added automatic switching to the Fast Pair not discoverable advertising mode with the hide UI indication instead of removing the Fast Pair advertising payload when all bond slots are taken.
   * Fixed an issue where the sample was unable to advertise in Fast Pair not discoverable advertising mode when it had five Account Keys written.
   * Renamed the sample to :ref:`fast_pair_input_device` and moved it to the :file:`samples/bluetooth/fast_pair` folder.
+  * Increased the system workqueue stack size (:kconfig:option:`CONFIG_SYSTEM_WORKQUEUE_STACK_SIZE`) to ``1200`` to prevent stack overflows right after booting the nRF5340 DK.
 
 Bluetooth mesh samples
 ----------------------
@@ -375,15 +390,15 @@ Bluetooth mesh samples
 
 * :ref:`bluetooth_mesh_light_lc` sample:
 
-  * Added Composition Data Page 2 support.
-    Composition Data Page 2 support has a dependency on Bluetooth mesh 1.1 support.
+  * Added support for Composition Data Pages 1 and 2.
+    Support for Composition Data Pages 1 and 2 has a dependency on Bluetooth mesh 1.1 support.
   * Fixed an issue where the sample could return an invalid Light Lightness Status message if the transition time was evaluated to zero.
   * Removed support for the configuration with :ref:`CMSE enabled <app_boards_spe_nspe_cpuapp_ns>` for :ref:`zephyr:thingy53_nrf5340`.
 
 * :ref:`bluetooth_mesh_light_dim` sample:
 
-  * Added Composition Data Page 2 support.
-    Composition Data Page 2 support has a dependency on Bluetooth mesh 1.1 support.
+  * Added support for Composition Data Pages 1 and 2.
+    Support for Composition Data Pages 1 and 2 has a dependency on Bluetooth mesh 1.1 support.
   * Removed support for the configuration with :ref:`CMSE enabled <app_boards_spe_nspe_cpuapp_ns>` for :ref:`zephyr:thingy53_nrf5340`.
 
 * :ref:`bluetooth_mesh_light_switch` sample:
@@ -392,8 +407,8 @@ Bluetooth mesh samples
 
 * :ref:`bluetooth_mesh_sensor_server` sample:
 
-  * Added Composition Data Page 2 support.
-    Composition Data Page 2 support has a dependency on Bluetooth mesh 1.1 support.
+  * Added support for Composition Data Pages 1 and 2.
+    Support for Composition Data Pages 1 and 2 has a dependency on Bluetooth mesh 1.1 support.
   * Added a getter for the :c:var:`bt_mesh_sensor_rel_runtime_in_a_dev_op_temp_range` sensor.
   * Removed support for the configuration with :ref:`CMSE enabled <app_boards_spe_nspe_cpuapp_ns>` for :ref:`zephyr:thingy53_nrf5340`.
   * Fixed an issue where the :c:var:`bt_mesh_sensor_time_since_presence_detected` sensor could report an invalid value when the time delta would exceed the range of the characteristic.
@@ -437,10 +452,12 @@ Cellular samples (renamed from nRF9160 samples)
     * The sample to remove redundant shadow updates for nRF Cloud.
     * Build instructions, board files, and DTC overlay file so that Wi-Fi scanning works for the nRF9161 DK and the nRF9160 DK.
     * Configuration to enable power saving mode by default.
+    * Reduced the default value of :kconfig:option:`CONFIG_MAX_OUTGOING_MESSAGES` to prevent potential heap issues.
 
   * Fixed:
 
     * Legitimate server side CoAP API errors are not counted now as a reason to disconnect from and reconnect to the cloud, but only communications errors.
+    * Increased the value of :kconfig:option:`CONFIG_HEAP_MEM_POOL_SIZE` in the full modem FOTA overlay to prevent a boot loop on full modem image installation.
 
   * Removed the Kconfig options :kconfig:option:`CONFIG_LTE_INIT_RETRY_TIMEOUT_SECONDS` and :kconfig:option:`CLOUD_CONNECTION_REESTABLISH_DELAY_SECONDS` as they are no longer needed.
 
@@ -529,6 +546,7 @@ Cellular samples (renamed from nRF9160 samples)
 
     * A DTS overlay file for LEDs on the nRF9160 DK to be compatible with the :ref:`caf_leds`.
     * Header files for buttons and LEDs definition required by the :ref:`lib_caf` library.
+    * An :file:`overlay-nrf_provisioning.conf` file to enable the :ref:`lib_nrf_provisioning` library.
 
   * Updated:
 
@@ -622,7 +640,9 @@ Multicore samples
 nRF5340 samples
 ---------------
 
-|no_changes_yet_note|
+* :ref:`nc_bootloader` sample:
+
+  * Added the functionality of reading out the network core application version number.
 
 Gazell samples
 --------------
@@ -704,7 +724,7 @@ Binary libraries
 
 * :ref:`liblwm2m_carrier_readme` library:
 
-  * Updated to 3.3.0.
+  * Updated to v3.3.1.
     See the :ref:`liblwm2m_carrier_changelog` for detailed information.
 
 Bluetooth libraries and services
@@ -869,6 +889,7 @@ Libraries for networking
     * An event :c:enum:`NRF_CLOUD_EVT_FOTA_JOB_AVAILABLE` that indicates a FOTA update job is available.
     * :c:func:`nrf_cloud_fota_job_start` function that starts a FOTA update job.
     * :c:func:`nrf_cloud_shadow_delta_response_encode()` to help accept or reject shadow delta desired settings.
+    * :c:func:`nrf_cloud_credentials_check` to check if nRF Cloud credentials exist.
 
   * Updated:
 
@@ -887,6 +908,7 @@ Libraries for networking
     * A bug preventing ``AIR_QUAL`` from being enabled in shadow UI service info.
     * A bug that prevented an MQTT FOTA job from being started.
     * An invalid value for a shadow delta change to the control section is now rejected by updating the desired section to the previous value.
+    * Encoding of the "doReply" flag in the :c:func:`nrf_cloud_obj_location_request_create` function.
 
   * Removed:
 
@@ -1051,6 +1073,11 @@ Common Application Framework (CAF)
 
   * Reduced verbosity of logs denoting allowed power states from ``info`` to ``debug``.
 
+* :ref:`caf_settings_loader`:
+
+  * Increased the default stack size of a thread responsible for loading settings (:kconfig:option:`CONFIG_CAF_SETTINGS_LOADER_THREAD_STACK_SIZE`) to ``1200``.
+    A bigger thread stack size prevents stack overflows on the initial boot right after programming the device.
+
 Shell libraries
 ---------------
 
@@ -1074,6 +1101,9 @@ DFU libraries
 
 * Added a new DFU SMP target for the image update to an external MCU by using the MCUmgr SMP Client.
 
+* :ref:`subsys_pcd` library:
+
+  * Added function :c:func:`pcd_network_core_app_version` for reading peripheral CPU application version number.
 
 Scripts
 =======
@@ -1084,6 +1114,9 @@ This section provides detailed lists of changes by :ref:`script <scripts>`.
 
   * The size of the span partitions was changed to include the alignment partitions (``EMPTY_x``) appearing between other partitions, but not alignment partitions at the beginning or end of the span partition.
     The size of the span partitions now reflects the memory space taken from the start of the first of its elements to the end of the last, not just the sum of the sizes of the included partitions.
+  * Fixed a bug where the ``align`` spec was deleted.
+    This would happen in cases where two ``placement`` specs were identical.
+    When disambiguating one of them, the ``align`` spec was not preserved.
 
 * :ref:`west_sbom`:
 
@@ -1096,34 +1129,34 @@ This section provides detailed lists of changes by :ref:`script <scripts>`.
 MCUboot
 =======
 
-The MCUboot fork in |NCS| (``sdk-mcuboot``) contains all commits from the upstream MCUboot repository up to and including ``74c4d1c52fd51d07904b27a7aa9b2303e896a4e3``, with some |NCS| specific additions.
+The MCUboot fork in |NCS| (``sdk-mcuboot``) contains all commits from the upstream MCUboot repository up to and including ``11ecbf639d826c084973beed709a63d51d9b684e``, with some |NCS| specific additions.
 
 The code for integrating MCUboot into |NCS| is located in the :file:`ncs/nrf/modules/mcuboot` folder.
 
 The following list summarizes both the main changes inherited from upstream MCUboot and the main changes applied to the |NCS| specific additions:
 
-|no_changes_yet_note|
+* Added a version check for network core when downgrade prevention is enabled.
 
 Zephyr
 ======
 
 .. NOTE TO MAINTAINERS: All the Zephyr commits in the below git commands must be handled specially after each upmerge and each nRF Connect SDK release.
 
-The Zephyr fork in |NCS| (``sdk-zephyr``) contains all commits from the upstream Zephyr repository up to and including ``a8b28f13c195a00bdf50f5c24092981124664ed9``, with some |NCS| specific additions.
+The Zephyr fork in |NCS| (``sdk-zephyr``) contains all commits from the upstream Zephyr repository up to and including ``a768a05e6205e415564226543cee67559d15b736``, with some |NCS| specific additions.
 
 For the list of upstream Zephyr commits (not including cherry-picked commits) incorporated into nRF Connect SDK since the most recent release, run the following command from the :file:`ncs/zephyr` repository (after running ``west update``):
 
 .. code-block:: none
 
-   git log --oneline a8b28f13c1 ^4bbd91a908
+   git log --oneline a768a05e62 ^4bbd91a908
 
 For the list of |NCS| specific commits, including commits cherry-picked from upstream, run:
 
 .. code-block:: none
 
-   git log --oneline manifest-rev ^a8b28f13c1
+   git log --oneline manifest-rev ^a768a05e62
 
-The current |NCS| main branch is based on revision ``a8b28f13c1`` of Zephyr.
+The current |NCS| main branch is based on revision ``a768a05e62`` of Zephyr.
 
 .. note::
    For possible breaking changes and changes between the latest Zephyr release and the current Zephyr version, refer to the :ref:`Zephyr release notes <zephyr_release_notes>`.
@@ -1167,6 +1200,7 @@ Documentation
 
 * Updated:
 
+  * :ref:`samples` with separate sections for :ref:`keys_samples` and :ref:`peripheral_samples`, which were previously listed in :ref:`other_samples`.
   * The :ref:`emds_readme` library documentation with :ref:`emds_readme_application_integration` section about the formula used to compute the required storage time at shutdown in a worst case scenario.
   * The structure of the :ref:`nrf_modem_lib_readme` documentation.
   * The structure of the |NCS| documentation at its top level, with the following major changes:
@@ -1178,8 +1212,8 @@ Documentation
     * :ref:`release_notes`, :ref:`software_maturity`, :ref:`known_issues`, :ref:`glossary`, and :ref:`dev-model` are now located under :ref:`releases_and_maturity`.
 
   * The :ref:`ug_thread` documentation to improve the overall presentation and add additional details where necessary.
-  * The :ref:`ug_nrf9160_gs` instructions to use `Cellular Monitor`_ instead of Programmer for :ref:`nrf9160_gs_updating_fw`.
-    The instructions for using Programmer were moved to the :ref:`ug_nrf9160` page.
+  * The :ref:`ug_nrf9160_gs` and :ref:`ug_thingy91_gsg` instructions to use `Cellular Monitor`_ instead of Programmer for the :ref:`nrf9160_gs_updating_fw` and :ref:`thingy91_update_firmware` sections, respectively.
+    The instructions for using Programmer were moved to the :ref:`ug_nrf9160` and :ref:`ug_thingy91` pages.
   * Replaced LTE Link Monitor and Trace Collector apps with `nRF Connect Serial Terminal`_ and `Cellular Monitor`_ apps.
   * Renamed nRF91 AT Commands Reference Guide to `nRF9160 AT Commands Reference Guide`_, and added references to the `nRF91x1 AT Commands Reference Guide`_ in the documentation.
   * All references to GNSS assistance from ``A-GPS`` to `A-GNSS`_.

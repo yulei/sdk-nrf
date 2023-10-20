@@ -119,6 +119,10 @@ int rpu_irq_config(struct gpio_callback *irq_callback_data, void (*irq_handler)(
 {
 	int ret;
 
+	if (!device_is_ready(host_irq_spec.port)) {
+		return -ENODEV;
+	}
+
 	ret = gpio_pin_configure_dt(&host_irq_spec, GPIO_INPUT);
 
 	ret = gpio_pin_interrupt_configure_dt(&host_irq_spec,
@@ -137,13 +141,14 @@ int rpu_irq_config(struct gpio_callback *irq_callback_data, void (*irq_handler)(
 
 int rpu_irq_remove(struct gpio_callback *irq_callback_data)
 {
+	gpio_pin_configure_dt(&host_irq_spec, GPIO_DISCONNECTED);
 	gpio_remove_callback(host_irq_spec.port, irq_callback_data);
 
 	return 0;
 }
 
 
-int ble_gpio_config(void)
+static int ble_gpio_config(void)
 {
 #if defined(CONFIG_BOARD_NRF7002DK_NRF7001_NRF5340_CPUAPP) || \
 	defined(CONFIG_BOARD_NRF7002DK_NRF5340_CPUAPP)
@@ -161,8 +166,17 @@ int ble_gpio_config(void)
 #endif /* CONFIG_BOARD_NRF700XDK_NRF5340 */
 }
 
+static int ble_gpio_remove(void)
+{
+	#if defined(CONFIG_BOARD_NRF7002DK_NRF7001_NRF5340_CPUAPP) || \
+		defined(CONFIG_BOARD_NRF7002DK_NRF5340_CPUAPP)
+		return gpio_pin_configure_dt(&btrf_switch_spec, GPIO_DISCONNECTED);
+	#else
+		return 0;
+	#endif
+}
 
-int rpu_gpio_config(void)
+static int rpu_gpio_config(void)
 {
 	int ret;
 
@@ -171,10 +185,6 @@ int rpu_gpio_config(void)
 	}
 
 	if (!device_is_ready(bucken_spec.port)) {
-		return -ENODEV;
-	}
-
-	if (!device_is_ready(host_irq_spec.port)) {
 		return -ENODEV;
 	}
 
@@ -197,7 +207,27 @@ int rpu_gpio_config(void)
 	return 0;
 }
 
-int rpu_pwron(void)
+static int rpu_gpio_remove(void)
+{
+	int ret;
+
+	ret = gpio_pin_configure_dt(&bucken_spec, GPIO_DISCONNECTED);
+	if (ret) {
+		LOG_ERR("BUCKEN GPIO remove failed...\n");
+		return ret;
+	}
+
+	ret = gpio_pin_configure_dt(&iovdd_ctrl_spec, GPIO_DISCONNECTED);
+	if (ret) {
+		LOG_ERR("IOVDD GPIO remove failed...\n");
+		return ret;
+	}
+
+	LOG_DBG("GPIO remove done...\n\n");
+	return ret;
+}
+
+static int rpu_pwron(void)
 {
 	int ret;
 
@@ -208,18 +238,17 @@ int rpu_pwron(void)
 	}
 	/* Settling time is 50us (H0) or 100us (L0) */
 	k_msleep(1);
+
 	ret = gpio_pin_set_dt(&iovdd_ctrl_spec, 1);
 	if (ret) {
 		LOG_ERR("IOVDD GPIO set failed...\n");
 		return ret;
 	}
-
 	/* Settling time for iovdd nRF7002 DK/EK - switch (TCK106AG): ~600us */
 	k_msleep(1);
-
 #ifdef CONFIG_SHIELD_NRF7002EB
-	/* For nRF7002 Evaluation board, we need a total time after bucken assertion
-	 * to be 6ms (2ms+4ms)
+	/* For nRF7002 Expansion board, we need a total wait time after bucken assertion
+	 * to be 6ms (1ms + 1ms + 4ms).
 	 */
 	k_msleep(4);
 #endif /* SHIELD_NRF7002EB */
@@ -227,15 +256,26 @@ int rpu_pwron(void)
 	LOG_DBG("Bucken = %d, IOVDD = %d\n", gpio_pin_get_dt(&bucken_spec),
 			gpio_pin_get_dt(&iovdd_ctrl_spec));
 
-	return 0;
+	return ret;
 }
 
-int rpu_pwroff(void)
+static int rpu_pwroff(void)
 {
-	gpio_pin_set_dt(&bucken_spec, 0); /* BUCKEN = 0 */
-	gpio_pin_set_dt(&iovdd_ctrl_spec, 0); /* IOVDD CNTRL = 0 */
+	int ret;
 
-	return 0;
+	ret = gpio_pin_set_dt(&bucken_spec, 0); /* BUCKEN = 0 */
+	if (ret) {
+		LOG_ERR("BUCKEN GPIO set failed...\n");
+		return ret;
+	}
+
+	ret = gpio_pin_set_dt(&iovdd_ctrl_spec, 0); /* IOVDD CNTRL = 0 */
+	if (ret) {
+		LOG_ERR("IOVDD GPIO set failed...\n");
+		return ret;
+	}
+
+	return ret;
 }
 
 #if defined(CONFIG_BOARD_NRF7002DK_NRF7001_NRF5340_CPUAPP) || \
@@ -293,9 +333,18 @@ int rpu_sleep(void)
 
 int rpu_wakeup(void)
 {
-	rpu_wrsr2(1);
-	rpu_rdsr2();
-	rpu_rdsr1();
+	int ret;
+
+	ret = rpu_wrsr2(1);
+	if (ret) {
+		LOG_ERR("Error: WRSR2 failed\n");
+		return ret;
+	}
+
+	/* These return actual values not return values */
+	(void)rpu_rdsr2();
+
+	(void)rpu_rdsr1();
 
 	return 0;
 }
@@ -307,21 +356,39 @@ int rpu_sleep_status(void)
 
 void rpu_get_sleep_stats(uint32_t addr, uint32_t *buff, uint32_t wrd_len)
 {
-	rpu_wakeup();
-	rpu_read(addr, buff, wrd_len * 4);
-	rpu_sleep();
+	int ret;
+
+	ret = rpu_wakeup();
+	if (ret) {
+		LOG_ERR("Error: RPU wakeup failed\n");
+		return;
+	}
+
+	ret = rpu_read(addr, buff, wrd_len * 4);
+	if (ret) {
+		LOG_ERR("Error: RPU read failed\n");
+		return;
+	}
+
+	ret = rpu_sleep();
+	if (ret) {
+		LOG_ERR("Error: RPU sleep failed\n");
+		return;
+	}
 }
 
 int rpu_wrsr2(uint8_t data)
 {
+	int ret;
+
 #if CONFIG_NRF700X_ON_QSPI
-	qspi_cmd_wakeup_rpu(&qspi_perip, data);
+	ret = qspi_cmd_wakeup_rpu(&qspi_perip, data);
 #else
-	spim_cmd_rpu_wakeup_fn(data);
+	ret = spim_cmd_rpu_wakeup_fn(data);
 #endif
 
 	LOG_DBG("Written 0x%x to WRSR2\n", data);
-	return 0;
+	return ret;
 }
 
 int rpu_rdsr2(void)
@@ -367,6 +434,8 @@ int rpu_enable(void)
 int rpu_disable(void)
 {
 	rpu_pwroff();
+	rpu_gpio_remove();
+	ble_gpio_remove();
 
 	return 0;
 }

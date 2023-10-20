@@ -25,6 +25,10 @@ module-str = Log level for Wi-Fi nRF700x bus layers
 module-help = Sets log level for Wi-Fi nRF700x bus layers
 source "subsys/net/Kconfig.template.log_config.net"
 
+config WIFI_NRF700X_BUS_LOG_LEVEL
+	# Enable error by default
+	default 1
+
 # Hidden define for internal use
 config NRF700X_SCAN_ONLY_MODE
 	bool
@@ -85,6 +89,10 @@ module-dep = LOG
 module-str = Log level for Wi-Fi nRF700x driver
 module-help = Sets log level for Wi-Fi nRF700x driver
 source "subsys/logging/Kconfig.template.log_config"
+
+config WIFI_NRF700X_LOG_LEVEL
+	# Enable error by default
+	default 1
 
 config NRF700X_ON_QSPI
 	def_bool $(dt_compat_enabled,$(DT_COMPAT_NORDIC_NRF700X_QSPI))
@@ -321,7 +329,7 @@ config NRF700X_RSSI_STALE_TIMEOUT_MS
 	int "RSSI stale timeout in milliseconds"
 	default 1000
 	help
-	  RSSI stale timeout is the period after which driver querries
+	  RSSI stale timeout is the period after which driver queries
 	  RPU to get the RSSI the value.
 	  If data is active (e.g. ping), driver stores the RSSI value from
 	  the received frames and provides this stored information
@@ -329,7 +337,7 @@ config NRF700X_RSSI_STALE_TIMEOUT_MS
 	  as stored RSSI value at driver will be updated regularly.
 	  If data is not active or after the stale timeout duration,
 	  driver queries the RPU to get the RSSI value
-	  and provides it to wpa_suuplicant. The value should be set to lower
+	  and provides it to wpa_supplicant. The value should be set to lower
 	  value as driver does not store it and requires RPU to provide the
 	  info.
 

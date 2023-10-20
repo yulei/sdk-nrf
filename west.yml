@@ -61,7 +61,7 @@ manifest:
     # https://developer.nordicsemi.com/nRF_Connect_SDK/doc/latest/zephyr/guides/modules.html
     - name: zephyr
       repo-path: sdk-zephyr
-      revision: v3.4.99-ncs1-rc1
+      revision: a01c3a4caccb6964a29078172ba7f590bcdbe790
       import:
         # In addition to the zephyr repository itself, NCS also
         # imports the contents of zephyr/west.yml at the above
@@ -120,7 +120,7 @@ manifest:
     - name: wfa-qt-control-app
       repo-path: sdk-wi-fiquicktrack-controlappc
       path: modules/lib/wfa-qt-control-app
-      revision: e174aa1bc6d740b961e37ad619a56214632b2c99
+      revision: 0e213ab6a421298484a81a9d18f5c31c4b8084a8
       userdata:
         ncs:
           upstream-url: https://github.com/Wi-FiQuickTrack/Wi-FiQuickTrack-ControlAppC
@@ -128,7 +128,7 @@ manifest:
           compare-by-default: true
     - name: mcuboot
       repo-path: sdk-mcuboot
-      revision: v1.10.99-ncs1-rc1
+      revision: dc0b692181837d912e49fc49841918e47a60d22c
       path: bootloader/mcuboot
     - name: qcbor
       url: https://github.com/laurencelundblade/QCBOR.git
@@ -137,11 +137,11 @@ manifest:
     - name: mbedtls
       path: modules/crypto/mbedtls
       repo-path: sdk-mbedtls
-      revision: v3.3.0-ncs2-rc1
+      revision: acea48fc8a5eb227033b55e6ec012731218e257f
     - name: nrfxlib
       repo-path: sdk-nrfxlib
       path: nrfxlib
-      revision: a6f7979eef0ef64cb81dbd620edd1bbfa392e903
+      revision: bbb718adf44a915c1f42bbc6393b2708cb93cf88
     - name: trusted-firmware-m
       repo-path: sdk-trusted-firmware-m
       path: modules/tee/tf-m/trusted-firmware-m
@@ -149,7 +149,7 @@ manifest:
     - name: matter
       repo-path: sdk-connectedhomeip
       path: modules/lib/matter
-      revision: 90100b726206eefc173a5497e16b564c63b5fce6
+      revision: 1d4ecfee38850ff9c40c1a7144519c32a72aaa3a
       submodules:
         - name: nlio
           path: third_party/nlio/repo
@@ -174,7 +174,7 @@ manifest:
       # Only for internal Nordic development
       repo-path: dragoon.git
       remote: dragoon
-      revision: d01eb29d381c6afb0a0c662062af4ea0b9990b4b
+      revision: c593baa9144d8d05304e9b92d7711ee8aa02503c
       submodules: true
       groups:
         - dragoon
@@ -189,18 +189,18 @@ manifest:
           compare-by-default: false
     - name: sidewalk
       repo-path: sdk-sidewalk
-      revision: 6d1efc6904a3c0a36df613903a1d53bc8ce0dbbf
+      revision: 9a2e912e703625f11b73889678bfdf1792f3c266
       submodules: true
       groups:
         - sidewalk
     - name: homekit
       repo-path: sdk-homekit
-      revision: v2.5.0-rc1
+      revision: e941e59a43e78e6b40232fe70b7e95ef5e37fa87
       groups:
         - homekit
     - name: find-my
       repo-path: sdk-find-my
-      revision: 0ac6b15de7078e5bc02fe1fc1fb3bce248d08782
+      revision: 1b6cb33c5584ca19f328f7844fe57accc1c21045
       groups:
         - find-my
     - name: azure-sdk-for-c
