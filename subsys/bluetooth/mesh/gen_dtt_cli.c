@@ -7,10 +7,10 @@
 #include <bluetooth/mesh/gen_dtt_cli.h>
 #include "model_utils.h"
 
-static int handle_status(struct bt_mesh_model *model, struct bt_mesh_msg_ctx *ctx,
+static int handle_status(const struct bt_mesh_model *model, struct bt_mesh_msg_ctx *ctx,
 			 struct net_buf_simple *buf)
 {
-	struct bt_mesh_dtt_cli *cli = model->user_data;
+	struct bt_mesh_dtt_cli *cli = model->rt->user_data;
 	int32_t transition_time =
 		model_transition_decode(net_buf_simple_pull_u8(buf));
 	int *rsp;
@@ -37,9 +37,9 @@ const struct bt_mesh_model_op _bt_mesh_dtt_cli_op[] = {
 	BT_MESH_MODEL_OP_END,
 };
 
-static int bt_mesh_dtt_init(struct bt_mesh_model *model)
+static int bt_mesh_dtt_init(const struct bt_mesh_model *model)
 {
-	struct bt_mesh_dtt_cli *cli = model->user_data;
+	struct bt_mesh_dtt_cli *cli = model->rt->user_data;
 
 	cli->model = model;
 	cli->pub.msg = &cli->pub_buf;
@@ -50,9 +50,9 @@ static int bt_mesh_dtt_init(struct bt_mesh_model *model)
 	return 0;
 }
 
-static void bt_mesh_dtt_reset(struct bt_mesh_model *model)
+static void bt_mesh_dtt_reset(const struct bt_mesh_model *model)
 {
-	struct bt_mesh_dtt_cli *cli = model->user_data;
+	struct bt_mesh_dtt_cli *cli = model->rt->user_data;
 
 	net_buf_simple_reset(model->pub->msg);
 	bt_mesh_msg_ack_ctx_reset(&cli->ack_ctx);

@@ -12,13 +12,12 @@
 #include <zephyr/bluetooth/conn.h>
 #include <zephyr/bluetooth/gatt.h>
 #include <zephyr/bluetooth/hci.h>
-#include <zephyr/bluetooth/hci_vs.h>
 
 #include <caf/events/ble_common_event.h>
 
-#ifdef CONFIG_BT_LL_SOFTDEVICE
+#ifdef CONFIG_CAF_BLE_USE_LLPM
 #include "sdc_hci_vs.h"
-#endif /* CONFIG_BT_LL_SOFTDEVICE */
+#endif /* CONFIG_CAF_BLE_USE_LLPM */
 
 #define MODULE ble_state
 #include <caf/events/module_state_event.h>
@@ -96,6 +95,7 @@ static void connected(struct bt_conn *conn, uint8_t error)
 
 		event->id = conn;
 		event->state = PEER_STATE_CONN_FAILED;
+		event->reason = error;
 		APP_EVENT_SUBMIT(event);
 
 		if (IS_ENABLED(CONFIG_LOG)) {
@@ -131,6 +131,7 @@ static void connected(struct bt_conn *conn, uint8_t error)
 
 	event->id = conn;
 	event->state = PEER_STATE_CONNECTED;
+	event->reason = 0;
 	APP_EVENT_SUBMIT(event);
 
 	broadcast_init_conn_params(conn);
@@ -211,6 +212,7 @@ static void disconnected(struct bt_conn *conn, uint8_t reason)
 
 	event->id = conn;
 	event->state = PEER_STATE_DISCONNECTED;
+	event->reason = reason;
 	APP_EVENT_SUBMIT(event);
 }
 
@@ -253,8 +255,10 @@ static void security_changed(struct bt_conn *conn, bt_security_t level,
 	}
 
 	struct ble_peer_event *event = new_ble_peer_event();
+
 	event->id = conn;
 	event->state = PEER_STATE_SECURED;
+	event->reason = 0;
 	APP_EVENT_SUBMIT(event);
 
 	if (IS_ENABLED(CONFIG_CAF_BLE_STATE_EXCHANGE_MTU)) {

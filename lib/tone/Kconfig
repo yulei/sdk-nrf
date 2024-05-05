@@ -5,6 +5,9 @@
 
 menuconfig TONE
 	bool "TONE - Sinus creation library"
+	default n
+	select CMSIS_DSP
+	select CMSIS_DSP_FASTMATH
 	help
 	  Library for creating tones
 

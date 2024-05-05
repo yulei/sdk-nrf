@@ -4,7 +4,11 @@
  * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
-/**@file
+#ifndef BT_SCAN_H_
+#define BT_SCAN_H_
+
+/**
+ * @file
  * @defgroup nrf_bt_scan BT Scanning module
  * @{
  * @brief BT Scanning module
@@ -20,10 +24,6 @@
  * @note The Scanning Module also supports applications with a
  *       multicentral link.
  */
-
-
-#ifndef BT_SCAN_H_
-#define BT_SCAN_H_
 
 #include <zephyr/types.h>
 #include <zephyr/sys/slist.h>
@@ -394,7 +394,7 @@ struct cb_data {
  *
  *  This structure is used for tracking the state of a scanning.
  *  It is registered with the help of the @ref bt_scan_cb_register() API.
- *  It's permissible to register multiple instances of this @ref bt_scan_cb
+ *  It is permissible to register multiple instances of this @ref bt_scan_cb
  *  type, in case different modules of an application are interested in
  *  tracking the scanning state. If a callback is not of interest for
  *  an instance, it may be set to NULL and will as a consequence not be
@@ -562,10 +562,19 @@ int bt_scan_blocklist_device_add(const bt_addr_le_t *addr);
  */
 void bt_scan_blocklist_clear(void);
 
+/**@brief Function to update the autoconnect flag after a filter match.
+ *
+ * @note The function should not be used when scanning is active.
+ *
+ * @param[in] connect_if_match If set to true, the module automatically
+ *			       connects after a filter match.
+ */
+void bt_scan_update_connect_if_match(bool connect_if_match);
+
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* BT_SCAN_H_ */
-
 /** @} */
+
+#endif /* BT_SCAN_H_ */

@@ -25,7 +25,7 @@ The sample is compatible with the HCI RPMsg driver provided by the |NCS| Bluetoo
 
 See the following configuration options for more information:
 
-* :kconfig:option:`CONFIG_BT_RPMSG`
+* :kconfig:option:`CONFIG_BT_HCI_IPC`
 * :kconfig:option:`CONFIG_NRF_802154_SER_HOST`
 
 You might need to adjust the Kconfig configuration of this sample to make it compatible with the peer application.
@@ -44,13 +44,13 @@ Building and running
 You must program this sample to the nRF5340 network core.
 
 The recommended way of building the sample is to use the multi-image feature of the build system.
-In this way, the sample is built automatically as a child image when both :kconfig:option:`CONFIG_BT_RPMSG` and :kconfig:option:`CONFIG_NRF_802154_SER_HOST` are enabled.
+In this way, the sample is built automatically as a child image when both :kconfig:option:`CONFIG_BT_HCI_IPC` and :kconfig:option:`CONFIG_NRF_802154_SER_HOST` are enabled.
 
 However, you can also build the sample as a stand-alone image.
 
 See :ref:`configure_application` for information about how to configure the sample.
 
-For example, you can include the Multiprotocol RPMsg sample in a multi-image build by building the :ref:`sockets-echo-server-sample` sample for the nRF5340 application core and adding the following configuration files to your build as CMake options:
+For example, you can include the Multiprotocol RPMsg sample in a multi-image build by building the :zephyr:code-sample:`sockets-echo-server` sample for the nRF5340 application core and adding the following configuration files to your build as CMake options:
 
 * :file:`overlay-802154.conf`
 * :file:`overlay-bt.conf`
@@ -61,7 +61,7 @@ To see an example of this multi-image build on the command line, run the followi
 .. parsed-literal::
    :class: highlight
 
-   west build -b nrf5340dk_nrf5340_cpuapp -p -- -DOVERLAY_CONFIG="overlay-802154.conf;overlay-bt.conf"
+   west build -b nrf5340dk/nrf5340/cpuapp -p -- -DEXTRA_CONF_FILE="overlay-802154.conf;overlay-bt.conf"
 
 .. include:: /includes/build_and_run.txt
 
@@ -69,9 +69,9 @@ Testing
 *******
 
 The testing methods for this sample depend on how it was built and programmed to the device.
-For example, if you built the sample in a multi-image build containing also the :ref:`sockets-echo-server-sample` sample, you can test it as follows:
+For example, if you built the sample in a multi-image build containing also the :zephyr:code-sample:`sockets-echo-server` sample, you can test it as follows:
 
-1. Run the IEEE 802.15.4 variant of the :ref:`sockets-echo-client-sample` on a second development kit that supports IEEE 802.15.4.
+1. Run the IEEE 802.15.4 variant of the :zephyr:code-sample:`sockets-echo-client` on a second development kit that supports IEEE 802.15.4.
 #. |connect_terminal|
    As the nRF5340 DK has multiple UART instances, you must identify the correct port.
 #. Observe that IPv6 packets are exchanged between the echo client and server over the IEEE 802.15.4 interface.

@@ -9,6 +9,7 @@
 
 #include <zephyr/kernel.h>
 #include <zephyr/init.h>
+#include <helpers/nrfx_reset_reason.h>
 #include <nrf_modem.h>
 
 #include <sys/types.h>
@@ -24,6 +25,7 @@
 #endif
 
 #include <modem/nrf_modem_lib.h>
+#include <modem/nrf_modem_lib_trace.h>
 #include <modem/at_monitor.h>
 #include <modem/modem_info.h>
 #include <modem/lte_lc.h>
@@ -31,7 +33,7 @@
 #include <net/nrf_cloud_os.h>
 
 #include <dk_buttons_and_leds.h>
-#include "uart/uart_shell.h"
+#include "uart_shell.h"
 
 #if defined(CONFIG_MOSH_PPP)
 #include "ppp_ctrl.h"
@@ -49,7 +51,7 @@
 #include "fota.h"
 #endif
 #if defined(CONFIG_MOSH_WORKER_THREADS)
-#include "th/th_ctrl.h"
+#include "th_ctrl.h"
 #endif
 #include "mosh_defines.h"
 #include "mosh_print.h"
@@ -147,29 +149,65 @@ void nrf_modem_fault_handler(struct nrf_modem_fault_info *fault_info)
 	__ASSERT(false, "Modem crash detected, halting application execution");
 }
 
-static void mosh_print_version_info(void)
+#if defined(CONFIG_NRF_MODEM_LIB_SHELL_TRACE)
+void nrf_modem_lib_trace_callback(enum nrf_modem_lib_trace_event evt)
 {
-#if defined(APP_VERSION)
-	printk("\nMOSH version:       %s", STRINGIFY(APP_VERSION));
-#else
-	printk("\nMOSH version:       unknown");
+	if (evt == NRF_MODEM_LIB_TRACE_EVT_FULL) {
+		mosh_warn("Modem trace storage is full.");
+		mosh_print("It is recommended to stop modem tracing before sending.");
+		mosh_print("Send or clear modem traces before re-starting.");
+	}
+}
 #endif
 
-#if defined(BUILD_ID)
-	printk("\nMOSH build id:      v%s", STRINGIFY(BUILD_ID));
-#else
-	printk("\nMOSH build id:      custom");
-#endif
+static void reset_reason_str_get(char *str, uint32_t reason)
+{
+	size_t len;
 
-#if defined(BUILD_VARIANT)
-#if defined(BRANCH_NAME)
-	printk("\nMOSH build variant: %s/%s\n\n", STRINGIFY(BRANCH_NAME), STRINGIFY(BUILD_VARIANT));
-#else
-	printk("\nMOSH build variant: %s\n\n", STRINGIFY(BUILD_VARIANT));
-#endif
-#else
-	printk("\nMOSH build variant: dev\n\n");
-#endif
+	*str = '\0';
+
+	if (reason & NRFX_RESET_REASON_RESETPIN_MASK) {
+		(void)strcat(str, "PIN reset | ");
+	}
+	if (reason & NRFX_RESET_REASON_DOG_MASK) {
+		(void)strcat(str, "watchdog | ");
+	}
+	if (reason & NRFX_RESET_REASON_OFF_MASK) {
+		(void)strcat(str, "wakeup from power-off | ");
+	}
+	if (reason & NRFX_RESET_REASON_DIF_MASK) {
+		(void)strcat(str, "debug interface wakeup | ");
+	}
+	if (reason & NRFX_RESET_REASON_SREQ_MASK) {
+		(void)strcat(str, "software | ");
+	}
+	if (reason & NRFX_RESET_REASON_LOCKUP_MASK) {
+		(void)strcat(str, "CPU lockup | ");
+	}
+	if (reason & NRFX_RESET_REASON_CTRLAP_MASK) {
+		(void)strcat(str, "control access port | ");
+	}
+
+	len = strlen(str);
+	if (len == 0) {
+		(void)strcpy(str, "power-on reset");
+	} else {
+		str[len - 3] = '\0';
+	}
+}
+
+static void mosh_print_reset_reason(void)
+{
+	uint32_t reset_reason;
+	char reset_reason_str[128];
+
+	/* Read RESETREAS register value and clear current reset reason(s). */
+	reset_reason = nrfx_reset_reason_get();
+	nrfx_reset_reason_clear(reset_reason);
+
+	reset_reason_str_get(reset_reason_str, reset_reason);
+
+	printk("\nReset reason: %s\n", reset_reason_str);
 }
 
 #if defined(CONFIG_DK_LIBRARY)
@@ -211,6 +249,14 @@ int main(void)
 
 	__ASSERT(mosh_shell != NULL, "Failed to get shell backend");
 
+	/* Reset reason can only be read once, because the register needs to be cleared after
+	 * reading. Memfault implementation reads the reset reason before modem_shell, so the
+	 * register would always be empty.
+	 */
+	if (!IS_ENABLED(CONFIG_MEMFAULT)) {
+		mosh_print_reset_reason();
+	}
+
 	mosh_print_version_info();
 
 #if defined(CONFIG_NRF_CLOUD_REST) || defined(CONFIG_NRF_CLOUD_MQTT)
@@ -251,7 +297,6 @@ int main(void)
 		return 0;
 	}
 
-	lte_lc_init();
 #if defined(CONFIG_MOSH_PPP)
 	ppp_ctrl_init();
 #endif
@@ -292,9 +337,10 @@ int main(void)
 	}
 #endif
 	/* Application started successfully, mark image as OK to prevent
-	 * revert at next reboot.
+	 * revert at next reboot. If LwM2M Carrier library is enabled, allow
+	 * the library to do it.
 	 */
-#if defined(CONFIG_BOOTLOADER_MCUBOOT)
+#if (defined(CONFIG_BOOTLOADER_MCUBOOT) && !defined(CONFIG_LWM2M_CARRIER))
 	boot_write_img_confirmed();
 #endif
 	k_poll_signal_init(&mosh_signal);

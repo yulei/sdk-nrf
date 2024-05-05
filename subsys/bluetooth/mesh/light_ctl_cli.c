@@ -7,7 +7,7 @@
 #include <bluetooth/mesh/light_ctl_cli.h>
 #include "model_utils.h"
 
-static int handle_ctl_status(struct bt_mesh_model *model, struct bt_mesh_msg_ctx *ctx,
+static int handle_ctl_status(const struct bt_mesh_model *model, struct bt_mesh_msg_ctx *ctx,
 			     struct net_buf_simple *buf)
 {
 	if (buf->len != BT_MESH_LIGHT_CTL_MSG_MINLEN_STATUS &&
@@ -15,7 +15,7 @@ static int handle_ctl_status(struct bt_mesh_model *model, struct bt_mesh_msg_ctx
 		return -EMSGSIZE;
 	}
 
-	struct bt_mesh_light_ctl_cli *cli = model->user_data;
+	struct bt_mesh_light_ctl_cli *cli = model->rt->user_data;
 	struct bt_mesh_light_ctl_status status;
 	struct bt_mesh_light_ctl_status *rsp;
 
@@ -55,10 +55,10 @@ static int handle_ctl_status(struct bt_mesh_model *model, struct bt_mesh_msg_ctx
 	return 0;
 }
 
-static int handle_temp_range_status(struct bt_mesh_model *model, struct bt_mesh_msg_ctx *ctx,
+static int handle_temp_range_status(const struct bt_mesh_model *model, struct bt_mesh_msg_ctx *ctx,
 				    struct net_buf_simple *buf)
 {
-	struct bt_mesh_light_ctl_cli *cli = model->user_data;
+	struct bt_mesh_light_ctl_cli *cli = model->rt->user_data;
 	struct bt_mesh_light_temp_range_status status;
 	struct bt_mesh_light_temp_range_status *rsp;
 
@@ -79,7 +79,7 @@ static int handle_temp_range_status(struct bt_mesh_model *model, struct bt_mesh_
 	return 0;
 }
 
-static int handle_temp_status(struct bt_mesh_model *model, struct bt_mesh_msg_ctx *ctx,
+static int handle_temp_status(const struct bt_mesh_model *model, struct bt_mesh_msg_ctx *ctx,
 			      struct net_buf_simple *buf)
 {
 	if (buf->len != BT_MESH_LIGHT_CTL_MSG_MINLEN_TEMP_STATUS &&
@@ -87,7 +87,7 @@ static int handle_temp_status(struct bt_mesh_model *model, struct bt_mesh_msg_ct
 		return -EMSGSIZE;
 	}
 
-	struct bt_mesh_light_ctl_cli *cli = model->user_data;
+	struct bt_mesh_light_ctl_cli *cli = model->rt->user_data;
 	struct bt_mesh_light_temp_status status;
 	struct bt_mesh_light_temp_status *rsp;
 
@@ -128,10 +128,10 @@ static int handle_temp_status(struct bt_mesh_model *model, struct bt_mesh_msg_ct
 	return 0;
 }
 
-static int handle_default_status(struct bt_mesh_model *model, struct bt_mesh_msg_ctx *ctx,
+static int handle_default_status(const struct bt_mesh_model *model, struct bt_mesh_msg_ctx *ctx,
 				 struct net_buf_simple *buf)
 {
-	struct bt_mesh_light_ctl_cli *cli = model->user_data;
+	struct bt_mesh_light_ctl_cli *cli = model->rt->user_data;
 	struct bt_mesh_light_ctl status;
 	struct bt_mesh_light_ctl *rsp;
 
@@ -181,9 +181,9 @@ const struct bt_mesh_model_op _bt_mesh_light_ctl_cli_op[] = {
 	BT_MESH_MODEL_OP_END,
 };
 
-static int bt_mesh_light_ctl_cli_init(struct bt_mesh_model *model)
+static int bt_mesh_light_ctl_cli_init(const struct bt_mesh_model *model)
 {
-	struct bt_mesh_light_ctl_cli *cli = model->user_data;
+	struct bt_mesh_light_ctl_cli *cli = model->rt->user_data;
 
 	cli->model = model;
 	cli->pub.msg = &cli->pub_buf;
@@ -194,9 +194,9 @@ static int bt_mesh_light_ctl_cli_init(struct bt_mesh_model *model)
 	return 0;
 }
 
-static void bt_mesh_light_ctl_cli_reset(struct bt_mesh_model *model)
+static void bt_mesh_light_ctl_cli_reset(const struct bt_mesh_model *model)
 {
-	struct bt_mesh_light_ctl_cli *cli = model->user_data;
+	struct bt_mesh_light_ctl_cli *cli = model->rt->user_data;
 
 	net_buf_simple_reset(cli->pub.msg);
 	bt_mesh_msg_ack_ctx_reset(&cli->ack_ctx);

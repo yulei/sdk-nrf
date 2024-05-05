@@ -20,9 +20,23 @@ The |NCS| allows you to develop applications with different versions of Matter, 
 +--------------------------+-----------------------------------------------------+------------------------+
 | nRF Connect SDK version  | Matter specification version                        | `Matter SDK version`_  |
 +==========================+=====================================================+========================+
-| v2.4.99 (latest)         | :ref:`1.1.0 <ug_matter_overview_dev_model_support>` | 1.1.0.1                |
+| v2.6.99 (latest)         | :ref:`1.2.0 <ug_matter_overview_dev_model_support>` | 1.2.0.1                |
 +--------------------------+                                                     |                        |
 | |release|                |                                                     |                        |
++--------------------------+-----------------------------------------------------+------------------------+
+| v2.5.2                   | :ref:`1.1.0 <ug_matter_overview_dev_model_support>` | 1.1.0.1                |
++--------------------------+                                                     |                        |
+| v2.5.1                   |                                                     |                        |
++--------------------------+                                                     |                        |
+| v2.5.0                   |                                                     |                        |
++--------------------------+                                                     |                        |
+| v2.4.3                   |                                                     |                        |
++--------------------------+                                                     |                        |
+| v2.4.2                   |                                                     |                        |
++--------------------------+                                                     |                        |
+| v2.4.1                   |                                                     |                        |
++--------------------------+                                                     |                        |
+| v2.4.0                   |                                                     |                        |
 +--------------------------+-----------------------------------------------------+------------------------+
 | v2.3.0                   | :ref:`1.0.0 <ug_matter_overview_dev_model_support>` | 1.0.0.2                |
 +--------------------------+                                                     +------------------------+
@@ -38,6 +52,11 @@ The |NCS| allows you to develop applications with different versions of Matter, 
 .. note::
    The Matter SDK version is taken as the base for the `dedicated Matter fork`_, which can then include additional changes for each |NCS| release.
    These changes are listed in the Matter fork section of the |NCS| :ref:`release_notes`.
+
+.. important::
+   For Matter over Thread samples, starting with |NCS| releases after v2.5.2, the default cryptography backend is Arm PSA Crypto API instead of Mbed TLS, which was used in earlier versions.
+   To :ref:`inherit Thread certification <ug_matter_device_certification_reqs_dependent>` from Nordic Semiconductor, you must use the PSA Crypto API backend.
+   See the :ref:`migration guide <migration_2.6>` to learn about all changes if you are migrating from an earlier version of the |NCS|.
 
 For more information about Matter compatibility, see :ref:`ug_matter_overview_dev_model_support` and :ref:`supported Matter features per SoC <software_maturity_protocol_matter>`.
 

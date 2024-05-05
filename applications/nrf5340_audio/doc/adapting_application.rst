@@ -1,18 +1,18 @@
 .. _nrf53_audio_app_adapting:
 
-Adapting nRF5340 Audio application for end products
-###################################################
+Adapting nRF5340 Audio applications for end products
+####################################################
 
 .. contents::
    :local:
    :depth: 2
 
-This page describes the relevant configuration sources and lists the steps required for adapting the :ref:`nrf53_audio_app` application to end products.
+This page describes the relevant configuration sources and lists the steps required for adapting the :ref:`nrf53_audio_app` to end products.
 
 Board configuration sources
 ***************************
 
-The nRF5340 Audio application uses the following files as board configuration sources:
+The nRF5340 Audio applications use the following files as board configuration sources:
 
 * Devicetree Specification (DTS) files - These reflect the hardware configuration.
   See :ref:`zephyr:dt-guide` for more information about the DTS data structure.
@@ -20,7 +20,7 @@ The nRF5340 Audio application uses the following files as board configuration so
   See :ref:`kconfig_tips_and_tricks` for information about how to configure them.
 * Memory layout configuration files - These define the memory layout of the application.
 
-You can see the :file:`zephyr/boards/arm/nrf5340_audio_dk_nrf5340` directory as an example of how these files are structured.
+You can see the :file:`zephyr/boards/nordic/nrf5340_audio_dk` directory as an example of how these files are structured.
 
 For information about differences between DTS and Kconfig, see :ref:`zephyr:dt_vs_kconfig`.
 For detailed instructions for adding Zephyr support to a custom board, see Zephyr's :ref:`zephyr:board_porting_guide`.
@@ -30,7 +30,7 @@ For detailed instructions for adding Zephyr support to a custom board, see Zephy
 Application configuration sources
 *********************************
 
-The application configuration source file defines a set of options used by the nRF5340 Audio application.
+The application configuration source file defines a set of options used by the given nRF5340 Audio application.
 This is a :file:`.conf` file that modifies the default Kconfig values defined in the Kconfig files.
 
 Only one :file:`.conf` file is included at a time.
@@ -38,7 +38,7 @@ The :file:`prj.conf` file is the default configuration file and it implements th
 For the release application version, you need to include the :file:`prj_release.conf` configuration file.
 In the release application version no debug features should be enabled.
 
-The nRF5340 Audio application also use several :file:`Kconfig.defaults` files to change configuration defaults automatically, based on the different application versions and device types.
+Each nRF5340 Audio application also uses its own :file:`Kconfig.default` file to change configuration defaults automatically.
 
 You need to edit :file:`prj.conf` and :file:`prj_release.conf` if you want to add new functionalities to your application, but editing these files when adding a new board is not required.
 
@@ -54,8 +54,8 @@ To use the nRF5340 Audio application with your custom board:
 
 1. Define the board files for your custom board:
 
-   a. Create a new directory in the :file:`nrf/boards/arm/` directory with the name of the new board.
-   #. Copy the nRF5340 Audio board files from the :file:`nrf5340_audio_dk_nrf5340` directory located in the :file:`zephyr/boards/arm/` folder to the newly created directory.
+   a. Create a new directory in the :file:`nrf/boards/<vendor>/` directory with the name of the new board.
+   #. Copy the nRF5340 Audio board files from the :file:`nrf5340_audio_dk` directory located in the :file:`zephyr/boards/nordic/` folder to the newly created directory.
 
 #. Edit the DTS files to make sure they match the hardware configuration.
    Pay attention to the following elements:

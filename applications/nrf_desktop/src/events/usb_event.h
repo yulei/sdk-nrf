@@ -11,7 +11,7 @@
 #ifndef _USB_EVENT_H_
 #define _USB_EVENT_H_
 
-#include <zephyr/toolchain/common.h>
+#include <zephyr/toolchain.h>
 
 #include <app_event_manager.h>
 #include <app_event_manager_profiler_tracer.h>
@@ -54,18 +54,6 @@ struct usb_state_event {
 	enum usb_state state;
 };
 APP_EVENT_TYPE_DECLARE(usb_state_event);
-
-/** @brief USB HID event. */
-struct usb_hid_event {
-	/** Event header. */
-	struct app_event_header header;
-
-	/** USB HID device id. */
-	const void *id;
-	/** USB HID device enabled state. */
-	bool enabled;
-};
-APP_EVENT_TYPE_DECLARE(usb_hid_event);
 
 /**
  * @}

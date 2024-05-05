@@ -10,7 +10,7 @@
 #include <zephyr/device.h>
 #include <nrf_modem_at.h>
 #include <modem/at_monitor.h>
-#include <zephyr/toolchain/common.h>
+#include <zephyr/toolchain.h>
 #include <zephyr/logging/log.h>
 
 LOG_MODULE_REGISTER(at_monitor, CONFIG_AT_MONITOR_LOG_LEVEL);
@@ -75,8 +75,8 @@ void at_monitor_dispatch(const char *notif)
 
 	at_notif = k_heap_alloc(&at_monitor_heap, sz_needed, K_NO_WAIT);
 	if (!at_notif) {
-		LOG_WRN("No heap space for incoming notification: %s",
-			notif);
+		LOG_WRN("No heap space for incoming notification: %s", notif);
+		__ASSERT(at_notif, "No heap space for incoming notification: %s", notif);
 		return;
 	}
 

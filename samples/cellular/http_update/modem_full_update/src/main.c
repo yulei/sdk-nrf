@@ -380,8 +380,6 @@ static int cert_provision(void)
  */
 static int modem_configure_and_connect(void)
 {
-	BUILD_ASSERT(!IS_ENABLED(CONFIG_LTE_AUTO_INIT_AND_CONNECT),
-			"This sample does not support auto init and connect");
 	int err;
 
 #if defined(CONFIG_USE_HTTPS)
@@ -394,7 +392,7 @@ static int modem_configure_and_connect(void)
 #endif /* CONFIG_USE_HTTPS */
 
 	printk("LTE Link Connecting ...\n");
-	err = lte_lc_init_and_connect_async(lte_lc_handler);
+	err = lte_lc_connect_async(lte_lc_handler);
 	if (err) {
 		printk("LTE link could not be established.");
 		return err;
@@ -422,13 +420,8 @@ static int update_download(void)
 {
 	int err;
 	const char *file;
-
-	err = fota_download_init(fota_dl_handler);
-	if (err != 0) {
-		printk("fota_download_init() failed, err %d\n", err);
-		return err;
-	}
-
+	int sec_tag = SEC_TAG;
+	uint8_t sec_tag_count = sec_tag < 0 ? 0 : 1;
 	const struct dfu_target_full_modem_params params = {
 		.buf = fmfu_buf,
 		.len = sizeof(fmfu_buf),
@@ -439,8 +432,14 @@ static int update_download(void)
 		}
 	};
 
-	err = dfu_target_full_modem_cfg(&params);
+	err = fota_download_init(fota_dl_handler);
 	if (err != 0) {
+		printk("fota_download_init() failed, err %d\n", err);
+		return err;
+	}
+
+	err = dfu_target_full_modem_cfg(&params);
+	if (err != 0 && err != -EALREADY) {
 		printk("dfu_target_full_modem_cfg failed: %d\n", err);
 		return err;
 	}
@@ -459,9 +458,10 @@ static int update_download(void)
 	}
 
 	/* Functions for getting the host and file */
-	err = fota_download_start(CONFIG_DOWNLOAD_HOST, file, SEC_TAG, 0, 0);
+	err = fota_download(CONFIG_DOWNLOAD_HOST, file, &sec_tag, sec_tag_count, 0, 0,
+			    DFU_TARGET_IMAGE_TYPE_FULL_MODEM);
 	if (err != 0) {
-		printk("fota_download_start() failed, err %d\n", err);
+		printk("fota_download() failed, err %d\n", err);
 		return err;
 	}
 

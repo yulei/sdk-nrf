@@ -26,6 +26,7 @@
 #include <zephyr/kernel.h>
 #include <zephyr/net/offloaded_netdev.h>
 #include <zephyr/net/conn_mgr_connectivity.h>
+#include <zephyr/net/conn_mgr_connectivity_impl.h>
 #include <zephyr/net/net_if.h>
 #include <zephyr/sys/util_macro.h>
 
@@ -35,11 +36,12 @@
 #include <zephyr/posix/sys/socket.h>
 #endif
 
-#if defined(CONFIG_LTE_CONNECTIVITY)
-#include "lte_connectivity/lte_connectivity.h"
-#endif /* CONFIG_LTE_CONNECTIVITY */
-
 #if defined(CONFIG_NET_SOCKETS_OFFLOAD)
+
+/* Macro used to define a private Connection Manager connectivity context type.
+ * Required but not implemented.
+ */
+#define NRF_MODEM_LIB_NET_IF_CTX_TYPE void *
 
 #define OBJ_TO_SD(obj) (((struct nrf_sock_ctx *)obj)->nrf_fd)
 #define OBJ_TO_CTX(obj) ((struct nrf_sock_ctx *)obj)
@@ -196,6 +198,9 @@ static int z_to_nrf_optname(int z_in_level, int z_in_optname,
 		case SO_ERROR:
 			*nrf_out_optname = NRF_SO_ERROR;
 			break;
+		case SO_KEEPOPEN:
+			*nrf_out_optname = NRF_SO_KEEPOPEN;
+			break;
 		case SO_EXCEPTIONAL_DATA:
 			*nrf_out_optname = NRF_SO_EXCEPTIONAL_DATA;
 			break;
@@ -211,6 +216,8 @@ static int z_to_nrf_optname(int z_in_level, int z_in_optname,
 		case SO_REUSEADDR:
 			*nrf_out_optname = NRF_SO_REUSEADDR;
 			break;
+
+		/* SO_RAI_* and NRF_SO_RAI_* are deprecated */
 		case SO_RAI_LAST:
 			*nrf_out_optname = NRF_SO_RAI_LAST;
 			break;
@@ -225,6 +232,9 @@ static int z_to_nrf_optname(int z_in_level, int z_in_optname,
 			break;
 		case SO_RAI_WAIT_MORE:
 			*nrf_out_optname = NRF_SO_RAI_WAIT_MORE;
+			break;
+		case SO_RAI:
+			*nrf_out_optname = NRF_SO_RAI;
 			break;
 		default:
 			retval = -1;
@@ -516,7 +526,7 @@ static int nrf91_socket_offload_setsockopt(void *obj, int level, int optname,
 			nrf_optlen = sizeof(struct nrf_timeval);
 		}
 	} else if ((level == SOL_TLS) && (optname == TLS_SESSION_CACHE)) {
-		nrf_optlen = sizeof(nrf_sec_session_cache_t);
+		nrf_optlen = sizeof(int);
 	}
 
 	retval = nrf_setsockopt(sd, nrf_level, nrf_optname, nrf_optval,
@@ -1117,7 +1127,7 @@ static int nrf91_socket_create(int family, int type, int proto)
 
 #define NRF91_SOCKET_PRIORITY 40
 
-NET_SOCKET_REGISTER(nrf91_socket, NRF91_SOCKET_PRIORITY, AF_UNSPEC,
+NET_SOCKET_OFFLOAD_REGISTER(nrf91_socket, NRF91_SOCKET_PRIORITY, AF_UNSPEC,
 		    nrf91_socket_is_supported, nrf91_socket_create);
 
 /* Create a network interface for nRF91 */
@@ -1157,14 +1167,18 @@ static void nrf91_iface_api_init(struct net_if *iface)
 
 static int nrf91_iface_enable(const struct net_if *iface, bool enabled)
 {
+#if defined(CONFIG_NRF_MODEM_LIB_NET_IF)
 	/* Enables or disable the device (in response to admin state change) */
-#if defined(CONFIG_LTE_CONNECTIVITY)
-	return enabled ? lte_connectivity_enable() : lte_connectivity_disable();
+	extern int lte_net_if_enable(void);
+	extern int lte_net_if_disable(void);
+
+	return enabled ? lte_net_if_enable() :
+			 lte_net_if_disable();
 #else
 	ARG_UNUSED(iface);
 	ARG_UNUSED(enabled);
 	return 0;
-#endif /* CONFIG_NRF9160_CONNECTIVITY */
+#endif /* CONFIG_NRF_MODEM_LIB_NET_IF */
 }
 
 static struct offloaded_if_api nrf91_iface_offload_api = {
@@ -1179,18 +1193,10 @@ NET_DEVICE_OFFLOAD_INIT(nrf91_socket, "nrf91_socket",
 			&nrf91_iface_data, NULL,
 			0, &nrf91_iface_offload_api, 1280);
 
-#if defined(CONFIG_LTE_CONNECTIVITY)
-/* Bind l2 connectity APIs. */
-static struct conn_mgr_conn_api conn_api = {
-	.init = lte_connectivity_init,
-	.connect = lte_connectivity_connect,
-	.disconnect = lte_connectivity_disconnect,
-	.set_opt = lte_connectivity_options_set,
-	.get_opt = lte_connectivity_options_get,
-};
-
-CONN_MGR_CONN_DEFINE(LTE_CONNECTIVITY, &conn_api);
-CONN_MGR_BIND_CONN(nrf91_socket, LTE_CONNECTIVITY);
-#endif /* CONFIG_LTE_CONNECTIVITY */
+#if defined(CONFIG_NRF_MODEM_LIB_NET_IF)
+extern struct conn_mgr_conn_api lte_net_if_conn_mgr_api;
+CONN_MGR_CONN_DEFINE(NRF_MODEM_LIB_NET_IF, &lte_net_if_conn_mgr_api);
+CONN_MGR_BIND_CONN(nrf91_socket, NRF_MODEM_LIB_NET_IF);
+#endif /* CONFIG_NRF_MODEM_LIB_NET_IF */
 
 #endif /* CONFIG_NET_SOCKETS_OFFLOAD */

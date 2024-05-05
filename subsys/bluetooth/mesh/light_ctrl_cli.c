@@ -6,10 +6,10 @@
 
 #include <bluetooth/mesh/light_ctrl_cli.h>
 #include "model_utils.h"
-#include "light_ctrl_internal.h"
+#include "sensor.h"
 
 union prop_value {
-	struct sensor_value prop;
+	sensor_value_type prop;
 	float coeff;
 };
 struct prop_status_ctx {
@@ -17,11 +17,11 @@ struct prop_status_ctx {
 	union prop_value val;
 };
 
-static int handle_mode(struct bt_mesh_model *model, struct bt_mesh_msg_ctx *ctx,
+static int handle_mode(const struct bt_mesh_model *model, struct bt_mesh_msg_ctx *ctx,
 		       struct net_buf_simple *buf)
 {
 	bool *ack_buf;
-	struct bt_mesh_light_ctrl_cli *cli = model->user_data;
+	struct bt_mesh_light_ctrl_cli *cli = model->rt->user_data;
 	uint8_t enabled = net_buf_simple_pull_u8(buf);
 
 	if (enabled > 1) {
@@ -41,11 +41,11 @@ static int handle_mode(struct bt_mesh_model *model, struct bt_mesh_msg_ctx *ctx,
 	return 0;
 }
 
-static int handle_occupancy(struct bt_mesh_model *model, struct bt_mesh_msg_ctx *ctx,
+static int handle_occupancy(const struct bt_mesh_model *model, struct bt_mesh_msg_ctx *ctx,
 			    struct net_buf_simple *buf)
 {
 	bool *ack_buf;
-	struct bt_mesh_light_ctrl_cli *cli = model->user_data;
+	struct bt_mesh_light_ctrl_cli *cli = model->rt->user_data;
 	uint8_t enabled = net_buf_simple_pull_u8(buf);
 
 	if (enabled > 1) {
@@ -65,10 +65,10 @@ static int handle_occupancy(struct bt_mesh_model *model, struct bt_mesh_msg_ctx 
 	return 0;
 }
 
-static int handle_light_onoff(struct bt_mesh_model *model, struct bt_mesh_msg_ctx *ctx,
+static int handle_light_onoff(const struct bt_mesh_model *model, struct bt_mesh_msg_ctx *ctx,
 			      struct net_buf_simple *buf)
 {
-	struct bt_mesh_light_ctrl_cli *cli = model->user_data;
+	struct bt_mesh_light_ctrl_cli *cli = model->rt->user_data;
 	struct bt_mesh_onoff_status status;
 	struct bt_mesh_onoff_status *ack_buf;
 
@@ -109,10 +109,10 @@ static int handle_light_onoff(struct bt_mesh_model *model, struct bt_mesh_msg_ct
 	return 0;
 }
 
-static int handle_prop(struct bt_mesh_model *model, struct bt_mesh_msg_ctx *ctx,
+static int handle_prop(const struct bt_mesh_model *model, struct bt_mesh_msg_ctx *ctx,
 		       struct net_buf_simple *buf)
 {
-	struct bt_mesh_light_ctrl_cli *cli = model->user_data;
+	struct bt_mesh_light_ctrl_cli *cli = model->rt->user_data;
 	struct prop_status_ctx *rsp;
 	const struct bt_mesh_sensor_format *format;
 	union prop_value value;
@@ -133,7 +133,7 @@ static int handle_prop(struct bt_mesh_model *model, struct bt_mesh_msg_ctx *ctx,
 		       net_buf_simple_pull_mem(buf, sizeof(float)),
 		       sizeof(float));
 	} else {
-		format = prop_format_get(id);
+		format = bt_mesh_lc_prop_format_get(id);
 		if (!format) {
 			return -ENOENT;
 		}
@@ -186,9 +186,9 @@ const struct bt_mesh_model_op _bt_mesh_light_ctrl_cli_op[] = {
 	BT_MESH_MODEL_OP_END,
 };
 
-static int light_ctrl_cli_init(struct bt_mesh_model *model)
+static int light_ctrl_cli_init(const struct bt_mesh_model *model)
 {
-	struct bt_mesh_light_ctrl_cli *cli = model->user_data;
+	struct bt_mesh_light_ctrl_cli *cli = model->rt->user_data;
 
 	cli->model = model;
 	cli->pub.msg = &cli->pub_buf;
@@ -199,9 +199,9 @@ static int light_ctrl_cli_init(struct bt_mesh_model *model)
 	return 0;
 }
 
-static void light_ctrl_cli_reset(struct bt_mesh_model *model)
+static void light_ctrl_cli_reset(const struct bt_mesh_model *model)
 {
-	struct bt_mesh_light_ctrl_cli *cli = model->user_data;
+	struct bt_mesh_light_ctrl_cli *cli = model->rt->user_data;
 
 	net_buf_simple_reset(cli->pub.msg);
 	bt_mesh_msg_ack_ctx_reset(&cli->ack_ctx);
@@ -365,7 +365,11 @@ int bt_mesh_light_ctrl_cli_light_onoff_set_unack(
 int bt_mesh_light_ctrl_cli_prop_get(struct bt_mesh_light_ctrl_cli *cli,
 				    struct bt_mesh_msg_ctx *ctx,
 				    enum bt_mesh_light_ctrl_prop id,
+#ifdef CONFIG_BT_MESH_SENSOR_USE_LEGACY_SENSOR_VALUE
 				    struct sensor_value *rsp)
+#else
+				    struct bt_mesh_sensor_value *rsp)
+#endif
 {
 	struct prop_status_ctx ack = {
 		.id = id,
@@ -398,8 +402,14 @@ int bt_mesh_light_ctrl_cli_prop_get(struct bt_mesh_light_ctrl_cli *cli,
 int bt_mesh_light_ctrl_cli_prop_set(struct bt_mesh_light_ctrl_cli *cli,
 				    struct bt_mesh_msg_ctx *ctx,
 				    enum bt_mesh_light_ctrl_prop id,
+#ifdef CONFIG_BT_MESH_SENSOR_USE_LEGACY_SENSOR_VALUE
 				    const struct sensor_value *val,
 				    struct sensor_value *rsp)
+#else
+				    const struct bt_mesh_sensor_value *val,
+				    struct bt_mesh_sensor_value *rsp)
+
+#endif
 {
 	const struct bt_mesh_sensor_format *format;
 	struct prop_status_ctx ack = {
@@ -413,7 +423,7 @@ int bt_mesh_light_ctrl_cli_prop_set(struct bt_mesh_light_ctrl_cli *cli,
 	bt_mesh_model_msg_init(&buf, BT_MESH_LIGHT_CTRL_OP_PROP_SET);
 	net_buf_simple_add_le16(&buf, id);
 
-	format = prop_format_get(id);
+	format = bt_mesh_lc_prop_format_get(id);
 	if (!format) {
 		return -EINVAL;
 	}
@@ -445,7 +455,11 @@ int bt_mesh_light_ctrl_cli_prop_set(struct bt_mesh_light_ctrl_cli *cli,
 int bt_mesh_light_ctrl_cli_prop_set_unack(struct bt_mesh_light_ctrl_cli *cli,
 					  struct bt_mesh_msg_ctx *ctx,
 					  enum bt_mesh_light_ctrl_prop id,
+#ifdef CONFIG_BT_MESH_SENSOR_USE_LEGACY_SENSOR_VALUE
 					  const struct sensor_value *val)
+#else
+					  const struct bt_mesh_sensor_value *val)
+#endif
 {
 	const struct bt_mesh_sensor_format *format;
 	int err;
@@ -456,7 +470,7 @@ int bt_mesh_light_ctrl_cli_prop_set_unack(struct bt_mesh_light_ctrl_cli *cli,
 	bt_mesh_model_msg_init(&buf, BT_MESH_LIGHT_CTRL_OP_PROP_SET_UNACK);
 	net_buf_simple_add_le16(&buf, id);
 
-	format = prop_format_get(id);
+	format = bt_mesh_lc_prop_format_get(id);
 	if (!format) {
 		return -EINVAL;
 	}

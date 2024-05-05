@@ -14,9 +14,7 @@ Requirements
 
 The sample supports the following development kits:
 
-.. table-from-rows:: /includes/sample_board_rows.txt
-   :header: heading
-   :rows: nrf9161dk_nrf9161_ns
+.. table-from-sample-yaml::
 
 .. include:: /includes/tfm.txt
 
@@ -71,16 +69,6 @@ CONFIG_RF_PROVISIONING_RX_BUF_S
 CONFIG_NRF_PROVISIONING_TX_BUF_SZ
    Configures the command request buffer size.
 
-.. _CONFIG_NRF_PROVISIONING_ATTESTTOKEN:
-
-CONFIG_NRF_PROVISIONING_ATTESTTOKEN
-   Configures attestation token for client authentication.
-
-.. _CONFIG_NRF_PROVISIONING_JWT:
-
-CONFIG_NRF_PROVISIONING_JWT
-   Configures JWT for client authentication.
-
 HTTP options
 ------------
 
@@ -126,7 +114,7 @@ The following files are available:
 
 * :file:`prj.conf` - Standard default configuration file.
 * :file:`overlay-coap.conf` - Enables CoAP transfer protocol support.
-* :file:`overlay-jwt.conf` - Enables authentication with JWT.
+* :file:`overlay-at_shell.conf` - Enables writing of large certificates from AT shell.
 
 Building and running
 ********************
@@ -156,15 +144,18 @@ The following is an example output of the sample when there is no provisioning c
 .. code-block:: console
 
 	<inf> nrf_provisioning_sample: Establishing LTE link ...
+	<inf> nrf_provisioning_sample: Provisioning started
 	<inf> nrf_provisioning_http: Requesting commands
 	<inf> nrf_provisioning_http: Connected
 	<inf> nrf_provisioning_http: No more commands to process on server side
+	<inf> nrf_provisioning_sample: Provisioning stopped
 
 The following is an example output when the sample is processing commands from the server:
 
 .. code-block:: console
 
 	<inf> nrf_provisioning_sample: Establishing LTE link ...
+	<inf> nrf_provisioning_sample: Provisioning started
 	<inf> nrf_provisioning_http: Requesting commands
 	<inf> nrf_provisioning_http: Connected
 	<inf> nrf_provisioning_http: Processing commands
@@ -177,6 +168,9 @@ The following is an example output when the sample is processing commands from t
 	<inf> nrf_provisioning_http: Requesting commands
 	<inf> nrf_provisioning_http: Connected
 	<inf> nrf_provisioning_http: No more commands to process on server side
+	<inf> nrf_provisioning_sample: Provisioning stopped
+	<inf> nrf_provisioning_sample: Provisioning done, rebooting...
+	<inf> nrf_provisioning: Disconnected from network - provisioning paused
 
 Dependencies
 ************

@@ -5,6 +5,7 @@
 #
 
 # This file is nrf_security's entry-point for the NCS build system
+set(BUILD_INSIDE_TFM False)
 
 set(NRFXLIB_DIR ${ZEPHYR_NRFXLIB_MODULE_DIR})
 set(NRF_SECURITY_ROOT ${CMAKE_CURRENT_LIST_DIR})
@@ -96,6 +97,3 @@ add_subdirectory(${NRFXLIB_DIR}/crypto crypto_copy)
 
 # Add mbed TLS Libraries
 add_subdirectory(src)
-
-# Add zephyr-specific code
-add_subdirectory(src/zephyr)

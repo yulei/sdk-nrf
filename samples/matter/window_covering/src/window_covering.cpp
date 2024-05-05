@@ -5,8 +5,7 @@
  */
 
 #include "window_covering.h"
-#include "app_config.h"
-#include "pwm_device.h"
+#include "pwm/pwm_device.h"
 
 #include <dk_buttons_and_leds.h>
 
@@ -18,7 +17,6 @@
 
 LOG_MODULE_DECLARE(app, CONFIG_CHIP_APP_LOG_LEVEL);
 
-using namespace ::chip::Credentials;
 using namespace ::chip::DeviceLayer;
 using namespace chip::app::Clusters::WindowCovering;
 
@@ -29,9 +27,6 @@ static constexpr uint32_t sMoveTimeoutMs{ 200 };
 
 WindowCovering::WindowCovering()
 {
-	mLiftLED.Init(LIFT_STATE_LED);
-	mTiltLED.Init(TILT_STATE_LED);
-
 	if (mLiftIndicator.Init(&sLiftPwmDevice, 0, 255) != 0) {
 		LOG_ERR("Cannot initialize the lift indicator");
 	}
@@ -254,9 +249,9 @@ void WindowCovering::SetBrightness(MoveType aMoveType, uint16_t aPosition)
 {
 	uint8_t brightness = PositionToBrightness(aPosition, aMoveType);
 	if (aMoveType == MoveType::LIFT) {
-		mLiftIndicator.InitiateAction(PWMDevice::LEVEL_ACTION, 0, &brightness);
+		mLiftIndicator.InitiateAction(Nrf::PWMDevice::LEVEL_ACTION, 0, &brightness);
 	} else if (aMoveType == MoveType::TILT) {
-		mTiltIndicator.InitiateAction(PWMDevice::LEVEL_ACTION, 0, &brightness);
+		mTiltIndicator.InitiateAction(Nrf::PWMDevice::LEVEL_ACTION, 0, &brightness);
 	}
 }
 
@@ -292,4 +287,6 @@ void WindowCovering::DoPostAttributeChange(intptr_t aArg)
 	VerifyOrReturn(data != nullptr);
 
 	PostAttributeChange(data->mEndpoint, data->mAttributeId);
+
+	chip::Platform::Delete(data);
 }

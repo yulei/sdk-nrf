@@ -3,6 +3,7 @@
  *
  * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
+
 /**
  * @file
  * @defgroup bt_mesh_model_utils Model utility functions.
@@ -21,7 +22,7 @@
 /**
  * @brief Create emds model id to identify the model, where @p mod is the model.
  */
-#define EMDS_MODEL_ID(mod) (((uint16_t)mod->elem_idx << 8) | mod->mod_idx)
+#define EMDS_MODEL_ID(mod) (((uint16_t)mod->rt->elem_idx << 8) | mod->rt->mod_idx)
 #endif
 
 /**
@@ -31,7 +32,7 @@
 #define ROUNDED_DIV(A, B) (((A) + ((B) / 2)) / (B))
 
 /** @brief Compare the TID of an incoming message with the previous
- * transaction, and update it if it's new.
+ * transaction, and update it, if it is new.
  *
  * @param prev_transaction Previous transaction.
  * @param tid Transaction ID of the incoming message.
@@ -66,7 +67,7 @@ model_transition_buf_pull(struct net_buf_simple *buf,
 }
 
 static inline struct bt_mesh_model_transition *
-model_transition_get(struct bt_mesh_model *model,
+model_transition_get(const struct bt_mesh_model *model,
 		     struct bt_mesh_model_transition *transition,
 		     struct net_buf_simple *buf)
 {
@@ -90,7 +91,7 @@ model_transition_is_invalid(const struct bt_mesh_model_transition *transition)
 		 transition->delay > BT_MESH_MODEL_DELAY_TIME_MAX_MS));
 }
 
-int32_t model_ackd_timeout_get(struct bt_mesh_model *model, struct bt_mesh_msg_ctx *ctx);
+int32_t model_ackd_timeout_get(const struct bt_mesh_model *model, struct bt_mesh_msg_ctx *ctx);
 
 #endif /* MODEL_UTILS_H__ */
 

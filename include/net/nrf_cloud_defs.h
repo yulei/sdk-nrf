@@ -7,7 +7,7 @@
 #ifndef NRF_CLOUD_DEFS_H__
 #define NRF_CLOUD_DEFS_H__
 
-#include <zephyr/toolchain/common.h>
+#include <zephyr/toolchain.h>
 
 /** @defgroup nrf_cloud_defs nRF Cloud common defines
  * @{
@@ -19,7 +19,7 @@
 
 /* nRF Cloud appID values */
 #define NRF_CLOUD_JSON_APPID_KEY		"appId"
-#define NRF_CLOUD_JSON_APPID_VAL_AGPS		"AGPS"
+#define NRF_CLOUD_JSON_APPID_VAL_AGNSS		"AGNSS"
 #define NRF_CLOUD_JSON_APPID_VAL_PGPS		"PGPS"
 #define NRF_CLOUD_JSON_APPID_VAL_GNSS		"GNSS"
 #define NRF_CLOUD_JSON_APPID_VAL_LOCATION	"GROUND_FIX"
@@ -74,9 +74,15 @@
 #define NRF_CLOUD_CELL_POS_JSON_KEY_TDIFF	"timeDiff"
 
 /* Location */
-#define NRF_CLOUD_LOCATION_KEY_DOREPLY		"doReply"
+#define NRF_CLOUD_LOCATION_JSON_KEY_CONFIG	"config"
+#define NRF_CLOUD_LOCATION_JSON_KEY_DOREPLY	"doReply"
+#define NRF_CLOUD_LOCATION_JSON_KEY_HICONF	"hiConf"
+#define NRF_CLOUD_LOCATION_JSON_KEY_FALLBACK	"fallback"
 #define NRF_CLOUD_LOCATION_JSON_KEY_WIFI	"wifi"
 #define NRF_CLOUD_LOCATION_JSON_KEY_APS		"accessPoints"
+#define NRF_CLOUD_LOCATION_JSON_KEY_ANCHORS	"anchors"
+#define NRF_CLOUD_LOCATION_JSON_KEY_ANC_NAME	"name"
+#define NRF_CLOUD_LOCATION_JSON_KEY_ANC_MAC	"macAddress"
 #define NRF_CLOUD_LOCATION_JSON_KEY_WIFI_MAC	"macAddress"
 #define NRF_CLOUD_LOCATION_JSON_KEY_WIFI_CH	"channel"
 #define NRF_CLOUD_LOCATION_JSON_KEY_WIFI_RSSI	"signalStrength"
@@ -87,6 +93,12 @@
 #define NRF_CLOUD_LOCATION_TYPE_VAL_MCELL	"MCELL"
 #define NRF_CLOUD_LOCATION_TYPE_VAL_SCELL	"SCELL"
 #define NRF_CLOUD_LOCATION_TYPE_VAL_WIFI	"WIFI"
+#define NRF_CLOUD_LOCATION_TYPE_VAL_ANCHOR	"ANCHOR"
+
+/** Current defaults in the cloud. */
+#define NRF_CLOUD_LOCATION_DOREPLY_DEFAULT	true
+#define NRF_CLOUD_LOCATION_HICONF_DEFAULT	false
+#define NRF_CLOUD_LOCATION_FALLBACK_DEFAULT	true
 
 /* P-GPS */
 #define NRF_CLOUD_JSON_PGPS_PRED_COUNT		"predictionCount"
@@ -98,9 +110,9 @@
 #define NRF_CLOUD_PGPS_RCV_REST_HOST		"host"
 #define NRF_CLOUD_PGPS_RCV_REST_PATH		"path"
 
-/* A-GPS */
+/* A-GNSS */
 #define NRF_CLOUD_JSON_KEY_ELEVATION_MASK	"mask"
-#define NRF_CLOUD_JSON_KEY_AGPS_TYPES		"types"
+#define NRF_CLOUD_JSON_KEY_AGNSS_TYPES		"types"
 
 /* FOTA */
 #define NRF_CLOUD_FOTA_TYPE_MODEM_DELTA		"MODEM"
@@ -189,6 +201,8 @@
 #define NRF_CLOUD_JSON_KEY_METHOD		"method"
 #define NRF_CLOUD_JSON_VAL_NOT_ASSOC		"not_associated"
 #define NRF_CLOUD_JSON_VAL_PAIRED		"paired"
+#define NRF_CLOUD_JSON_KEY_SHADOW_VERSION	"version"
+#define NRF_CLOUD_JSON_KEY_SHADOW_TIMESTAMP	"timestamp"
 /* Current FOTA version string used in device shadow */
 #define NRF_CLOUD_FOTA_VER_STR			"fota_v" STRINGIFY(NRF_CLOUD_FOTA_VER)
 /* Max length of nRF Cloud's stage/environment name */
@@ -208,7 +222,7 @@
 #endif
 #define NRF_CLOUD_BULK_MSG_TOPIC		"/bulk"
 #define NRF_CLOUD_JSON_VAL_TOPIC_C2D		"/" NRF_CLOUD_JSON_KEY_CLOUD_TO_DEVICE
-#define NRF_CLOUD_JSON_VAL_TOPIC_AGPS		"/agps"
+#define NRF_CLOUD_JSON_VAL_TOPIC_AGNSS		"/agnss"
 #define NRF_CLOUD_JSON_VAL_TOPIC_PGPS		"/pgps"
 #define NRF_CLOUD_JSON_VAL_TOPIC_GND_FIX	"/ground_fix"
 #define NRF_CLOUD_JSON_VAL_TOPIC_RCV		"/r"

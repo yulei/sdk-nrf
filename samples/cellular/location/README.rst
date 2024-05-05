@@ -53,10 +53,8 @@ The configuration files are in the |sample path| directory.
 
 The following files are available:
 
-* :file:`nrf9160dk_with_nrf7002ek.overlay` - DTC overlay for nRF7002 EK Wi-Fi chip support.
-* :file:`nrf7002ek-wifi-scan-only.conf` - Config overlay for nRF7002 EK Wi-Fi chip support.
-* :file:`esp_8266_nrf9160ns.overlay` - DTC overlay for ESP8266 Wi-Fi chip support.
-* :file:`overlay-esp-wifi.conf` - Config overlay for ESP8266 Wi-Fi chip support.
+* :file:`overlay-nrf700x-wifi-scan-only.conf` - Config overlay for nRF7002 Wi-Fi chip support.
+* :file:`thingy91x-wifi.overlay` - DTC overlay for Thingy:91 X Wi-Fi support.
 * :file:`overlay-pgps.conf` - Config overlay for P-GPS support.
 
 .. include:: /libraries/modem/nrf_modem_lib/nrf_modem_lib_trace.rst
@@ -70,41 +68,44 @@ Building and running
 
 .. include:: /includes/build_and_run_ns.txt
 
-nRF9160 DK with nRF7002 EK Wi-Fi support
-========================================
+nRF91 Series DK with nRF7002 EK Wi-Fi support
+=============================================
 
-To build the sample with nRF9160 DK and nRF7002 EK Wi-Fi support, use the ``-DSHIELD=nrf7002ek``, ``-DDTC_OVERLAY_FILE=nrf9160dk_with_nrf7002ek.overlay`` and  ``-DOVERLAY_CONFIG=overlay-nrf7002ek-wifi-scan-only.conf`` options.
-
+To build the sample with nRF91 Series DK and nRF7002 EK Wi-Fi support, use the ``-DSHIELD=nrf7002ek`` and  ``-DEXTRA_CONF_FILE=overlay-nrf700x-wifi-scan-only.conf`` options.
 For example:
 
-.. code-block:: console
+.. parsed-literal::
+   :class: highlight
 
-   west build -p -b nrf9160dk_nrf9160_ns -- -DSHIELD=nrf7002ek -DDTC_OVERLAY_FILE=nrf9160dk_with_nrf7002ek.overlay -DOVERLAY_CONFIG=overlay-nrf7002ek-wifi-scan-only.conf
+   west build -p -b *build_target* -- -DSHIELD=nrf7002ek -DEXTRA_CONF_FILE=overlay-nrf700x-wifi-scan-only.conf
+
+|build_target|
 
 See :ref:`cmake_options` for more instructions on how to add these options.
 
-ESP8266 Wi-Fi support
-=====================
+Thingy:91 X Wi-Fi support
+=========================
 
-To build the Location sample with ESP8266 Wi-Fi chip support, use the ``-DDTC_OVERLAY_FILE=esp_8266_nrf9160ns.overlay`` and  ``-DOVERLAY_CONFIG=overlay-esp-wifi.conf`` options.
-
+To build the Location sample with Thingy:91 X Wi-Fi support, use the ``-DDTC_OVERLAY_FILE=thingy91x_wifi.overlay`` and  ``-DEXTRA_CONF_FILE=overlay-nrf700x-wifi-scan-only.conf`` options.
 For example:
 
 .. code-block:: console
 
-   west build -p -b nrf9160dk_nrf9160_ns -- -DDTC_OVERLAY_FILE=esp_8266_nrf9160ns.overlay -DOVERLAY_CONFIG=overlay-esp-wifi.conf
+   west build -p -b thingy91x_nrf9151_ns -- -DDTC_OVERLAY_FILE=thingy91x_wifi.overlay -DEXTRA_CONF_FILE=overlay-nrf700x-wifi-scan-only.conf
 
 See :ref:`cmake_options` for more instructions on how to add these options.
 
 P-GPS support
 =============
 
-To build the Location sample with P-GPS support, use the ``-DOVERLAY_CONFIG=overlay-pgps.conf`` option.
-For example:
+To build the Location sample with P-GPS support, use the following commands:
 
-.. code-block:: console
+.. parsed-literal::
+   :class: highlight
 
-   west build -p -b nrf9160dk_nrf9160_ns -- -DOVERLAY_CONFIG=overlay-pgps.conf
+   west build -p -b *build_target* -- -DEXTRA_CONF_FILE=overlay-pgps.conf
+
+|build_target|
 
 See :ref:`cmake_options` for more instructions on how to add this option.
 

@@ -9,15 +9,90 @@ Changelog
 
 All notable changes to this project are documented in this file.
 
-liblwm2m_carrier 3.3.1
+Certification status
+====================
+
+For certification status of the released versions, see `Mobile network operator certifications`_.
+
+liblwm2m_carrier 3.4.0
+**********************
+
+Release for modem firmware version 1.3.6 and 2.0.1.
+
+Size
+====
+
+See :ref:`lwm2m_lib_size` for an explanation of the library size in different scenarios.
+
++-------------------------+---------------+------------+
+|                         | Flash (Bytes) | RAM (Bytes)|
++-------------------------+---------------+------------+
+| Library size            | 77020         | 19435      |
+| (binary)                |               |            |
++-------------------------+---------------+------------+
+| Library size            | 97252         | 34088      |
+| (reference application) |               |            |
++-------------------------+---------------+------------+
+
+Changes
+=======
+
+* Removed AT&T support.
+  The LwM2M carrier library is no longer required to certify with AT&T.
+
+* Added preliminary support for Bell Canada subscriber ID.
+  This carrier can be disabled or enabled with the Kconfig option :kconfig:option:`CONFIG_LWM2M_CARRIER_BELL_CA`.
+
+* Changed the default string of the Device Type resource to say "Module" instead of "Smart Device".
+  This can be changed to other strings using the Kconfig option :kconfig:option:`CONFIG_LWM2M_CARRIER_DEVICE_TYPE`.
+
+* Added ``disable_queue_mode`` to the configuration :c:macro:`lwm2m_carrier_config_t`.
+  Queue Mode can now be disabled using the Kconfig option :kconfig:option:`CONFIG_LWM2M_CARRIER_QUEUE_MODE`.
+
+* Added a timeout to abort Push FOTA operations using the :kconfig:option:`CONFIG_LWM2M_CARRIER_FIRMWARE_DOWNLOAD_TIMEOUT` Kconfig option.
+  By default (0), the timer is disabled for unknown subscriber IDs, and set to 30 minutes for the SoftBank subscriber ID.
+
+* Added the function :c:func:`lwm2m_carrier_data_send`.
+  This function can be used to send Binary App Data Container and Event Log object data.
+
+  * Renamed the old ``lwm2m_carrier_app_data_send`` function to :c:func:`lwm2m_carrier_app_data_set` to avoid confusion with the new :c:func:`lwm2m_carrier_data_send` function.
+    The name now also matches the similar function :c:func:`lwm2m_carrier_log_data_set`.
+
+* The :kconfig:option:`CONFIG_LWM2M_CARRIER_SERVER_SEC_TAG` Kconfig option can now be used to provide a PSK Identity.
+  If a PSK Identity is stored in the configured security tag, the LwM2M carrier library makes use of it alongside the PSK.
+  This behavior does not apply when the device is in the Verizon network, in which case the PSK Identity is overwritten.
+
+* The FOTA implementation was reworked to use the :ref:`lib_dfu_target` library to manage the DFU process, providing a single interface to support different types of firmware upgrades.
+  Consequently, the LwM2M carrier library can now perform generic application FOTA.
+
+* Removed the firmware update type member ``type`` from the :c:struct:`lwm2m_carrier_event_fota_start_t` structure.
+  The image type is now determined when the LwM2M carrier library calls the glue layer function :c:func:`lwm2m_os_dfu_img_type`.
+
+liblwm2m_carrier 3.3.3
 **********************
 
 Release for modem firmware version 1.3.5 and 2.0.0.
 
-Certification status
-====================
+Changes
+=======
 
-For certification status, see `Mobile network operator certifications`_.
+* Minor fixes and improvements.
+
+liblwm2m_carrier 3.3.2
+**********************
+
+Release for modem firmware version 1.3.5 and 2.0.0.
+
+Changes
+=======
+
+* Fixed an issue where failed modem firmware updates would not be reported correctly to the user application and the LwM2M Server.
+
+
+liblwm2m_carrier 3.3.1
+**********************
+
+Release for modem firmware version 1.3.5 and 2.0.0.
 
 Changes
 =======
@@ -28,11 +103,6 @@ liblwm2m_carrier 3.3.0
 **********************
 
 Release for modem firmware version 1.3.5 and 2.0.0.
-
-Certification status
-====================
-
-For certification status, see `Mobile network operator certifications`_.
 
 Size
 ====
@@ -63,7 +133,7 @@ Changes
   * New successful event flow: :c:member:`LWM2M_CARRIER_EVENT_FOTA_START` > :c:member:`LWM2M_CARRIER_EVENT_LTE_POWER_OFF` > :c:member:`LWM2M_CARRIER_EVENT_MODEM_SHUTDOWN` > :c:member:`LWM2M_CARRIER_EVENT_MODEM_INIT` > :c:member:`LWM2M_CARRIER_EVENT_FOTA_SUCCESS` > :c:member:`LWM2M_CARRIER_EVENT_LTE_LINK_UP`.
 
 AT&T support has been deprecated
---------------------------------
+================================
 
 The application must no longer connect to the AT&T Device Management server.
 Consequently, the LwM2M carrier library is no longer required to certify with AT&T.
@@ -78,11 +148,6 @@ liblwm2m_carrier 3.2.0
 **********************
 
 Release for modem firmware version 1.3.5.
-
-Certification status
-====================
-
-For certification status, see `Mobile network operator certifications`_.
 
 Size
 ====
@@ -124,7 +189,7 @@ Changes
   * New successful event flow: :c:member:`LWM2M_CARRIER_EVENT_FOTA_START` > :c:member:`LWM2M_CARRIER_EVENT_LTE_POWER_OFF` > :c:member:`LWM2M_CARRIER_EVENT_MODEM_SHUTDOWN` > :c:member:`LWM2M_CARRIER_EVENT_MODEM_INIT` > :c:member:`LWM2M_CARRIER_EVENT_MODEM_INIT` > :c:member:`LWM2M_CARRIER_EVENT_FOTA_SUCCESS` > :c:member:`LWM2M_CARRIER_EVENT_LTE_LINK_UP`.
 
 nRF modem dependency change
----------------------------
+===========================
 
 LwM2M carrier library no longer explicitly controls the :ref:`nrf_modem`.
 Instead, the application can initialize the Modem library at its own convenience.
@@ -155,11 +220,6 @@ liblwm2m_carrier 3.1.0
 **********************
 
 Release for modem firmware version 1.3.3 and 1.3.4.
-
-Certification status
-====================
-
-For certification status, see `Mobile network operator certifications`_.
 
 Size
 ====
@@ -239,7 +299,7 @@ Changes
 
 * Added the Kconfig option :kconfig:option:`CONFIG_LWM2M_CARRIER_LG_UPLUS_DEVICE_SERIAL_NUMBER`.
 
-  * This configuration lets you choose between using the nRF9160 SoC 2DID Serial Number, or the Device IMEI as a Serial Number when connecting to the LG U+ device management server.
+  * This configuration lets you choose between using the nRF9160 SiP 2DID Serial Number, or the Device IMEI as a Serial Number when connecting to the LG U+ device management server.
   * Now that there are several LG U+ options, they have been grouped in :c:struct:`lwm2m_carrier_lg_uplus_config_t` inside :c:struct:`lwm2m_carrier_config_t`.
 
 * Added the ``carriers_enabled`` parameter to :c:macro:`lwm2m_carrier_config_t`.
@@ -258,7 +318,7 @@ Changes
 
   * This optional value can be left empty to use the default binding (UDP).
   * Added the new Kconfig :kconfig:option:`CONFIG_LWM2M_SERVER_BINDING_CHOICE`.
-  * The binding can be either ``U`` (UDP) or ``N`` (Non-IP).
+  * The binding can be either ``U`` (UDP) or ``N`` (non-IP).
 
 * Added the function :c:func:`lwm2m_carrier_request`.
 
@@ -274,11 +334,6 @@ liblwm2m_carrier 0.30.2
 ***********************
 
 Release for modem firmware version 1.3.3.
-
-Certification status
-====================
-
-For certification status, see `Mobile network operator certifications`_.
 
 Changes
 =======
@@ -307,11 +362,6 @@ liblwm2m_carrier 0.30.1
 
 Release for modem firmware version 1.3.3.
 
-Certification status
-====================
-
-For certification status, see `Mobile network operator certifications`_.
-
 Changes
 =======
 
@@ -321,11 +371,6 @@ liblwm2m_carrier 0.30.0
 ***********************
 
 Release for modem firmware version 1.3.1 and 1.3.2.
-
-Certification status
-====================
-
-For certification status, see `Mobile network operator certifications`_.
 
 Size
 ====
@@ -407,11 +452,6 @@ liblwm2m_carrier 0.22.0
 
 Release for modem firmware version 1.3.1.
 
-Certification status
-====================
-
-For certification status, see `Mobile network operator certifications`_.
-
 Size
 ====
 
@@ -444,11 +484,6 @@ liblwm2m_carrier 0.21.0
 
 Release for modem firmware version 1.3.1.
 
-Certification status
-====================
-
-For certification status, see `Mobile network operator certifications`_.
-
 Size
 ====
 
@@ -470,7 +505,7 @@ Changes
 * Library can now be provided a non-bootstrap custom URI. Previously, only bootstrap custom URI was accepted.
 
   * New Kconfig :kconfig:option:`CONFIG_LWM2M_CARRIER_IS_SERVER_BOOTSTRAP` indicates if the custom URI is a Bootstrap-Server.
-  * New Kconfig :kconfig:option:`CONFIG_LWM2M_CARRIER_SERVER_LIFETIME` sets the lifetime for the (non-bootstrap) LwM2M server.
+  * New Kconfig :kconfig:option:`CONFIG_LWM2M_CARRIER_SERVER_LIFETIME` sets the lifetime for the (non-bootstrap) LwM2M Server.
 * Library will now read bootstrap information from Smartcard when applicable.
 
   * New Kconfig :kconfig:option:`CONFIG_LWM2M_CARRIER_BOOTSTRAP_SMARTCARD` can be used to disable this feature.
@@ -487,11 +522,6 @@ liblwm2m_carrier 0.20.1
 ***********************
 
 Release for modem firmware version 1.3.0.
-
-Certification status
-====================
-
-For certification status, see `Mobile network operator certifications`_.
 
 Size
 ====
@@ -518,11 +548,6 @@ liblwm2m_carrier 0.20.0
 
 Release for modem firmware version 1.3.0.
 
-Certification status
-====================
-
-For certification status, see `Mobile network operator certifications`_.
-
 Changes
 =======
 
@@ -531,7 +556,7 @@ Changes
   * Application is now expected to store CA certificates into the modem security tags.
   * Added a new event :c:macro:`LWM2M_CARRIER_EVENT_CERTS_INIT` that instructs the application to provide the CA certificate security tags to the LwM2M carrier library.
 * Renamed the event :c:macro:`LWM2M_CARRIER_BSDLIB_INIT` to :c:macro:`LWM2M_CARRIER_EVENT_MODEM_INIT`.
-* Added a new deferred event reason :c:macro:`LWM2M_CARRIER_DEFERRED_SERVICE_UNAVAILABLE`, which indicates that the LwM2M server is unavailable due to maintenance.
+* Added a new deferred event reason :c:macro:`LWM2M_CARRIER_DEFERRED_SERVICE_UNAVAILABLE`, which indicates that the LwM2M Server is unavailable due to maintenance.
 * Added a new error code :c:macro:`LWM2M_CARRIER_ERROR_CONFIGURATION` which indicates that an illegal object configuration was detected.
 * Added new Kconfig options :kconfig:option:`CONFIG_LWM2M_CARRIER_USE_CUSTOM_APN` and :kconfig:option:`CONFIG_LWM2M_CARRIER_CUSTOM_APN` to set the ``apn`` member of :c:type:`lwm2m_carrier_config_t`.
 * It is now possible to configure a custom bootstrap URI using :kconfig:option:`CONFIG_LWM2M_CARRIER_USE_CUSTOM_BOOTSTRAP_URI` regardless of operator SIM.
@@ -540,11 +565,6 @@ liblwm2m_carrier 0.10.2
 ***********************
 
 Release for modem firmware versions 1.2.3 and 1.1.4, and |NCS| 1.4.2.
-
-Certification status
-====================
-
-For certification status, see `Mobile network operator certifications`_.
 
 Size
 ====
@@ -572,11 +592,6 @@ liblwm2m_carrier 0.10.1
 
 Release for modem firmware versions 1.2.2 and 1.1.4, and |NCS| 1.4.1.
 
-Certification status
-====================
-
-For certification status, see `Mobile network operator certifications`_.
-
 Changes
 =======
 
@@ -593,11 +608,6 @@ Modem firmware version 1.1.4 must be used for Verizon, and the modem firmware ve
 The snapshot can be used for development and testing only.
 It is not ready for certification.
 
-Certification status
-====================
-
-The library is not certified with any carrier.
-
 Changes
 =======
 
@@ -611,11 +621,6 @@ liblwm2m_carrier 0.9.1
 **********************
 
 Release with AT&T support, intended for modem firmware version 1.2.1 and |NCS| version 1.3.1.
-
-Certification status
-====================
-
-The library is certified with AT&T.
 
 Size
 ====
@@ -646,11 +651,6 @@ This release is intended to let users begin integration towards the AT&T and Ver
 It can be used for development and testing only.
 It is not ready for certification.
 
-Certification status
-====================
-
-The library is not certified with any carrier.
-
 Changes
 =======
 
@@ -672,11 +672,6 @@ liblwm2m_carrier 0.8.2
 **********************
 
 Release for modem firmware version 1.1.2, with support for Verizon Wireless.
-
-Certification status
-====================
-
-The library is certified with Verizon Wireless.
 
 Changes
 =======
@@ -705,11 +700,6 @@ liblwm2m_carrier 0.8.1+build1
 
 Release for modem firmware version 1.1.0, with support for Verizon Wireless.
 
-Certification status
-====================
-
-The library is certified with Verizon Wireless.
-
 Changes
 =======
 
@@ -734,11 +724,6 @@ liblwm2m_carrier 0.8.1
 **********************
 
 Release for modem firmware version 1.1.0, with support for Verizon Wireless.
-
-Certification status
-====================
-
-The library is certified with Verizon Wireless.
 
 Changes
 =======
@@ -765,11 +750,6 @@ liblwm2m_carrier 0.8.0
 
 Release for modem firmware version 1.1.0 and |NCS| v1.1.0, with support for Verizon Wireless.
 
-Certification status
-====================
-
-The library is not certified with Verizon Wireless.
-
 Changes
 =======
 
@@ -789,7 +769,7 @@ Changes
   The application must set and maintain these values to reflect the state of the device.
   Updated values are pushed to the servers autonomously.
 
-* Added API to set the "Device Type" resource. If not set, this is reported as "Smart Device".
+* Added API to set the ``Device Type`` resource. If not set, this is reported as ``Smart Device``.
 * Added API to set the "Software Version" resource. If not set, this is reported as "LwM2M 0.8.0".
 * Added API to set the "Hardware Version" resource. If not set, this is reported as "1.0".
 
@@ -827,4 +807,4 @@ Known issues and limitations
 * The following values are reported as dummy values instead of being fetched from the modem:
 
 	* "IP address", reported as ``192.168.0.0``.
-* The "Current Time" and "Timezone" resources do not respect write operations, instead, read operations on these resources will return the current time and timezone as kept by the nRF9160 modem.
+* The "Current Time" and "Timezone" resources do not respect write operations, instead, read operations on these resources will return the current time and timezone as kept by the nRF91 Series modem.

@@ -405,6 +405,8 @@ struct nrf_cloud_evt {
 	struct nrf_cloud_data data;
 	/** Topic on which data was received. */
 	struct nrf_cloud_topic topic;
+	/** Decoded shadow data: valid for NRF_CLOUD_EVT_RX_DATA_SHADOW events. */
+	struct nrf_cloud_obj_shadow_data *shadow;
 };
 
 /** @brief Structure used to send data to nRF Cloud. */
@@ -437,7 +439,7 @@ struct nrf_cloud_svc_info_fota {
 	uint8_t _rsvd:4;
 };
 
-/** @brief Controls which values are added to the UI array in the "serviceInfo" shadow section */
+/** @brief DEPRECATED - No longer used by nRF Cloud */
 struct nrf_cloud_svc_info_ui {
 	/* Items with UI support on nRF Cloud */
 	/** Temperature */
@@ -502,7 +504,8 @@ struct nrf_cloud_modem_info {
 struct nrf_cloud_svc_info {
 	/** Specify FOTA components to enable, set to NULL to remove the FOTA entry */
 	struct nrf_cloud_svc_info_fota *fota;
-	/** Specify UI components to enable, set to NULL to remove the UI entry */
+
+	/** DEPRECATED - nRF Cloud no longer requires the device to set UI values in the shadow */
 	struct nrf_cloud_svc_info_ui *ui;
 };
 
@@ -532,10 +535,10 @@ enum nrf_cloud_gnss_type {
 
 /** @brief PVT data */
 struct nrf_cloud_gnss_pvt {
-	/** Longitude in degrees; required. */
-	double lon;
 	/** Latitude in degrees; required. */
 	double lat;
+	/** Longitude in degrees; required. */
+	double lon;
 	/** Position accuracy (2D 1-sigma) in meters; required. */
 	float accuracy;
 
@@ -607,20 +610,6 @@ struct nrf_cloud_gw_data {
 	uint16_t id;
 };
 #endif
-
-/** @brief How the control section is handled when either a trimmed shadow
- *  or a delta shadow is received.
- */
-enum nrf_cloud_ctrl_status {
-	/** Data not present in shadow. */
-	NRF_CLOUD_CTRL_NOT_PRESENT,
-	/** This was not a delta, so no need to send update back. */
-	NRF_CLOUD_CTRL_NO_REPLY,
-	/** Send shadow update confirmation back. */
-	NRF_CLOUD_CTRL_REPLY,
-	/** Reject values -- update desired section, not reported. */
-	NRF_CLOUD_CTRL_REJECT
-};
 
 /** @brief Data to control behavior of the nrf_cloud library from the
  *  cloud side. This data is stored in the device shadow.
@@ -779,6 +768,19 @@ int nrf_cloud_sensor_data_stream(const struct nrf_cloud_sensor_data *param);
  * @return A negative value indicates an error.
  */
 int nrf_cloud_send(const struct nrf_cloud_tx_data *msg);
+
+/**
+ * @brief Update the device's shadow with the data from the provided object.
+ *
+ * @param[in] shadow_obj Object containing data to be written to the device's shadow.
+ *
+ * @retval 0       If successful.
+ * @retval -EINVAL Error; invalid parameter.
+ * @retval -EACCES Cloud connection is not established; wait for @ref NRF_CLOUD_EVT_READY.
+ * @retval -EIO Error; failed to encode data.
+ * @return A negative value indicates an error.
+ */
+int nrf_cloud_obj_shadow_update(struct nrf_cloud_obj *const shadow_obj);
 
 /**
  * @brief Disconnect from the cloud.
@@ -1005,6 +1007,18 @@ int nrf_cloud_fota_job_start(void);
  * @return A negative value indicates an error.
  */
 int nrf_cloud_credentials_check(struct nrf_cloud_credentials_status *const cs);
+
+/**
+ * @brief Check if the credentials required for connecting to nRF Cloud exist.
+ *        The application's configuration is used to determine which credentials
+ *        are required.
+ *
+ * @retval 0 Required credentials exist.
+ * @retval -EIO Error checking if credentials exists.
+ * @retval -ENOTSUP Required credentials do not exist.
+ * @return A negative value indicates an error.
+ */
+int nrf_cloud_credentials_configured_check(void);
 
 /** @} */
 

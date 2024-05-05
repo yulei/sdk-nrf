@@ -20,7 +20,7 @@ The application accepts both the modem-specific AT commands and proprietary AT c
 The AT commands are documented in the following guides:
 
 * Modem-specific AT commands - `nRF91x1 AT Commands Reference Guide`_  and `nRF9160 AT Commands Reference Guide`_
-* Proprietary AT commands - :ref:`SLM_AT_intro`
+* Proprietary AT commands - :ref:`SLM_AT_commands`
 
 Requirements
 ************
@@ -36,48 +36,75 @@ Configuration
 
 |config|
 
-.. _slm_config:
+.. _slm_config_options:
 
 Configuration options
 =====================
 
-Check and configure the following configuration options for the sample:
+.. _CONFIG_SLM_CUSTOMER_VERSION:
 
-.. _CONFIG_SLM_CUSTOMIZED:
-
-CONFIG_SLM_CUSTOMIZED - Flag for customized functionality
-   This flag can be used to enable customized functionality.
-   To add your own custom logic, enclose the code by ``#if defined(CONFIG_SLM_CUSTOMIZED)`` and enable this flag.
+CONFIG_SLM_CUSTOMER_VERSION - Customer version string
+   Version string defined by the customer after customizing the application.
+   When defined, this version is reported with the baseline versions by the ``#XSLMVER`` AT command.
 
 .. _CONFIG_SLM_AT_MAX_PARAM:
 
 CONFIG_SLM_AT_MAX_PARAM - AT command parameter count limit
    This defines the maximum number of parameters allowed in an AT command, including the command name.
 
+.. _CONFIG_SLM_CMUX:
+
+CONFIG_SLM_CMUX - Enable CMUX functionality
+   This option is enabled by the CMUX overlay.
+   It adds support for CMUX.
+   See :ref:`SLM_AT_CMUX` for more information.
+
+.. _CONFIG_SLM_PPP:
+
+CONFIG_SLM_PPP - Enable PPP functionality
+   This option is enabled by the PPP overlay.
+   It adds support for PPP.
+   PPP can be used in conjunction with :ref:`CMUX <CONFIG_SLM_CMUX>` in order to use a single UART for both AT data and PPP.
+   When CMUX is also enabled, PPP is usable only through a CMUX channel.
+   See :ref:`SLM_AT_PPP` for more information.
+
 .. _CONFIG_SLM_NATIVE_TLS:
 
-CONFIG_SLM_NATIVE_TLS - Use Zephyr mbedTLS
-   This option enables using Zephyr's mbedTLS.
-   It requires additional configuration.
+CONFIG_SLM_NATIVE_TLS - Use Zephyr's Mbed TLS for TLS connections
+   This option is enabled by the native TLS overlay.
    See :ref:`slm_native_tls` for more information.
+
+.. _CONFIG_SLM_NATIVE_TLS_CREDENTIAL_BUFFER_SIZE:
+
+CONFIG_SLM_NATIVE_TLS_CREDENTIAL_BUFFER_SIZE - Buffer space reserved for loading credentials
+   Specifies the credential buffer size available for a single ``sec_tag`` when loading credentials for Mbed TLS.
+   The default value is ``4096``.
+
+.. _CONFIG_SLM_NATIVE_TLS_CREDENTIAL_BUFFER_COUNT:
+
+CONFIG_SLM_NATIVE_TLS_CREDENTIAL_BUFFER_COUNT - Number of buffers for loading credentials
+   The number of buffers available for loading ``sec_tag`` credentials for Mbed TLS.
+   TLS client only needs the buffer when connecting, while TLS server needs the buffer as long as it is running.
+   Increase the value if you need both TLS client and server running simultaneously with different ``sec_tags``.
+   The default value is ``1``.
 
 .. _CONFIG_SLM_EXTERNAL_XTAL:
 
 CONFIG_SLM_EXTERNAL_XTAL - Use external XTAL for UARTE
    This option configures the application to use an external XTAL for UARTE.
    For the nRF9160 DK, see the `nRF9160 Product Specification`_ (section 6.19 UARTE) for more information.
-   For the nRF9161 DK, see the `nRF9161 Objective Product Specification`_ (section 6.19 UARTE) for more information.
+   For the nRF9161 DK, see the `nRF9161 Product Specification`_ (section 6.19 UARTE) for more information.
 
 .. _CONFIG_SLM_START_SLEEP:
 
 CONFIG_SLM_START_SLEEP - Enter sleep on startup
    This option makes an nRF91 Series device enter deep sleep after startup.
-   It is not selected by default.
+   It is not enabled by default.
 
-.. _CONFIG_SLM_WAKEUP_PIN:
+.. _CONFIG_SLM_POWER_PIN:
 
-CONFIG_SLM_WAKEUP_PIN - Interface GPIO to exit from sleep or idle
-   This option specifies which interface GPIO to use for exiting sleep or idle mode.
+CONFIG_SLM_POWER_PIN - Interface GPIO pin to power off the SiP and exit from sleep or idle
+   This option specifies which pin to use to power on or off the SiP and make SLM exit idle mode.
    It is set by default as follows:
 
    * On the nRF9161 DK:
@@ -93,13 +120,13 @@ CONFIG_SLM_WAKEUP_PIN - Interface GPIO to exit from sleep or idle
    * On Thingy:91, **P0.26** (Multi-function button on Thingy:91) is used.
 
    .. note::
-      This pin is used as input GPIO and configured as *Active Low*.
-      By default, the application pulls up this GPIO.
+      This pin is configured with a pull up, so it is active low.
+      It must be pulled down for a short time to perform one power off or wake up operation.
 
 .. _CONFIG_SLM_INDICATE_PIN:
 
-CONFIG_SLM_INDICATE_PIN - Interface GPIO to indicate data available or unsolicited event notifications
-   This option specifies which interface GPIO to use for indicating data available or unsolicited event notifications from the modem.
+CONFIG_SLM_INDICATE_PIN - Interface GPIO pin to indicate data available or unsolicited event notifications
+   This option specifies which pin to use for indicating data available or unsolicited event notifications from the modem.
    It is set by default as follows:
 
    * On the nRF9161 DK:
@@ -115,8 +142,7 @@ CONFIG_SLM_INDICATE_PIN - Interface GPIO to indicate data available or unsolicit
    * It is not defined when the target is Thingy:91.
 
    .. note::
-      This pin is used as output GPIO and configured as *Active Low*.
-      By default, the application sets this GPIO as *Inactive High*.
+      This pin is configured to be active low, so it will be high when inactive.
 
 .. _CONFIG_SLM_INDICATE_TIME:
 
@@ -124,14 +150,29 @@ CONFIG_SLM_INDICATE_TIME - Indicate GPIO active time
    This option specifies the length, in milliseconds, of the time interval during which the indicate GPIO must stay active.
    The default value is 100 milliseconds.
 
-.. _CONFIG_SLM_SOCKET_RX_MAX:
+.. _CONFIG_SLM_AUTO_CONNECT:
 
-CONFIG_SLM_SOCKET_RX_MAX - Maximum RX buffer size for receiving socket data
-   This option specifies the maximum buffer size for receiving data through the socket interface.
-   By default, this size is set to :c:enumerator:`NET_IPV4_MTU` (576), which is defined in Zephyr.
-   The maximum value is 708, which is the maximum segment size (MSS) defined for the modem.
+CONFIG_SLM_AUTO_CONNECT - Connect to LTE network at start-up or reset
+   This option enables connecting to the LTE network at start-up or reset using a defined PDN configuration.
+   This option is enabled by the LwM2M Carrier overlay, but is otherwise disabled by default.
 
-   This option impacts the total RAM usage.
+   .. note::
+      This option requires network-specific configuration in the ``slm_auto_connect.h`` file.
+
+   Here is a sample configuration for NIDD connection in the :file:`slm_auto_connect.h` file::
+
+      /* Network-specific default system mode configured by %XSYSTEMMODE (refer to AT command manual) */
+      0,        /* LTE support */
+      1,        /* NB-IoT support */
+      0,        /* GNSS support, also define CONFIG_MODEM_ANTENNA if not Nordic DK */
+      0,        /* LTE preference */
+      /* Network-specific default PDN configured by +CGDCONT and +CGAUTH (refer to AT command manual) */
+      true,     /* PDP context definition required or not */
+      "Non-IP", /* PDP type: "IP", "IPV6", "IPV4V6", "Non-IP" */
+      "",       /* Access point name */
+      0,        /* PDP authentication protocol: 0(None), 1(PAP), 2(CHAP) */
+      "",       /* PDN connection authentication username */
+      ""        /* PDN connection authentication password */
 
 .. _CONFIG_SLM_CR_TERMINATION:
 
@@ -205,7 +246,7 @@ CONFIG_SLM_TWI - TWI support in SLM
 .. _CONFIG_SLM_UART_RX_BUF_COUNT:
 
 CONFIG_SLM_UART_RX_BUF_COUNT - Receive buffers for UART.
-   This option defines the amount of buffers for receiving (RX) UART traffic.
+   This option defines the number of buffers for receiving (RX) UART traffic.
    The default value is 3.
 
 .. _CONFIG_SLM_UART_RX_BUF_SIZE:
@@ -219,6 +260,8 @@ CONFIG_SLM_UART_RX_BUF_SIZE - Receive buffer size for UART.
 CONFIG_SLM_UART_TX_BUF_SIZE - Send buffer size for UART.
    This option defines the size of the buffer for sending (TX) UART traffic.
    The default value is 256.
+
+.. _slm_additional_config:
 
 Additional configuration
 ========================
@@ -236,16 +279,27 @@ To switch to UART output, change the following options in the :file:`prj.conf` f
    CONFIG_LOG_BACKEND_RTT=n
    CONFIG_LOG_BACKEND_UART=y
 
+.. _slm_config_files:
 
 Configuration files
 ===================
 
-The sample provides predefined configuration files for both the parent image and the child image.
 You can find the configuration files in the :file:`applications/serial_lte_modem` directory.
+
+In general, they have an ``overlay-`` prefix, and a :file:`.conf` or :file:`.overlay` extension for Kconfig or devicetree overlays, respectively.
+Board-specific configuration files are named :file:`<BOARD>` with a :file:`.conf` or :file:`.overlay` extension and are located in the :file:`boards` directory.
+When the name of the board-specific configuration file matches the build target, the overlay is automatically included by the build system.
+
+See :ref:`app_build_system`: for more information on the |NCS| configuration system.
+
+.. important::
+
+  When adding Kconfig fragments and devicetree overlays, make sure to use the ``-DEXTRA_CONF_FILE`` and ``-DEXTRA_DTC_OVERLAY_FILE`` CMake parameters, respectively.
+  Otherwise, if ``-DCONF_FILE`` or ``-DDTC_OVERLAY_FILE`` is used, all the configuration files that normally get picked up automatically will have to be included explicitly.
 
 The following configuration files are provided:
 
-* :file:`prj.conf` - This configuration file contains the standard configuration for the serial LTE modem application.
+* :file:`prj.conf` - This configuration file contains the standard configuration for the serial LTE modem application and is included by default by the build system.
 
 * :file:`overlay-native_tls.conf` - This configuration file contains additional configuration options that are required to use :ref:`slm_native_tls`.
   You can include it by adding ``-DEXTRA_CONF_FILE=overlay-native_tls.conf`` to your build command.
@@ -257,51 +311,56 @@ The following configuration files are provided:
 * :file:`overlay-full_fota.conf` - Configuration file that adds full modem FOTA support.
   See :ref:`SLM_AT_FOTA` for more information on how to use full modem FOTA functionality.
 
+* :file:`overlay-cmux.conf` - Configuration file that adds support for the CMUX protocol.
+  See :ref:`SLM_AT_CMUX` for more information.
+
+* :file:`overlay-ppp.conf` - Configuration file that adds support for the Point-to-Point Protocol (PPP).
+  This disables most of the IP-based protocols available through AT commands (such as FTP and MQTT) as it is expected that the controlling chip's own IP stack is used instead.
+  See :ref:`CONFIG_SLM_PPP <CONFIG_SLM_PPP>` and :ref:`SLM_AT_PPP` for more information.
+
+* :file:`overlay-ppp-without-cmux.conf` - Kconfig fragment that configures the UART to be used by PPP.
+  This configuration file should be included when building SLM with PPP and without CMUX.
+
+* :file:`overlay-ppp-without-cmux.overlay` - Devicetree overlay that configures the UART to be used by PPP.
+  This configuration file should be included when building SLM with PPP and without CMUX, in addition to :file:`overlay-ppp.conf`.
+  It can be customized to fit your configuration (UART, baud rate, and so on).
+  By default, it sets the baud rate of the PPP UART to 1 000 000.
+
+* :file:`overlay-zephyr-modem.conf`, :file:`overlay-zephyr-modem-external-mcu.conf`, :file:`overlay-zephyr-modem-nrf9160dk-nrf52840.conf`, :file:`overlay-external-mcu.overlay`,  and :file:`overlay-zephyr-modem-nrf9160dk-nrf52840.overlay` - These configuration files are used when compiling SLM to turn an nRF91 Series SiP into a Zephyr-compatible standalone modem.
+  See :ref:`slm_as_zephyr_modem` for more information.
+
 * :file:`boards/nrf9160dk_nrf9160_ns.conf` - Configuration file specific for the nRF9160 DK.
-  This file is automatically merged with the :file:`prj.conf` file when you build for the ``nrf9160dk_nrf9160_ns`` build target.
+  This file is automatically merged with the :file:`prj.conf` file when you build for the ``nrf9160dk/nrf9160/ns`` build target.
 
 * :file:`boards/nrf9161dk_nrf9161_ns.conf` - Configuration file specific for the nRF9161 DK.
-  This file is automatically merged with the :file:`prj.conf` file when you build for the ``nrf9161dk_nrf9161_ns`` build target.
+  This file is automatically merged with the :file:`prj.conf` file when you build for the ``nrf9161dk/nrf9161/ns`` build target.
 
 * :file:`boards/thingy91_nrf9160_ns.conf` - Configuration file specific for Thingy:91.
-  This file is automatically merged with the :file:`prj.conf` file when you build for the ``thingy91_nrf9160_ns`` build target.
-
-In general, Kconfig overlays have an ``overlay-`` prefix and a :file:`.conf` extension.
-Board-specific configuration files are named :file:`<BOARD>.conf` and are located in the :file:`boards` folder.
-DTS overlay files are named as the build target they are meant to be used with, and use the file extension :file:`.overlay`.
-They are also placed in the :file:`boards` folder.
-When the DTS overlay filename matches the build target, the overlay is automatically chosen and applied by the build system.
-
-See :ref:`app_build_system`: for more information on the |NCS| configuration system.
+  This file is automatically merged with the :file:`prj.conf` file when you build for the ``thingy91/nrf9160/ns`` build target.
 
 .. _slm_native_tls:
 
 Native TLS
 ----------
 
-By default, the secure socket (TLS/DTLS) is offloaded onto the modem.
-However, if you need customized TLS/DTLS features that are not supported by the modem firmware, you can use native TLS instead.
+By default, the secure socket (TLS) is offloaded to the modem.
+If you need customized TLS features that are not supported by the modem firmware, you can use native TLS instead.
+Native TLS uses the Mbed TLS library in Zephyr to establish secure connectivity.
 Currently, the SLM application can be built to use native TLS for the following services:
 
 * Secure socket
+* TLS Proxy client
 * TLS Proxy server
 * HTTPS client
 
-If native TLS is enabled, you must use the ``AT#XCMNG`` command to store the credentials.
+With native TLS, the credentials are stored in the Zephyr settings storage with the ``AT#XCMNG`` command.
+
+The configuration options that are required to enable native TLS are defined in the :file:`overlay-native_tls.conf` file.
 
 .. note::
 
-   The modem needs to be in an offline state when storing the credentials.
-   The SLM application supports security tags ranging from ``0`` to ``214748364``.
+   Native TLS services have the following limitations:
 
-The configuration options that are required to enable the native TLS socket are defined in the :file:`overlay-native_tls.conf` file.
-
-.. note::
-
-   Native TLS sockets have the following limitations:
-
-   * PSK, PSK identity, and PSK public key are currently not supported.
-   * The DTLS server is currently not supported.
    * TLS session resumption is currently not supported.
 
 .. include:: /libraries/modem/nrf_modem_lib/nrf_modem_lib_trace.rst
@@ -343,30 +402,15 @@ To connect to an nRF91 Series DK with a PC:
    Using the Cellular Monitor app in combination with the nRF Connect Serial Terminal shows how the modem responds to the different modem commands.
    You can then use this connection to send or receive AT commands over UART, and to see the log output of the development kit.
 
-   Alternatively, you can use a terminal emulator like `Termite`_, `Teraterm`_, or PuTTY to establish a terminal connection to the development kit, using the following settings:
-
-   * Baud rate: 115200
-   * 8 data bits
-   * 1 stop bit
-   * No parity
-   * HW flow control: None
+   Instead of using nRF Connect Serial Terminal, you can use PuTTY to establish a terminal connection to the development kit, using the :ref:`default serial port connection settings <test_and_optimize>`.
 
    .. note::
 
       The default AT command terminator is a carriage return followed by a line feed (``\r\n``).
       nRF Connect Serial Terminal supports this format.
       If you want to use another terminal emulator, make sure that the configured AT command terminator corresponds to the line terminator of your terminal.
-
-      When using `Termite`_ and `Teraterm`_, configure the AT command terminator as follows:
-
-      .. figure:: images/termite.svg
-         :alt: Termite configuration for sending AT commands through UART
-
-      .. figure:: images/teraterm.svg
-         :alt: Teraterm configuration for sending AT commands through UART
-
-      When using PuTTY, you must set the :ref:`CONFIG_SLM_CR_TERMINATION <CONFIG_SLM_CR_TERMINATION>` SLM configuration option instead.
-      See :ref:`application configuration <slm_config>` for more details.
+      When using PuTTY, you must set the :ref:`CONFIG_SLM_CR_TERMINATION <CONFIG_SLM_CR_TERMINATION>` SLM configuration option.
+      See :ref:`slm_config_options` for more details.
 
 .. slm_connecting_91dk_pc_instr_end
 
@@ -394,14 +438,14 @@ To connect with an external MCU using UART_2, change the configuration files for
           # unmask the following config
           #CONFIG_UART_0_NRF_HW_ASYNC_TIMER=2
           #CONFIG_UART_0_NRF_HW_ASYNC=y
-          #CONFIG_SLM_WAKEUP_PIN=8
+          #CONFIG_SLM_POWER_PIN=8
           #CONFIG_SLM_INDICATE_PIN=0
 
           # Use UART_2 (when working with external MCU)
           # unmask the following config
           CONFIG_UART_2_NRF_HW_ASYNC_TIMER=2
           CONFIG_UART_2_NRF_HW_ASYNC=y
-          CONFIG_SLM_WAKEUP_PIN=31
+          CONFIG_SLM_POWER_PIN=31
           CONFIG_SLM_INDICATE_PIN=30
 
       * In the :file:`nrf9161dk_nrf9161_ns.overlay` file::
@@ -436,14 +480,14 @@ To connect with an external MCU using UART_2, change the configuration files for
           # unmask the following config
           #CONFIG_UART_0_NRF_HW_ASYNC_TIMER=2
           #CONFIG_UART_0_NRF_HW_ASYNC=y
-          #CONFIG_SLM_WAKEUP_PIN=6
+          #CONFIG_SLM_POWER_PIN=6
           #CONFIG_SLM_INDICATE_PIN=2
 
           # Use UART_2 (when working with external MCU)
           # unmask the following config
           CONFIG_UART_2_NRF_HW_ASYNC_TIMER=2
           CONFIG_UART_2_NRF_HW_ASYNC=y
-          CONFIG_SLM_WAKEUP_PIN=31
+          CONFIG_SLM_POWER_PIN=31
           CONFIG_SLM_INDICATE_PIN=30
 
 
@@ -514,18 +558,19 @@ Communicating with the modem on Thingy:91
 =========================================
 
 In this scenario, Thingy:91 running the Serial LTE Modem application serves as the host.
-You can use only a PC as a client.
+You can use a PC as a client.
 
 .. _slm_connecting_thingy91_pc:
 
 Connecting with a PC
 --------------------
 
-To connect to Thingy:91 with a PC, you must first program the :ref:`connectivity_bridge` on the nrf52840 of Thingy:91.
-It routes ``UART_0`` to ``USB_CDC0`` on Thingy:91.
-By enabling the option ``CONFIG_BRIDGE_BLE_ENABLE`` , you can also use SLM over :ref:`nus_service_readme`.
+The nRF52840 SoC of Thingy:91 is pre-programmed with the :ref:`connectivity_bridge` application.
+To update the :ref:`connectivity_bridge` application, see the :ref:`programming_thingy` documentation.
+The :ref:`connectivity_bridge` application routes ``UART_0`` to ``USB_CDC0`` on Thingy:91.
+By enabling the :kconfig:option:`CONFIG_BRIDGE_BLE_ENABLE` Kconfig option in the :ref:`connectivity_bridge`, you can also use SLM over :ref:`nus_service_readme`.
 
-Then follow the instructions below:
+To connect to a Thingy:91 with a PC:
 
 .. include:: slm_description.rst
    :start-after: .. slm_connecting_91dk_pc_instr_start
@@ -565,7 +610,8 @@ Using the LwM2M carrier library
 
 The certificate provisioning can also be done directly in the Serial LTE Modem application by using the same AT commands as described for the :ref:`at_client_sample` sample.
 
-Enabling the LwM2M carrier library will disable this application's support for GNSS in order to have enough space in flash.
+When the :ref:`liblwm2m_carrier_readme` library is in use, by default the application will auto-connect to the network on startup.
+This behavior can be changed by disabling the :kconfig:option:`CONFIG_SLM_AUTO_CONNECT` option.
 
 Dependencies
 ************

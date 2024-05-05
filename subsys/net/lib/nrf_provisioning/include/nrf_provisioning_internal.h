@@ -3,6 +3,7 @@
  *
  * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
+
 #ifndef NRF_PROVISIONING_INTERNAL_H__
 #define NRF_PROVISIONING_INTERNAL_H__
 
@@ -16,7 +17,7 @@ extern "C" {
 #endif
 
 /**
- * @brief Background provisioning service - assumed to run in it's own thread.
+ * @brief Background provisioning service - assumed to run in its own thread.
  *
  * Revealed only to be able to test the functionality.
  */

@@ -13,6 +13,12 @@
 #include <zephyr/net/conn_mgr_connectivity.h>
 #include <zephyr/net/conn_mgr_monitor.h>
 
+#if defined(CONFIG_POSIX_API)
+#include <zephyr/posix/arpa/inet.h>
+#include <zephyr/posix/unistd.h>
+#include <zephyr/posix/sys/socket.h>
+#endif
+
 LOG_MODULE_REGISTER(udp_sample, CONFIG_UDP_SAMPLE_LOG_LEVEL);
 
 #define UDP_IP_HEADER_SIZE 28
@@ -170,13 +176,20 @@ int main(void)
 		return err;
 	}
 
+	err = conn_mgr_all_if_connect(true);
+	if (err) {
+		LOG_ERR("conn_mgr_all_if_connect, error: %d", err);
+		FATAL_ERROR();
+		return err;
+	}
+
 	/* Resend connection status if the sample is built for QEMU x86.
 	 * This is necessary because the network interface is automatically brought up
 	 * at SYS_INIT() before main() is called.
 	 * This means that NET_EVENT_L4_CONNECTED fires before the
 	 * appropriate handler l4_event_handler() is registered.
 	 */
-	if (IS_ENABLED(CONFIG_BOARD_QEMU_X86)) {
+	if (IS_ENABLED(CONFIG_BOARD_QEMU_X86) || IS_ENABLED(CONFIG_BOARD_NATIVE_SIM)) {
 		conn_mgr_mon_resend_status();
 	}
 

@@ -6,7 +6,7 @@
 
 #include <bluetooth/adv_prov.h>
 #include <bluetooth/adv_prov/fast_pair.h>
-#include <bluetooth/services/fast_pair.h>
+#include <bluetooth/services/fast_pair/fast_pair.h>
 
 #include <zephyr/logging/log.h>
 LOG_MODULE_DECLARE(bt_le_adv_prov, CONFIG_BT_ADV_PROV_LOG_LEVEL);
@@ -85,6 +85,11 @@ static int get_data(struct bt_data *ad, const struct bt_le_adv_prov_adv_state *s
 	struct bt_fast_pair_adv_config adv_config;
 
 	if (!enabled) {
+		return -ENOENT;
+	}
+
+	if (!bt_fast_pair_is_ready()) {
+		LOG_WRN("Fast Pair is not ready");
 		return -ENOENT;
 	}
 

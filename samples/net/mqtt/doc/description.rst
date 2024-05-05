@@ -7,7 +7,11 @@ Sample description
    :local:
    :depth: 2
 
-The MQTT sample communicates with an MQTT broker either over LTE using an nRF91 Series device, or over Wi-Fi using an nRF70 Series device.
+The MQTT sample communicates with an MQTT broker either over LTE using an nRF91 Series device, or over Wi-Fi®  using an nRF70 Series device.
+
+.. |wifi| replace:: Wi-Fi
+
+.. include:: /includes/net_connection_manager.txt
 
 Requirements
 ************
@@ -81,7 +85,9 @@ CONFIG_MQTT_SAMPLE_TRANSPORT_SUBSCRIBE_TOPIC - MQTT subscribe topic
 	This configuration option sets the topic to which the sample subscribes.
 	Default is ``<clientID>/my/subscribe/topic``.
 
-.. include:: /includes/wifi_credentials_options.txt
+.. include:: /includes/wifi_credentials_shell.txt
+
+.. include:: /includes/wifi_credentials_static.txt
 
 Additional configuration
 ========================
@@ -97,6 +103,8 @@ Configuration files
 The sample provides predefined configuration files for the following development kits:
 
 * :file:`prj.conf` - General project configuration file.
+* :file:`boards/nrf9151dk_nrf9151_ns.conf` - Configuration file for the nRF9151 DK.
+* :file:`boards/nrf9161dk_nrf9161_ns.conf` - Configuration file for the nRF9161 DK.
 * :file:`boards/nrf9160dk_nrf9160_ns.conf` - Configuration file for the nRF9160 DK.
 * :file:`boards/thingy91_nrf9160_ns.conf` - Configuration file for the Thingy:91.
 * :file:`boards/nrf7002dk_nrf5340_cpuapp.conf` - Configuration file for the nRF7002 DK.
@@ -112,20 +120,20 @@ In addition, the sample provides the following overlay configuration files, whic
 
 They are located in :file:`samples/net/mqtt` folder.
 
-To add a specific overlay configuration file to the build, add the ``-- -DOVERLAY_CONFIG=<overlay_config_file>`` flag to your build.
+To add a specific overlay configuration file to the build, add the ``-- -DEXTRA_CONF_FILE=<overlay_config_file>`` flag to your build.
 
 See :ref:`cmake_options` for instructions on how to add this option to your build.
 For example, when building with the command line, the following commands can be used for the nRF9160 DK:
 
 .. code-block:: console
 
-   west build -b nrf9160dk_nrf9160_ns -- -DOVERLAY_CONFIG=overlay-tls-nrf91.conf
+   west build -b nrf9160dk/nrf9160/ns -- -DEXTRA_CONF_FILE=overlay-tls-nrf91.conf
 
 For Thingy:91, with TLS and debug logging enabled for the :ref:`lib_mqtt_helper` library (for more information, see the related :ref:`sample output <mqtt_sample_output_IPv6>`):
 
 .. code-block:: console
 
-   west build -b thingy91_nrf9160_ns -- -DOVERLAY_CONFIG=overlay-tls-nrf91.conf -DCONFIG_MQTT_HELPER_LOG_LEVEL_DBG=y
+   west build -b thingy91/nrf9160/ns -- -DEXTRA_CONF_FILE=overlay-tls-nrf91.conf -DCONFIG_MQTT_HELPER_LOG_LEVEL_DBG=y
 
 .. include:: /libraries/modem/nrf_modem_lib/nrf_modem_lib_trace.rst
    :start-after: modem_lib_sending_traces_UART_start
@@ -233,7 +241,7 @@ The sample output showing IPv6, but for a different build configuration using LT
 .. note::
    For nRF91 Series devices, the output differs from the above example output.
    This is because the sample enables the :ref:`lib_at_host` library using the :kconfig:option:`CONFIG_AT_HOST_LIBRARY` option.
-   This library makes it possible to send AT commands to the cellular modem and receive responses using the `Cellular Monitor`_ app from nRF Connect for Desktop.
+   This library makes it possible to send AT commands to the nRF91 Series modem and receive responses using the `Cellular Monitor`_ app from nRF Connect for Desktop.
    The additional logs are AT command responses that the modem sends to the application core that are forwarded over UART to be displayed on any of these nRF Connect for Desktop apps.
 
 Reconnection logic
@@ -260,7 +268,7 @@ Emulation
 =========
 
 The sample can be run in :ref:`Native Posix <zephyr:native_posix>` that simplifies development and testing and removes the need for hardware.
-Before you can build and run Native Posix, you need to perform the steps included in this link: :ref:`networking_with_native_posix`.
+Before you can build and run Native Posix, you need to perform the steps included in this link: :ref:`networking_with_native_sim`.
 
 When the aforementioned steps are completed, you can build and run the sample by using the following commands:
 

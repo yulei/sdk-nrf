@@ -147,6 +147,7 @@ static void selector_isr(const struct device *dev, struct gpio_callback *cb,
 {
 	struct selector *sel;
 	size_t port;
+	uint8_t *ptr;
 
 	for (port = 0; port < ARRAY_SIZE(gpio_dev); port++) {
 		if (dev == gpio_dev[port]) {
@@ -155,7 +156,8 @@ static void selector_isr(const struct device *dev, struct gpio_callback *cb,
 	}
 	__ASSERT_NO_MSG(port != ARRAY_SIZE(gpio_dev));
 
-	sel = CONTAINER_OF((uint8_t *)cb - port * sizeof(sel->gpio_cb[0]),
+	ptr = (uint8_t *)cb - port * sizeof(sel->gpio_cb[0]);
+	sel = CONTAINER_OF((struct gpio_callback (*)[])ptr,
 			   struct selector,
 			   gpio_cb);
 	disable_interrupts_nolock(sel);
@@ -175,7 +177,7 @@ static int read_state_and_enable_interrupts(struct selector *selector)
 
 static void selector_work_fn(struct k_work *w)
 {
-	struct selector *selector = CONTAINER_OF(w, struct selector, work);
+	struct selector *selector = CONTAINER_OF(w, struct selector, work.work);
 
 	int err = read_state_and_enable_interrupts(selector);
 

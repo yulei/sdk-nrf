@@ -32,8 +32,8 @@ IPv6 network support
 
 The development kits for this sample offer the following IPv6 network support for Matter:
 
-* Matter over Thread is supported for ``nrf52840dk_nrf52840``, ``nrf5340dk_nrf5340_cpuapp``, and ``nrf21540dk_nrf52840``.
-* Matter over Wi-Fi is supported for ``nrf5340dk_nrf5340_cpuapp`` with the ``nrf7002ek`` shield attached or for ``nrf7002dk_nrf5340_cpuapp``.
+* Matter over Thread is supported for ``nrf52840dk_nrf52840``, ``nrf5340dk_nrf5340_cpuapp``, ``nrf21540dk_nrf52840``, and ``nrf54l15pdk_nrf54l15``.
+* Matter over Wi-Fi is supported for ``nrf5340dk_nrf5340_cpuapp`` with the ``nrf7002ek`` shield attached or for ``nrf7002dk/nrf5340/cpuapp``.
 
 Overview
 ********
@@ -113,6 +113,38 @@ Device Firmware Upgrade support
     :start-after: matter_door_lock_sample_build_with_dfu_start
     :end-before: matter_door_lock_sample_build_with_dfu_end
 
+.. matter_template_nrf54l15_build_with_dfu_start
+
+The Device Firmware Upgrade (DFU) for the nRF54L15 PDK is exclusively available for the ``release`` build configuration and is limited to using the internal MRAM for storage.
+This means that both the currently running firmware and the new firmware to be updated must be stored within the device's internal flash memory.
+Currently, there is no support for utilizing external flash memory for this purpose.
+
+To build the sample with DFU support, use the ``-DCONF_FILE=prj_release.conf`` flag in your CMake build command.
+
+The following is an example command to build the sample with support for OTA DFU only:
+
+.. code-block:: console
+
+    west build -b nrf54l15pdk_nrf54l15_cpuapp -- -DCONF_FILE=prj_release.conf
+
+If you want to build the sample with support for both OTA DFU and SMP DFU, use the following command:
+
+.. code-block:: console
+
+    west build -b nrf54l15pdk_nrf54l15_cpuapp -- -DCONF_FILE=prj_release.conf -DCONFIG_CHIP_DFU_OVER_BT_SMP=y
+
+You can disable DFU support for the ``release`` build configuration to double available application memory space.
+Do this by setting the :kconfig:option:`CONFIG_CHIP_DFU_OVER_BT_SMP` and :kconfig:option:`CONFIG_CHIP_OTA_REQUESTOR` Kconfig options to ``n``, and removing the :file:`pm_static_nrf54l15pdk_nrf54l15_cpuapp_release.yml` file.
+
+For example:
+
+.. code-block:: console
+
+    west build -b nrf54l15pdk_nrf54l15_cpuapp -- -DCONF_FILE=prj_release.conf -DCONFIG_CHIP_DFU_OVER_BT_SMP=n -DCONFIG_CHIP_OTA_REQUESTOR=n
+
+
+.. matter_template_nrf54l15_build_with_dfu_end
+
 FEM support
 ===========
 
@@ -128,13 +160,25 @@ Factory data support
 User interface
 **************
 
+.. matter_template_nrf54l15_0_3_0_interface_start
+
+.. note::
+
+    The nRF54L15 PDK revision v0.3.0 uses a different numbering system for buttons and LEDs compared to previous boards.
+    All numbers start from 0 instead of 1, as was the case previously.
+    This means that **LED1** in this documentation refers to **LED0** on the nRF54L15 PDK board, **LED2** refers to **LED1**, **Button 1** refers to **Button 0**, and so on.
+
+    For the nRF54L15 PDK revision v0.2.1, the numbering of buttons and LEDs is the same as on the nRF52840 DK and nRF5340 DK boards.
+
+.. matter_template_nrf54l15_0_3_0_interface_end
+
 .. include:: ../lock/README.rst
     :start-after: matter_door_lock_sample_led1_start
     :end-before: matter_door_lock_sample_led1_end
 
-Button 1:
-     If pressed for six seconds, it initiates the factory reset of the device.
-     Releasing the button within the six-second window cancels the factory reset procedure.
+.. include:: ../lock/README.rst
+    :start-after: matter_door_lock_sample_button1_start
+    :end-before: matter_door_lock_sample_button1_end
 
 .. include:: ../lock/README.rst
     :start-after: matter_door_lock_sample_jlink_start
@@ -150,38 +194,8 @@ Building and running
 Selecting a build type
 ======================
 
-Before you start testing the application, you can select one of the `Matter template build types`_, depending on your building method.
-
-Selecting a build type in |VSC|
--------------------------------
-
-.. include:: /config_and_build/modifying.rst
-   :start-after: build_types_selection_vsc_start
-   :end-before: build_types_selection_vsc_end
-
-Selecting a build type from command line
-----------------------------------------
-
-.. include:: /config_and_build/modifying.rst
-   :start-after: build_types_selection_cmd_start
-   :end-before: For example, you can replace the
-
-For example, you can replace the *selected_build_type* variable to build the ``release`` firmware for ``nrf52840dk_nrf52840`` by running the following command in the project directory:
-
-.. parsed-literal::
-   :class: highlight
-
-   west build -b nrf52840dk_nrf52840 -d build_nrf52840dk_nrf52840 -- -DCONF_FILE=prj_release.conf
-
-The ``build_nrf52840dk_nrf52840`` parameter specifies the output directory for the build files.
-
-.. note::
-   If the selected board does not support the selected build type, the build is interrupted.
-   For example, if the ``shell`` build type is not supported by the selected board, the following notification appears:
-
-   .. code-block:: console
-
-      File not found: ./ncs/nrf/samples/matter/template/configuration/nrf52840dk_nrf52840/prj_shell.conf
+Before you start testing the application, you can select one of the `Matter template build types`_.
+See :ref:`cmake_options` for information about how to select a build type.
 
 Testing
 =======
@@ -211,7 +225,7 @@ To test the sample in a Matter-enabled Thread network, complete the following st
 
    At the end of this procedure, **LED 1** of the Matter device programmed with the sample starts flashing in the Short Flash Off state.
    This indicates that the device is fully provisioned, but does not yet have full IPv6 network connectivity.
-#. Press **Button 1** for six seconds to initiate the factory reset of the device.
+#. Keep the **Button 1** pressed for more than six seconds to initiate factory reset of the device.
 
 The device reboots after all its settings are erased.
 

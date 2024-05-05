@@ -11,6 +11,7 @@ menuconfig NRF_CLOUD_COAP
 	select COAP_EXTENDED_OPTIONS_LEN
 	select COAP_CLIENT
 	select EXPERIMENTAL
+	select LTE_PROPRIETARY_PSM_REQ if (SOC_NRF9161_LACA || SOC_NRF9151_LACA || SOC_NRF9131_LACA)
 
 if NRF_CLOUD_COAP
 
@@ -26,15 +27,14 @@ config NRF_CLOUD_COAP_SERVER_PORT
 	int "CoAP server port"
 	default 5684
 
-config NON_RESP_RETRIES
-	int "Number of times to retry waiting for a response to a NON request"
-	default 0
+config NRF_CLOUD_COAP_GF_CONF
+	bool "Enable configuration options for ground-fix requests"
 	help
-	  Non confirmable requests are usually used to send data to the cloud
-	  for which it is OK if it is sometimes lost. A value of 0 means it is
-	  acceptable if no response is received from the cloud. Non-zero values
-	  result in up to this number of retransmissions of the request followed
-	  by waits for a response.
+	  The initial release of CoAP for nRF Cloud did not provide a way to
+	  configure the response; it defaulted to always returning the location
+	  and method used to acquire the location. The cloud will soon support
+	  configuration values do_reply, fallback, and hi_conf. When the cloud
+	  support is ready, NRF_CLOUD_COAP_GF_CONF can be set true.
 
 if WIFI
 
@@ -47,7 +47,7 @@ config NRF_CLOUD_COAP_SEND_SSIDS
 	  require the access point MAC addresses. By not including SSIDs
 	  the amount of data sent to the cloud is greatly reduced.
 
-endif
+endif # WIFI
 
 module = NRF_CLOUD_COAP
 module-str = nRF Cloud COAP

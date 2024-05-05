@@ -15,6 +15,8 @@ The Asset Tracker v2 application is built on the following principles:
 * Batching of data - Data is batched to reduce the number of messages transmitted, and to be able to retain collected data while the device is offline.
 * Configurable at run time - The application behavior (for example, accelerometer sensitivity or GNSS timeout) can be configured at run time. This improves the development experience with individual devices or when debugging the device behavior in specific areas and situations. It also reduces the cost for transmitting data to the devices by reducing the frequency of sending firmware updates to the devices.
 
+.. _asset_tracker_v2_requirements:
+
 Requirements
 ************
 
@@ -33,7 +35,7 @@ Following are the cloud services that are supported by the application:
 * `AWS IoT Core`_
 * `Azure IoT Hub`_
 * `nRF Cloud`_
-* `LwM2M`_ v1.1 compliant service (for example, AVSystem's `Coiote Device Management`_, `Leshan LwM2M server <Leshan homepage_>`_).
+* `LwM2M`_ v1.1 compliant service (for example, AVSystem's `Coiote Device Management`_, `Leshan LwM2M Server <Leshan homepage_>`_).
   To know more about the AVSystem integration with |NCS|, see :ref:`ug_avsystem`.
 
 To run the application on a development kit and connect to a cloud service, you must complete the following steps:
@@ -67,7 +69,7 @@ To set up a cloud service to work with the application firmware, complete the st
 
 * Azure IoT Hub - :ref:`lib_azure_iot_hub`.
   This step retrieves a *security tag* and *ID scope* that will be needed during the configuration of the firmware.
-  Make sure to follow the steps documented in the :ref:`dps_config` section to enable Device Provisioning Service (DPS).
+  Make sure to follow the steps documented in the :ref:`configuration using DPS <dps_config>` section to enable Device Provisioning Service (DPS).
 
 * AVSystem's LwM2M Coiote Device Management - :ref:`server_setup_lwm2m_client`.
   No additional configuration is needed if the server is set up according to the linked documentation.
@@ -104,16 +106,11 @@ The application provides predefined configuration files for typical use cases.
 
 Following are the available configuration files:
 
-* :file:`prj.conf` - Configuration file common for ``nrf9161dk_nrf9161_ns``, ``thingy91_nrf9160_ns``, and ``nrf9160dk_nrf9160_ns`` build targets.
-* :file:`prj_qemu_x86.conf` - Configuration file common for ``qemu_x86`` build target.
-* :file:`prj_native_posix.conf` - Configuration file common for ``native_posix`` build target.
-* :file:`boards/nrf9161dk_nrf9161_ns.conf` - Configuration file specific for nRF9161 DK.
-  This file is automatically merged with the :file:`prj.conf` file when you build for the ``nrf9161dk_nrf9161_ns`` build target.
-* :file:`boards/thingy91_nrf9160_ns.conf` - Configuration file specific for Thingy:91.
-  This file is automatically merged with the :file:`prj.conf` file when you build for the ``thingy91_nrf9160_ns`` build target.
-* :file:`boards/nrf9160dk_nrf9160_ns.conf` - Configuration file specific for nRF9160 DK.
-  This file is automatically merged with the :file:`prj.conf` file when you build for the ``nrf9160dk_nrf9160_ns`` build target.
-* :file:`boards/<BOARD>/led_state_def.h` - Header file that describes the LED behavior of the CAF LEDs module.
+* :file:`prj.conf` - Configuration file for all build targets.
+* :file:`boards/<BOARD>.conf` - Configuration file specific for a build target specified with **<BOARD>**, where **<BOARD>** is the build target, for example ``nrf9161dk/nrf9161/ns``.
+  This file is automatically merged with the :file:`prj.conf` file when you build for that target.
+
+The :file:`include/<BOARD>/led_state_def.h` header file describes the LED behavior of the CAF LEDs module.
 
 Overlay configurations files that enable specific features:
 
@@ -172,7 +169,7 @@ Building and running
 ********************
 
 This application can be found under :file:`applications/asset_tracker_v2` in the |NCS| folder structure.
-See :ref:`programming` for information about how to build and program the application.
+See :ref:`building` for information about how to build the application and :ref:`programming` for information about how to program it.
 
 Testing
 =======

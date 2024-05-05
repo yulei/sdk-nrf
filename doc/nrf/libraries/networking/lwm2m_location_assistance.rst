@@ -7,14 +7,14 @@ LwM2M location assistance
    :local:
    :depth: 2
 
-The LwM2M location assistance library provides a proprietary mechanism to fetch location assistance data from `nRF Cloud`_ by proxying it through the LwM2M server.
+The LwM2M location assistance library provides a proprietary mechanism to fetch location assistance data from `nRF Cloud`_ by proxying it through the LwM2M Server.
 
 Overview
 ********
 
 Location Assistance object is a proprietary LwM2M object used to deliver information required by various location services through LwM2M.
 This feature is currently under development and considered :ref:`experimental <software_maturity>`.
-As of now, only AVSystem's Coiote LwM2M server can be used for utilizing the location assistance data from nRF Cloud.
+As of now, only AVSystem's Coiote LwM2M Server can be used for utilizing the location assistance data from nRF Cloud.
 To know more about the AVSystem integration with |NCS|, see :ref:`ug_avsystem`.
 
 The library adds support for four objects related to location assistance:
@@ -35,13 +35,13 @@ Supported features
 
 There are four different supported methods of obtaining the location assistance:
 
-* Location based on cell information - The device sends information about the current cell and possibly about the neighboring cells to the LwM2M server.
-  The LwM2M server then sends the location request to nRF Cloud, which responds with the location data.
-* Location based on Wi-Fi access points - The device sends information about the nearby Wi-Fi access points to the LwM2M server.
-  The LwM2M server then sends the location request to nRF Cloud, which responds with the location data.
-* Query of A-GNSS assistance data - The A-GNSS assistance data is queried from nRF Cloud and provided back to the device through the LwM2M server.
+* Location based on cell information - The device sends information about the current cell and possibly about the neighboring cells to the LwM2M Server.
+  The LwM2M Server then sends the location request to nRF Cloud, which responds with the location data.
+* Location based on Wi-Fi access points - The device sends information about the nearby Wi-Fi access points to the LwM2M Server.
+  The LwM2M Server then sends the location request to nRF Cloud, which responds with the location data.
+* Query of A-GNSS assistance data - The A-GNSS assistance data is queried from nRF Cloud and provided back to the device through the LwM2M Server.
   The A-GNSS assistance data is then provided to the GNSS module for obtaining the position fix faster.
-* Query of P-GPS predictions - The P-GPS predictions are queried from nRF Cloud and provided back to the device through the LwM2M server.
+* Query of P-GPS predictions - The P-GPS predictions are queried from nRF Cloud and provided back to the device through the LwM2M Server.
   The predictions are stored in the device flash and injected to the GNSS module when needed.
 
 API usage
@@ -63,7 +63,7 @@ To populate the objects, call the :c:func:`lwm2m_ncell_handler_register` functio
 
 The Ground Fix Location object needs to address the ``report_back`` resource before sending a location request.
 Back reporting tells the server whether it needs to send the acquired location back to the device.
-If the location is sent back to the device, the location is stored only in the Ground Fix Location object.
+If the location is sent back to the device, the location is stored in the Ground Fix Location object and copied in the LwM2M Location object.
 
 To send the location request for the cell-based location, call the :c:func:`location_assistance_ground_fix_request_send` function.
 
@@ -128,9 +128,10 @@ It can have three different values:
 * ``-1`` - A permanent error in the server needs fixing.
   The library will reject further requests and the device must be rebooted after the issue has been resolved in the server.
 * ``1``  - Due to a temporary error in the server, the device needs to retry sending the request after a while.
+* ``2`` - When no response has been received from the server in LOCATION_ASSISTANT_RESULT_TIMEOUT seconds.
 
 The library has a resend handler for the temporary error code.
-You can initialize it with the :c:func:`location_assistance_init_resend_handler` function.
+You can initialize it with the :c:func:`location_assistance_retry_init` function.
 It uses an exponential backoff for scheduling the resends.
 
 The library has a callback handler for the result code.
@@ -156,8 +157,8 @@ To enable location assistance, configure either or both of the following Kconfig
 
 Following are the other important library options:
 
-* :kconfig:option:`CONFIG_LWM2M_CLIENT_UTILS_LOCATION_ASSIST_AGNSS` -  nRF Cloud provides A-GNSS assistance data and the GNSS-module in the device uses the data for obtaining a GNSS fix, which is reported back to the LwM2M server.
-* :kconfig:option:`CONFIG_LWM2M_CLIENT_UTILS_LOCATION_ASSIST_PGPS` -  nRF Cloud provides P-GPS predictions and the GNSS-module in the device uses the data for obtaining a GNSS fix, which is reported back to the LwM2M server.
+* :kconfig:option:`CONFIG_LWM2M_CLIENT_UTILS_LOCATION_ASSIST_AGNSS` -  nRF Cloud provides A-GNSS assistance data and the GNSS-module in the device uses the data for obtaining a GNSS fix, which is reported back to the LwM2M Server.
+* :kconfig:option:`CONFIG_LWM2M_CLIENT_UTILS_LOCATION_ASSIST_PGPS` -  nRF Cloud provides P-GPS predictions and the GNSS-module in the device uses the data for obtaining a GNSS fix, which is reported back to the LwM2M Server.
 * :kconfig:option:`CONFIG_LWM2M_CLIENT_UTILS_LOCATION_ASSIST_CELL` -  nRF Cloud provides estimated location based on currently attached cell and its neighborhood.
 * :kconfig:option:`CONFIG_LWM2M_CLIENT_UTILS_CONN_MON_OBJ_SUPPORT` - Enable support for connectivity monitoring utilities.
   Provides data about the current cell and network the device has connected to.

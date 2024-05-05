@@ -14,19 +14,24 @@ LOG_MODULE_DECLARE(app, CONFIG_CHIP_APP_LOG_LEVEL);
 
 namespace
 {
-CHIP_ERROR StoreDevice(MatterBridgedDevice *device, BridgedDeviceDataProvider *provider, uint8_t index)
+CHIP_ERROR StoreDevice(Nrf::MatterBridgedDevice *device, Nrf::BridgedDeviceDataProvider *provider, uint8_t index)
 {
-	uint16_t endpointId;
 	uint8_t count = 0;
-	uint8_t indexes[BridgeManager::kMaxBridgedDevices] = { 0 };
+	uint8_t indexes[Nrf::BridgeManager::kMaxBridgedDevices] = { 0 };
 	bool deviceRefresh = false;
+	Nrf::BridgeStorageManager::BridgedDevice bridgedDevice;
 
 	/* Check if a device is already present in the storage. */
-	if (BridgeStorageManager::Instance().LoadBridgedDeviceEndpointId(endpointId, index)) {
+	if (Nrf::BridgeStorageManager::Instance().LoadBridgedDevice(bridgedDevice, index)) {
 		deviceRefresh = true;
 	}
 
-	if (!BridgeStorageManager::Instance().StoreBridgedDevice(device, index)) {
+	bridgedDevice.mEndpointId = device->GetEndpointId();
+	bridgedDevice.mDeviceType = device->GetDeviceType();
+	bridgedDevice.mNodeLabelLength = strlen(device->GetNodeLabel());
+	memcpy(bridgedDevice.mNodeLabel, device->GetNodeLabel(), strlen(device->GetNodeLabel()));
+
+	if (!Nrf::BridgeStorageManager::Instance().StoreBridgedDevice(bridgedDevice, index)) {
 		LOG_ERR("Failed to store bridged device");
 		return CHIP_ERROR_INTERNAL;
 	}
@@ -34,18 +39,18 @@ CHIP_ERROR StoreDevice(MatterBridgedDevice *device, BridgedDeviceDataProvider *p
 	/* If a device was not present in the storage before, put new index on the end of list and increment the count
 	 * number of stored devices. */
 	if (!deviceRefresh) {
-		CHIP_ERROR err = BridgeManager::Instance().GetDevicesIndexes(indexes, sizeof(indexes), count);
+		CHIP_ERROR err = Nrf::BridgeManager::Instance().GetDevicesIndexes(indexes, sizeof(indexes), count);
 		if (CHIP_NO_ERROR != err) {
 			LOG_ERR("Failed to get bridged devices indexes");
 			return err;
 		}
 
-		if (!BridgeStorageManager::Instance().StoreBridgedDevicesIndexes(indexes, count)) {
+		if (!Nrf::BridgeStorageManager::Instance().StoreBridgedDevicesIndexes(indexes, count)) {
 			LOG_ERR("Failed to store bridged devices indexes.");
 			return CHIP_ERROR_INTERNAL;
 		}
 
-		if (!BridgeStorageManager::Instance().StoreBridgedDevicesCount(count)) {
+		if (!Nrf::BridgeStorageManager::Instance().StoreBridgedDevicesCount(count)) {
 			LOG_ERR("Failed to store bridged devices count.");
 			return CHIP_ERROR_INTERNAL;
 		}
@@ -59,38 +64,56 @@ SimulatedBridgedDeviceFactory::BridgedDeviceFactory &SimulatedBridgedDeviceFacto
 {
 	auto checkLabel = [](const char *nodeLabel) {
 		/* If node label is provided it must fit the maximum defined length */
-		if (!nodeLabel || (nodeLabel && (strlen(nodeLabel) < MatterBridgedDevice::kNodeLabelSize))) {
+		if (!nodeLabel || (nodeLabel && (strlen(nodeLabel) < Nrf::MatterBridgedDevice::kNodeLabelSize))) {
 			return true;
 		}
 		return false;
 	};
 
 	static BridgedDeviceFactory sBridgedDeviceFactory{
-#ifdef CONFIG_BRIDGE_HUMIDITY_SENSOR_BRIDGED_DEVICE
-		{ DeviceType::HumiditySensor,
-		  [checkLabel](const char *nodeLabel) -> MatterBridgedDevice * {
-			  if (!checkLabel(nodeLabel)) {
-				  return nullptr;
-			  }
-			  return chip::Platform::New<HumiditySensorDevice>(nodeLabel);
-		  } },
-#endif
 #ifdef CONFIG_BRIDGE_ONOFF_LIGHT_BRIDGED_DEVICE
-		{ DeviceType::OnOffLight,
-		  [checkLabel](const char *nodeLabel) -> MatterBridgedDevice * {
+		{ Nrf::MatterBridgedDevice::DeviceType::OnOffLight,
+		  [checkLabel](const char *nodeLabel) -> Nrf::MatterBridgedDevice * {
 			  if (!checkLabel(nodeLabel)) {
 				  return nullptr;
 			  }
 			  return chip::Platform::New<OnOffLightDevice>(nodeLabel);
 		  } },
 #endif
+#ifdef CONFIG_BRIDGE_GENERIC_SWITCH_BRIDGED_DEVICE
+		{ Nrf::MatterBridgedDevice::DeviceType::GenericSwitch,
+		  [checkLabel](const char *nodeLabel) -> Nrf::MatterBridgedDevice * {
+			  if (!checkLabel(nodeLabel)) {
+				  return nullptr;
+			  }
+			  return chip::Platform::New<GenericSwitchDevice>(nodeLabel);
+		  } },
+#endif
+#ifdef CONFIG_BRIDGE_ONOFF_LIGHT_SWITCH_BRIDGED_DEVICE
+		{ Nrf::MatterBridgedDevice::DeviceType::OnOffLightSwitch,
+		  [checkLabel](const char *nodeLabel) -> Nrf::MatterBridgedDevice * {
+			  if (!checkLabel(nodeLabel)) {
+				  return nullptr;
+			  }
+			  return chip::Platform::New<OnOffLightSwitchDevice>(nodeLabel);
+		  } },
+#endif
 #ifdef CONFIG_BRIDGE_TEMPERATURE_SENSOR_BRIDGED_DEVICE
-		{ MatterBridgedDevice::DeviceType::TemperatureSensor,
-		  [checkLabel](const char *nodeLabel) -> MatterBridgedDevice * {
+		{ Nrf::MatterBridgedDevice::DeviceType::TemperatureSensor,
+		  [checkLabel](const char *nodeLabel) -> Nrf::MatterBridgedDevice * {
 			  if (!checkLabel(nodeLabel)) {
 				  return nullptr;
 			  }
 			  return chip::Platform::New<TemperatureSensorDevice>(nodeLabel);
+		  } },
+#endif
+#ifdef CONFIG_BRIDGE_HUMIDITY_SENSOR_BRIDGED_DEVICE
+		{ Nrf::MatterBridgedDevice::DeviceType::HumiditySensor,
+		  [checkLabel](const char *nodeLabel) -> Nrf::MatterBridgedDevice * {
+			  if (!checkLabel(nodeLabel)) {
+				  return nullptr;
+			  }
+			  return chip::Platform::New<HumiditySensorDevice>(nodeLabel);
 		  } },
 #endif
 	};
@@ -100,22 +123,34 @@ SimulatedBridgedDeviceFactory::BridgedDeviceFactory &SimulatedBridgedDeviceFacto
 SimulatedBridgedDeviceFactory::SimulatedDataProviderFactory &SimulatedBridgedDeviceFactory::GetDataProviderFactory()
 {
 	static SimulatedDataProviderFactory sDeviceDataProvider{
-#ifdef CONFIG_BRIDGE_HUMIDITY_SENSOR_BRIDGED_DEVICE
-		{ DeviceType::HumiditySensor,
-		  [](UpdateAttributeCallback clb) {
-			  return chip::Platform::New<SimulatedHumiditySensorDataProvider>(clb);
+#ifdef CONFIG_BRIDGE_ONOFF_LIGHT_BRIDGED_DEVICE
+		{ Nrf::MatterBridgedDevice::DeviceType::OnOffLight,
+		  [](UpdateAttributeCallback updateClb, InvokeCommandCallback commandClb) {
+			  return chip::Platform::New<SimulatedOnOffLightDataProvider>(updateClb, commandClb);
 		  } },
 #endif
-#ifdef CONFIG_BRIDGE_ONOFF_LIGHT_BRIDGED_DEVICE
-		{ DeviceType::OnOffLight,
-		  [](UpdateAttributeCallback clb) {
-			  return chip::Platform::New<SimulatedOnOffLightDataProvider>(clb);
+#ifdef CONFIG_BRIDGE_GENERIC_SWITCH_BRIDGED_DEVICE
+		{ Nrf::MatterBridgedDevice::DeviceType::GenericSwitch,
+		  [](UpdateAttributeCallback updateClb, InvokeCommandCallback commandClb) {
+			  return chip::Platform::New<SimulatedGenericSwitchDataProvider>(updateClb, commandClb);
+		  } },
+#endif
+#ifdef CONFIG_BRIDGE_ONOFF_LIGHT_SWITCH_BRIDGED_DEVICE
+		{ Nrf::MatterBridgedDevice::DeviceType::OnOffLightSwitch,
+		  [](UpdateAttributeCallback updateClb, InvokeCommandCallback commandClb) {
+			  return chip::Platform::New<SimulatedOnOffLightSwitchDataProvider>(updateClb, commandClb);
 		  } },
 #endif
 #ifdef CONFIG_BRIDGE_TEMPERATURE_SENSOR_BRIDGED_DEVICE
-		{ DeviceType::TemperatureSensor,
-		  [](UpdateAttributeCallback clb) {
-			  return chip::Platform::New<SimulatedTemperatureSensorDataProvider>(clb);
+		{ Nrf::MatterBridgedDevice::DeviceType::TemperatureSensor,
+		  [](UpdateAttributeCallback updateClb, InvokeCommandCallback commandClb) {
+			  return chip::Platform::New<SimulatedTemperatureSensorDataProvider>(updateClb, commandClb);
+		  } },
+#endif
+#ifdef CONFIG_BRIDGE_HUMIDITY_SENSOR_BRIDGED_DEVICE
+		{ Nrf::MatterBridgedDevice::DeviceType::HumiditySensor,
+		  [](UpdateAttributeCallback updateClb, InvokeCommandCallback commandClb) {
+			  return chip::Platform::New<SimulatedHumiditySensorDataProvider>(updateClb, commandClb);
 		  } },
 #endif
 	};
@@ -128,15 +163,15 @@ CHIP_ERROR SimulatedBridgedDeviceFactory::CreateDevice(int deviceType, const cha
 {
 	CHIP_ERROR err;
 
-	BridgedDeviceDataProvider *provider = GetDataProviderFactory().Create(
-		static_cast<MatterBridgedDevice::DeviceType>(deviceType), BridgeManager::HandleUpdate);
+	Nrf::BridgedDeviceDataProvider *provider = GetDataProviderFactory().Create(
+		static_cast<Nrf::MatterBridgedDevice::DeviceType>(deviceType), Nrf::BridgeManager::HandleUpdate, Nrf::BridgeManager::HandleCommand);
 
 	VerifyOrReturnError(provider != nullptr, CHIP_ERROR_INVALID_ARGUMENT, LOG_ERR("No valid data provider!"));
 
 	auto *newBridgedDevice =
-		GetBridgedDeviceFactory().Create(static_cast<MatterBridgedDevice::DeviceType>(deviceType), nodeLabel);
+		GetBridgedDeviceFactory().Create(static_cast<Nrf::MatterBridgedDevice::DeviceType>(deviceType), nodeLabel);
 
-	MatterBridgedDevice *newBridgedDevices[] = { newBridgedDevice };
+	Nrf::MatterBridgedDevice *newBridgedDevices[] = { newBridgedDevice };
 
 	if (!newBridgedDevice) {
 		LOG_ERR("Cannot allocate Matter device of given type");
@@ -151,10 +186,10 @@ CHIP_ERROR SimulatedBridgedDeviceFactory::CreateDevice(int deviceType, const cha
 	if (index.HasValue() && endpointId.HasValue()) {
 		endpointIds[0] = endpointId.Value();
 		deviceIndex[0] = index.Value();
-		err = BridgeManager::Instance().AddBridgedDevices(
+		err = Nrf::BridgeManager::Instance().AddBridgedDevices(
 			newBridgedDevices, provider, ARRAY_SIZE(newBridgedDevices), deviceIndex, endpointIds);
 	} else {
-		err = BridgeManager::Instance().AddBridgedDevices(newBridgedDevices, provider,
+		err = Nrf::BridgeManager::Instance().AddBridgedDevices(newBridgedDevices, provider,
 								  ARRAY_SIZE(newBridgedDevices), deviceIndex);
 	}
 
@@ -175,42 +210,34 @@ CHIP_ERROR SimulatedBridgedDeviceFactory::RemoveDevice(int endpointId)
 {
 	uint8_t index;
 	uint8_t count = 0;
-	uint8_t indexes[BridgeManager::kMaxBridgedDevices] = { 0 };
+	uint8_t indexes[Nrf::BridgeManager::kMaxBridgedDevices] = { 0 };
 
-	CHIP_ERROR err = BridgeManager::Instance().RemoveBridgedDevice(endpointId, index);
+	CHIP_ERROR err = Nrf::BridgeManager::Instance().RemoveBridgedDevice(endpointId, index);
 
 	if (CHIP_NO_ERROR != err) {
 		LOG_ERR("Failed to remove bridged device");
 		return err;
 	}
 
-	err = BridgeManager::Instance().GetDevicesIndexes(indexes, sizeof(indexes), count);
+	err = Nrf::BridgeManager::Instance().GetDevicesIndexes(indexes, sizeof(indexes), count);
 	if (CHIP_NO_ERROR != err) {
 		LOG_ERR("Failed to get bridged devices indexes");
 		return err;
 	}
 
 	/* Update the current indexes list. */
-	if (!BridgeStorageManager::Instance().StoreBridgedDevicesIndexes(indexes, count)) {
+	if (!Nrf::BridgeStorageManager::Instance().StoreBridgedDevicesIndexes(indexes, count)) {
 		LOG_ERR("Failed to store bridged devices indexes.");
 		return CHIP_ERROR_INTERNAL;
 	}
 
-	if (!BridgeStorageManager::Instance().StoreBridgedDevicesCount(count)) {
+	if (!Nrf::BridgeStorageManager::Instance().StoreBridgedDevicesCount(count)) {
 		LOG_ERR("Failed to store bridged devices count.");
 		return CHIP_ERROR_INTERNAL;
 	}
 
-	if (!BridgeStorageManager::Instance().RemoveBridgedDeviceEndpointId(index)) {
-		LOG_ERR("Failed to remove bridged device endpoint id.");
-		return CHIP_ERROR_INTERNAL;
-	}
-
-	/* Ignore error, as node label may not be present in the storage. */
-	BridgeStorageManager::Instance().RemoveBridgedDeviceNodeLabel(index);
-
-	if (!BridgeStorageManager::Instance().RemoveBridgedDeviceType(index)) {
-		LOG_ERR("Failed to remove bridged device type.");
+	if (!Nrf::BridgeStorageManager::Instance().RemoveBridgedDevice(index)) {
+		LOG_ERR("Failed to remove bridged device from the storage.");
 		return CHIP_ERROR_INTERNAL;
 	}
 

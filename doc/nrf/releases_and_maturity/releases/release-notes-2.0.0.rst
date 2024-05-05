@@ -31,7 +31,7 @@ Highlights
 * Support for the Zigbee Cluster Library specification v8 (ZCL 8) and Base Device Behavior specification v3.0.1 (BDB 3.0.1) is no longer experimental.
   ZCL 8 and BDB 3.0.1 libraries are now used by default in Zigbee samples.
 * Updated Zephyr LwM2M stack to v1.1, which provides extended commands and options for more efficient data transmission.
-* Added nRF Cloud Location Services support in the AVSystem's Coiote LwM2M server.
+* Added nRF Cloud Location Services support in the AVSystem's Coiote LwM2M Server.
 * Added power consumption optimization for poor satellite coverage when using GNSS.
 
 A :ref:`migration guide <ncs_2.0.0_migration>` is available for users moving from |NCS| v1.x to v2.x.
@@ -410,7 +410,7 @@ nRF9160 samples
   * Added:
 
     * Minimal Portfolio object support that is required for LwM2M conformance testing.
-    * Support for using location assistance with Coiote LwM2M server.
+    * Support for using location assistance with Coiote LwM2M Server.
     * Guidelines on :ref:`setting up the sample for production <lwm2m_client_provisioning>` using AVSystem’s Coiote Device Management server.
 
   * Updated:
@@ -540,7 +540,7 @@ Other samples
   * Improved the calculation of the total payload size for the radio duty cycle.
   * Fast ramp-up is enabled for all radio modes.
   * The duty cycle for modulated transmission is limited to 1-90%.
-  * Improved the DFU throughput in the :ref:`smp_svr_sample` for the Bluetooth transport by optimizing Bluetooth MTU configuration and by leveraging the MCUmgr packet reassembly feature.
+  * Improved the DFU throughput in the :zephyr:code-sample:`smp-svr` for the Bluetooth transport by optimizing Bluetooth MTU configuration and by leveraging the MCUmgr packet reassembly feature.
 
 Drivers
 =======
@@ -740,7 +740,7 @@ Libraries for networking
 
 * :ref:`lib_lwm2m_client_utils` library:
 
-  * Added support for using location assistance when using the Coiote LwM2M server.
+  * Added support for using location assistance when using the Coiote LwM2M Server.
   * Updated the library to store credentials and server settings permanently on bootstrap.
   * Updated the library to let an application control the network connection state.
 

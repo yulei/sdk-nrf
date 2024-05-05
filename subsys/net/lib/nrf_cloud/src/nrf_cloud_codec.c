@@ -38,6 +38,11 @@ int nrf_cloud_obj_input_decode(struct nrf_cloud_obj *const obj,
 		return -EINVAL;
 	}
 
+	if (obj->type == NRF_CLOUD_OBJ_TYPE_COAP_CBOR) {
+		/* Decoding CoAP CBOR input is not supported */
+		return -ENOTSUP;
+	}
+
 	int ret;
 	bool known_type = true;
 
@@ -120,6 +125,63 @@ int nrf_cloud_obj_str_get(const struct nrf_cloud_obj *const obj, const char *con
 	case NRF_CLOUD_OBJ_TYPE_JSON:
 	{
 		return get_string_from_obj(obj->json, key, str);
+	}
+	default:
+		break;
+	}
+
+	return -ENOTSUP;
+}
+
+int nrf_cloud_obj_bool_get(const struct nrf_cloud_obj *const obj, const char *const key,
+	bool *val)
+{
+	if (!obj || !key || !val) {
+		return -EINVAL;
+	}
+
+	switch (obj->type) {
+	case NRF_CLOUD_OBJ_TYPE_JSON:
+	{
+		return get_bool_from_obj(obj->json, key, val);
+	}
+	default:
+		break;
+	}
+
+	return -ENOTSUP;
+}
+
+int nrf_cloud_obj_object_detach(struct nrf_cloud_obj *const obj, const char *const key,
+			     struct nrf_cloud_obj *const obj_out)
+{
+	if (!obj || !key || !obj_out) {
+		return -EINVAL;
+	}
+
+	switch (obj->type) {
+	case NRF_CLOUD_OBJ_TYPE_JSON:
+	{
+		if (!obj->json) {
+			return -ENOENT;
+		}
+
+		cJSON * to_detach = cJSON_GetObjectItem(obj->json, key);
+
+		if (!to_detach) {
+			return -ENODEV;
+		}
+
+		if (!cJSON_IsObject(to_detach)) {
+			return -ENOMSG;
+		}
+
+		(void)cJSON_DetachItemViaPointer(obj->json, to_detach);
+
+		obj_out->type = NRF_CLOUD_OBJ_TYPE_JSON;
+		obj_out->json = to_detach;
+
+		return 0;
 	}
 	default:
 		break;
@@ -351,6 +413,11 @@ int nrf_cloud_obj_free(struct nrf_cloud_obj *const obj)
 	return -ENOTSUP;
 }
 
+bool nrf_cloud_obj_bulk_check(struct nrf_cloud_obj *const obj)
+{
+	return (obj && (obj->type == NRF_CLOUD_OBJ_TYPE_JSON) && cJSON_IsArray(obj->json));
+}
+
 int nrf_cloud_obj_bulk_add(struct nrf_cloud_obj *const bulk, struct nrf_cloud_obj *const obj)
 {
 	if (!bulk || !obj) {
@@ -579,8 +646,13 @@ int nrf_cloud_obj_object_add(struct nrf_cloud_obj *const obj, const char *const 
 			return -ENOENT;
 		}
 
-		return cJSON_AddItemToObjectCS(dest_json_get(obj, data_child),
-					       key, obj_to_add->json) ? 0 : -ENOMEM;
+		if (!cJSON_AddItemToObjectCS(dest_json_get(obj, data_child), key,
+					     obj_to_add->json)) {
+			return -ENOMEM;
+		}
+
+		(void)nrf_cloud_obj_reset(obj_to_add);
+		return 0;
 	}
 	default:
 		break;
@@ -708,12 +780,16 @@ int nrf_cloud_obj_gnss_msg_create(struct nrf_cloud_obj *const obj,
 	}
 
 	int ret;
+	const char *msg_type;
 
 	NRF_CLOUD_OBJ_DEFINE(pvt_obj, obj->type);
 
 	/* Add the app ID, message type, and timestamp */
-	ret = nrf_cloud_obj_msg_init(obj, NRF_CLOUD_JSON_APPID_VAL_GNSS,
-				     NRF_CLOUD_JSON_MSG_TYPE_VAL_DATA);
+	msg_type = (IS_ENABLED(CONFIG_NRF_CLOUD_COAP) &&
+		    (obj->type == NRF_CLOUD_OBJ_TYPE_COAP_CBOR)) ?
+			NULL : NRF_CLOUD_JSON_MSG_TYPE_VAL_DATA;
+
+	ret = nrf_cloud_obj_msg_init(obj, NRF_CLOUD_JSON_APPID_VAL_GNSS, msg_type);
 	if (ret) {
 		goto cleanup;
 	}
@@ -771,7 +847,6 @@ int nrf_cloud_obj_gnss_msg_create(struct nrf_cloud_obj *const obj,
 		}
 
 		/* The pvt object now belongs to the gnss msg object */
-		pvt_obj.json = NULL;
 
 		break;
 
@@ -900,7 +975,7 @@ int nrf_cloud_obj_modem_pvt_add(struct nrf_cloud_obj *const obj,
 int nrf_cloud_obj_location_request_create(struct nrf_cloud_obj *const obj,
 					  const struct lte_lc_cells_info *const cells_inf,
 					  const struct wifi_scan_info *const wifi_inf,
-					  const bool request_loc)
+					  const struct nrf_cloud_location_config *const config)
 {
 	if ((!cells_inf && !wifi_inf) || !obj) {
 		return -EINVAL;
@@ -911,10 +986,14 @@ int nrf_cloud_obj_location_request_create(struct nrf_cloud_obj *const obj,
 	if (!NRF_CLOUD_OBJ_TYPE_VALID(obj)) {
 		return -EBADF;
 	}
+	if (obj->type != NRF_CLOUD_OBJ_TYPE_JSON) {
+		return -ENOTSUP;
+	}
 
 	int err;
 
 	NRF_CLOUD_OBJ_DEFINE(data_obj, obj->type);
+	NRF_CLOUD_OBJ_DEFINE(config_obj, obj->type);
 
 	/* Init obj with the appId and msgType */
 	err = nrf_cloud_obj_msg_init(obj, NRF_CLOUD_JSON_APPID_VAL_LOCATION,
@@ -928,41 +1007,66 @@ int nrf_cloud_obj_location_request_create(struct nrf_cloud_obj *const obj,
 		goto cleanup;
 	}
 
-	/* By default, nRF Cloud will send the location to the device */
-	if (!request_loc &&
-	    nrf_cloud_obj_num_add(&data_obj, NRF_CLOUD_LOCATION_KEY_DOREPLY, 0, false)) {
-		err = -ENOMEM;
-		goto cleanup;
-	}
-
-	switch (obj->type) {
-	case NRF_CLOUD_OBJ_TYPE_JSON:
-	{
-		/* Add cell/wifi info */
-		err = nrf_cloud_obj_location_request_payload_add(&data_obj, cells_inf, wifi_inf);
+	if (config &&
+	    ((config->do_reply != NRF_CLOUD_LOCATION_DOREPLY_DEFAULT) ||
+	     (config->hi_conf != NRF_CLOUD_LOCATION_HICONF_DEFAULT) ||
+	     (config->fallback != NRF_CLOUD_LOCATION_FALLBACK_DEFAULT))) {
+		err = nrf_cloud_obj_init(&config_obj);
 		if (err) {
 			goto cleanup;
 		}
 
-		/* Add data object to the location request object */
-		err = nrf_cloud_obj_object_add(obj, NRF_CLOUD_JSON_DATA_KEY, &data_obj, false);
+		if (config->do_reply != NRF_CLOUD_LOCATION_DOREPLY_DEFAULT) {
+			err = nrf_cloud_obj_bool_add(&config_obj,
+						     NRF_CLOUD_LOCATION_JSON_KEY_DOREPLY,
+						     config->do_reply, false);
+			if (err) {
+				goto cleanup;
+			}
+		}
+		if (config->hi_conf != NRF_CLOUD_LOCATION_HICONF_DEFAULT) {
+			err = nrf_cloud_obj_bool_add(&config_obj,
+						     NRF_CLOUD_LOCATION_JSON_KEY_HICONF,
+						     config->hi_conf, false);
+			if (err) {
+				goto cleanup;
+			}
+		}
+		if (config->fallback != NRF_CLOUD_LOCATION_FALLBACK_DEFAULT) {
+			err = nrf_cloud_obj_bool_add(&config_obj,
+						     NRF_CLOUD_LOCATION_JSON_KEY_FALLBACK,
+						     config->fallback, false);
+			if (err) {
+				goto cleanup;
+			}
+		}
+
+		/* At least one entry differed from defaults, so add it to the obj. */
+		err = nrf_cloud_obj_object_add(obj, NRF_CLOUD_LOCATION_JSON_KEY_CONFIG,
+					       &config_obj, false);
 		if (err) {
 			goto cleanup;
 		}
-
-		/* The data object now belongs to the location request object */
-		data_obj.json = NULL;
-
-		break;
+		/* The config object now belongs to the location request object */
 	}
-	default:
-		err = -ENOTSUP;
+
+	/* Add cell/wifi info */
+	err = nrf_cloud_obj_location_request_payload_add(&data_obj, cells_inf, wifi_inf);
+	if (err) {
 		goto cleanup;
 	}
+
+	/* Add data object to the location request object */
+	err = nrf_cloud_obj_object_add(obj, NRF_CLOUD_JSON_DATA_KEY, &data_obj, false);
+	if (err) {
+		goto cleanup;
+	}
+	/* The data object now belongs to the location request object */
 
 	return 0;
 
 cleanup:
+	(void)nrf_cloud_obj_free(&config_obj);
 	(void)nrf_cloud_obj_free(&data_obj);
 	(void)nrf_cloud_obj_free(obj);
 	return err;
@@ -1012,7 +1116,6 @@ int nrf_cloud_obj_pgps_request_create(struct nrf_cloud_obj *const obj,
 		}
 
 		/* The data object now belongs to the P-GPS request object */
-		data_obj.json = NULL;
 
 		break;
 	}
@@ -1030,38 +1133,29 @@ cleanup:
 }
 #endif
 
-int nrf_cloud_shadow_delta_response_encode(cJSON *input_obj,
-					   bool accept,
-					   struct nrf_cloud_data *const output)
+int nrf_cloud_obj_shadow_delta_response_encode(struct nrf_cloud_obj *const delta_state_obj,
+					       bool accept)
 {
-	__ASSERT_NO_MSG(output != NULL);
-	__ASSERT_NO_MSG(input_obj != NULL);
-
-	char *buffer = NULL;
-	cJSON *root_obj = NULL;
-	cJSON *state_obj = NULL;
-
-	if (input_obj == NULL) {
-		LOG_ERR("No input_obj");
-		return -ESRCH; /* invalid input */
+	if (!delta_state_obj || !delta_state_obj->json ||
+	    (delta_state_obj->type != NRF_CLOUD_OBJ_TYPE_JSON)) {
+		return -EINVAL;
 	}
 
-	root_obj = cJSON_CreateObject();
-	state_obj = cJSON_AddObjectToObjectCS(root_obj, NRF_CLOUD_JSON_KEY_STATE);
-	if (cJSON_AddItemToObjectCS(state_obj,
+	cJSON * root_obj = cJSON_CreateObject();
+	cJSON *state_obj = cJSON_AddObjectToObjectCS(root_obj, NRF_CLOUD_JSON_KEY_STATE);
+
+	/* Move the provided state into the new object.
+	 * Accept the delta by updating reported.
+	 * Reject the delta by updating desired.
+	 */
+	if (!cJSON_AddItemToObjectCS(state_obj,
 				    accept ? NRF_CLOUD_JSON_KEY_REP : NRF_CLOUD_JSON_KEY_DES,
-				    input_obj)) {
-		buffer = cJSON_PrintUnformatted(root_obj);
-	}
-	cJSON_Delete(root_obj);
-
-	if (buffer == NULL) {
+				    delta_state_obj->json)) {
+		cJSON_Delete(root_obj);
 		return -ENOMEM;
 	}
 
-	LOG_DBG("Response to the delta: %s", buffer);
-	output->ptr = buffer;
-	output->len = strlen(buffer);
-
+	/* Update to reference the new object */
+	delta_state_obj->json = root_obj;
 	return 0;
 }

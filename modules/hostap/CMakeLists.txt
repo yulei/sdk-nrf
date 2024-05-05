@@ -179,6 +179,9 @@ zephyr_library_sources_ifdef(CONFIG_WPA_SUPP_AP
 	${COMMON_SRC_BASE}/eap_server/eap_server_identity.c
 	${COMMON_SRC_BASE}/eap_server/eap_server_methods.c
 	${COMMON_SRC_BASE}/eapol_auth/eapol_auth_sm.c
+	${COMMON_SRC_BASE}/ap/mbo_ap.c
+	${COMMON_SRC_BASE}/ap/ctrl_iface_ap.c
+	${COMMON_SRC_BASE}/utils/crc32.c
 )
 
 zephyr_library_compile_definitions_ifdef(CONFIG_WPA_SUPP_AP
@@ -186,7 +189,7 @@ zephyr_library_compile_definitions_ifdef(CONFIG_WPA_SUPP_AP
 	CONFIG_NO_RADIUS
 	CONFIG_NO_VLAN
 	CONFIG_NO_ACCOUNTING
-	CONFIG_NEED_AP_MLME
+	NEED_AP_MLME
 	CONFIG_IEEE80211AX
 	CONFIG_EAP_SERVER
 	CONFIG_EAP_SERVER_IDENTITY
@@ -378,5 +381,9 @@ zephyr_library_sources_ifdef(CONFIG_WPA_SUPP_EAPOL
 
 zephyr_library_compile_definitions_ifdef(CONFIG_WPA_SUPP_EAPOL
 	IEEE8021X_EAPOL
+)
+
+zephyr_library_compile_definitions_ifdef(CONFIG_WPA_SUPP_NW_SEL_RELIABILITY
+	CONFIG_NW_SEL_RELIABILITY
 )
 endif()

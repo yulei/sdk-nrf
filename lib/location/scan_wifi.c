@@ -52,6 +52,51 @@ struct wifi_scan_info *scan_wifi_results_get(void)
 	return &scan_wifi_info;
 }
 
+#if defined(CONFIG_LOCATION_DATA_DETAILS)
+void scan_wifi_details_get(struct location_data_details *details)
+{
+	details->wifi.ap_count = scan_wifi_info.cnt;
+}
+#endif
+
+#if defined(CONFIG_LOCATION_METHOD_WIFI_NET_IF_UPDOWN)
+static int scan_wifi_interface_shutdown(struct net_if *iface)
+{
+	LOG_DBG("Shutting down Wi-Fi interface");
+	int ret;
+
+	if (!net_if_is_admin_up(iface)) {
+		return 0;
+	}
+
+	ret = net_if_down(iface);
+	if (ret) {
+		LOG_ERR("Cannot bring down Wi-Fi interface (%d)", ret);
+		return ret;
+	}
+
+	LOG_DBG("Interface down");
+
+	return 0;
+}
+
+static int scan_wifi_startup_interface(struct net_if *iface)
+{
+	LOG_DBG("Starting up Wi-Fi interface");
+	int ret;
+
+	if (!net_if_is_admin_up(iface)) {
+		ret = net_if_up(iface);
+		if (ret) {
+			LOG_ERR("Cannot bring up Wi-Fi interface (%d)", ret);
+			return ret;
+		}
+		LOG_DBG("Interface up");
+	}
+	return 0;
+}
+#endif /* defined(CONFIG_LOCATION_METHOD_WIFI_NET_IF_UPDOWN) */
+
 void scan_wifi_execute(int32_t timeout, struct k_sem *wifi_scan_ready)
 {
 	int ret;
@@ -63,6 +108,14 @@ void scan_wifi_execute(int32_t timeout, struct k_sem *wifi_scan_ready)
 	scan_wifi_info.cnt = 0;
 
 	__ASSERT_NO_MSG(wifi_iface != NULL);
+
+#if defined(CONFIG_LOCATION_METHOD_WIFI_NET_IF_UPDOWN)
+	ret = scan_wifi_startup_interface(wifi_iface);
+	if (ret) {
+		return;
+	}
+#endif /* defined(CONFIG_LOCATION_METHOD_WIFI_NET_IF_UPDOWN) */
+
 	ret = net_mgmt(NET_REQUEST_WIFI_SCAN, wifi_iface, NULL, 0);
 	if (ret) {
 		LOG_ERR("Failed to initiate Wi-Fi scanning: %d", ret);
@@ -136,6 +189,15 @@ void scan_wifi_net_mgmt_event_handler(
 			break;
 		}
 	}
+#if defined(CONFIG_LOCATION_METHOD_WIFI_NET_IF_UPDOWN)
+	/* This is a workaround for devices like the Thingy:91 X.
+	 * Usually, libraries should not shut down the interface in case there might be other
+	 * users of the device.
+	 */
+	if (mgmt_event == NET_EVENT_WIFI_SCAN_DONE) {
+		scan_wifi_interface_shutdown(wifi_iface);
+	}
+#endif /* defined(CONFIG_LOCATION_METHOD_WIFI_NET_IF_UPDOWN) */
 }
 
 int scan_wifi_cancel(void)
@@ -153,10 +215,16 @@ int scan_wifi_init(void)
 
 	wifi_iface = NULL;
 #if defined(CONFIG_WIFI_NRF700X)
-	wifi_dev = device_get_binding("wlan0");
+	wifi_dev = DEVICE_DT_GET(DT_CHOSEN(zephyr_wifi));
 #else
 	wifi_dev = DEVICE_DT_GET(DT_CHOSEN(ncs_location_wifi));
 #endif
+
+	if (!wifi_dev) {
+		LOG_ERR("Wi-Fi device not found");
+		return -ENODEV;
+	}
+
 	if (!device_is_ready(wifi_dev)) {
 		LOG_ERR("Wi-Fi device %s not ready", wifi_dev->name);
 		return -ENODEV;
@@ -164,7 +232,7 @@ int scan_wifi_init(void)
 
 	wifi_iface = net_if_lookup_by_dev(wifi_dev);
 	if (wifi_iface == NULL) {
-		LOG_ERR("Could not get the Wi-Fi net interface");
+		LOG_ERR("No Wi-Fi interface found: %s", wifi_dev->name);
 		return -EFAULT;
 	}
 
@@ -172,7 +240,11 @@ int scan_wifi_init(void)
 				     (NET_EVENT_WIFI_SCAN_RESULT | NET_EVENT_WIFI_SCAN_DONE));
 	net_mgmt_add_event_callback(&scan_wifi_net_mgmt_cb);
 
+#if defined(CONFIG_LOCATION_METHOD_WIFI_NET_IF_UPDOWN)
+	return scan_wifi_interface_shutdown(wifi_iface);
+#else
 	return 0;
+#endif /* defined(CONFIG_LOCATION_METHOD_WIFI_NET_IF_UPDOWN) */
 }
 
 static void scan_wifi_timeout_work_fn(struct k_work *work)

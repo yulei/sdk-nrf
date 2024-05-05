@@ -50,6 +50,7 @@ static void handle_wifi_scan_result(struct net_mgmt_event_callback *cb)
 	const struct wifi_scan_result *entry =
 		(const struct wifi_scan_result *)cb->info;
 	uint8_t mac_string_buf[sizeof("xx:xx:xx:xx:xx:xx")];
+	uint8_t ssid_print[WIFI_SSID_MAX_LEN + 1];
 
 	scan_result++;
 
@@ -58,8 +59,11 @@ static void handle_wifi_scan_result(struct net_mgmt_event_callback *cb)
 		       "Num", "SSID", "(len)", "Chan", "RSSI", "Security", "BSSID");
 	}
 
+	strncpy(ssid_print, entry->ssid, sizeof(ssid_print) - 1);
+	ssid_print[sizeof(ssid_print) - 1] = '\0';
+
 	printk("%-4d | %-32s %-5u | %-4u | %-4d | %-5s | %s\n",
-	       scan_result, entry->ssid, entry->ssid_length,
+	       scan_result, ssid_print, entry->ssid_length,
 	       entry->channel, entry->rssi,
 	       (entry->security == WIFI_SECURITY_TYPE_PSK ? "WPA/WPA2" : "Open    "),
 	       ((entry->mac_length) ?
@@ -215,16 +219,27 @@ int main(void)
 	if (!is_mac_addr_set(net_if_get_default())) {
 		struct net_if *iface = net_if_get_default();
 		int ret;
+		struct ethernet_req_params params;
 
-		/* Set a local MAC address with Nordic OUI */
-		ret = net_if_down(iface);
+		if (net_if_is_up(iface)) {
+			/* Set a local MAC address with Nordic OUI */
+			ret = net_if_down(iface);
+			if (ret) {
+				LOG_ERR("Cannot bring down iface (%d)", ret);
+				return ret;
+			}
+		}
+
+		ret = net_bytes_from_str(params.mac_address.addr, sizeof(CONFIG_WIFI_MAC_ADDRESS),
+					 CONFIG_WIFI_MAC_ADDRESS);
 		if (ret) {
-			LOG_ERR("Cannot bring down iface (%d)", ret);
+			LOG_ERR("Failed to parse MAC address: %s (%d)",
+				CONFIG_WIFI_MAC_ADDRESS, ret);
 			return ret;
 		}
 
 		net_mgmt(NET_REQUEST_ETHERNET_SET_MAC_ADDRESS, iface,
-			 (void *)CONFIG_WIFI_MAC_ADDRESS, sizeof(CONFIG_WIFI_MAC_ADDRESS));
+			 &params, sizeof(params));
 
 		ret = net_if_up(iface);
 		if (ret) {
@@ -239,9 +254,11 @@ int main(void)
 
 	buttons_init();
 
+#ifdef CONFIG_NRF_WIFI_IF_AUTO_START
 	exit_shutdown_mode();
 
 	enter_shutdown_mode();
+#endif
 
 	k_sleep(K_FOREVER);
 

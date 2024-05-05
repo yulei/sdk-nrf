@@ -1,10 +1,11 @@
 /*
- * Copyright (c) 2021 Nordic Semiconductor ASA
+ * Copyright (c) 2021-2023 Nordic Semiconductor ASA
  *
  * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
 #include <zephyr/kernel.h>
+#include <zephyr/sys_clock.h>
 
 #ifndef NRF_CLOUD_PGPS_UTILS_H_
 #define NRF_CLOUD_PGPS_UTILS_H_
@@ -16,11 +17,8 @@ extern "C" {
 /* (6.1.1980 UTC - 1.1.1970 UTC) */
 #define GPS_TO_UNIX_UTC_OFFSET_SECONDS	(315964800UL)
 #define GPS_TO_UTC_LEAP_SECONDS		(18UL)
-#define SEC_PER_MIN			(60UL)
-#define MIN_PER_HOUR			(60UL)
 #define SEC_PER_HOUR			(MIN_PER_HOUR * SEC_PER_MIN)
-#define HOURS_PER_DAY			(24UL)
-#define SEC_PER_DAY			(HOURS_PER_DAY * SEC_PER_HOUR)
+#define SEC_PER_DAY			(HOUR_PER_DAY * SEC_PER_HOUR)
 #define DAYS_PER_WEEK			(7UL)
 #define SECONDS_PER_WEEK		(SEC_PER_DAY * DAYS_PER_WEEK)
 
@@ -68,6 +66,7 @@ int npgps_get_time(int64_t *gps_sec, uint16_t *gps_day, uint32_t *gps_time_of_da
 /* flash block allocation functions */
 int ngps_block_pool_init(uint32_t base_address, int num);
 int npgps_alloc_block(void);
+void npgps_undo_alloc_block(int block);
 void npgps_free_block(int block);
 int npgps_get_block_extent(int block);
 void npgps_reset_block_pool(void);

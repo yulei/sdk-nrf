@@ -555,7 +555,7 @@ void zb_osif_init(void)
 	}
 	platform_inited = true;
 
-#ifdef CONFIG_ZB_HAVE_SERIAL
+#ifdef CONFIG_ZIGBEE_HAVE_SERIAL
 	/* Initialise serial trace */
 	zb_osif_serial_init();
 #endif
@@ -578,8 +578,10 @@ void zb_osif_abort(void)
 	LOG_ERR("ZBOSS fatal error occurred");
 	LOG_PANIC();
 
+#ifdef CONFIG_ZIGBEE_HAVE_SERIAL
 	/* Flush ZBOSS trace logs. */
 	ZB_OSIF_SERIAL_FLUSH();
+#endif
 
 	/* By default reset device or halt if so configured. */
 	if (IS_ENABLED(CONFIG_ZBOSS_RESET_ON_ASSERT)) {
@@ -600,12 +602,7 @@ void zb_reset(zb_uint8_t param)
 	reas = (uint8_t)SYS_REBOOT_NCP;
 #endif /* CONFIG_ZIGBEE_LIBRARY_NCP_DEV */
 
-/* For nRF5340DK sys_reboot() does not set reset reason.
- * Do it manually in this case - NCP samples require this.
- */
-#ifdef CONFIG_SOC_NRF5340_CPUAPP
-	nrf_power_gpregret_set(NRF_POWER, reas);
-#endif /* CONFIG_SOC_NRF5340_CPUAPP */
+	nrf_power_gpregret_set(NRF_POWER, 0, reas);
 
 	/* Power on unused sections of RAM to allow MCUboot to use it. */
 	if (IS_ENABLED(CONFIG_RAM_POWER_DOWN_LIBRARY)) {
@@ -685,7 +682,7 @@ zb_uint8_t zb_get_reset_source(void)
 
 	/* Read the value at the first API call, then use data from RAM. */
 	if (zephyr_reset_type == 0xFF) {
-		zephyr_reset_type = nrf_power_gpregret_get(NRF_POWER);
+		zephyr_reset_type = nrf_power_gpregret_get(NRF_POWER, 0);
 	}
 #endif /* CONFIG_ZIGBEE_LIBRARY_NCP_DEV */
 
@@ -730,7 +727,7 @@ zb_uint8_t zb_get_reset_source(void)
 	 * SW reset, the value will not trigger NCP logic.
 	 */
 	if (zephyr_reset_type == SYS_REBOOT_NCP) {
-		nrf_power_gpregret_set(NRF_POWER, (uint8_t)SYS_REBOOT_COLD);
+		nrf_power_gpregret_set(NRF_POWER, 0, (uint8_t)SYS_REBOOT_COLD);
 	}
 #endif /* CONFIG_ZIGBEE_LIBRARY_NCP_DEV */
 

@@ -6,6 +6,7 @@
 
 menuconfig WIFI_CREDENTIALS
 	bool "WIFI credentials management"
+	select EXPERIMENTAL
 	help
 	  Enable WiFi credentials management subsystem.
 
@@ -17,6 +18,7 @@ source "subsys/logging/Kconfig.template.log_config"
 
 choice WIFI_CREDENTIALS_BACKEND
 	prompt "WiFi credentials backend"
+	default WIFI_CREDENTIALS_BACKEND_PSA if BUILD_WITH_TFM && !TFM_PROFILE_TYPE_MINIMAL
 	default WIFI_CREDENTIALS_BACKEND_SETTINGS
 	default WIFI_CREDENTIALS_BACKEND_NONE if WIFI_CREDENTIALS_STATIC
 	help
@@ -61,12 +63,13 @@ endif # WIFI_CREDENTIALS
 
 if WIFI_CREDENTIALS_BACKEND_PSA
 
-config WIFI_CREDENTIALS_BACKEND_PSA_UID_OFFSET
-	int "Protected Storage UID offset"
-	default 3586949806
+config WIFI_CREDENTIALS_BACKEND_PSA_OFFSET
+	int "PSA_KEY_ID range offset"
+	default 0
 	help
-	  This library will use WIFI_CREDENTIALS_MAX_ENTRIES entries starting with the
-	  WIFI_CREDENTIALS_BACKEND_PSA_UID_OFFSET uid.
+	  The PSA specification mandates to set key identifiers for keys
+	  with persistent lifetime. The users of the PSA API are responsible (WIFI credentials
+	  management is user of PSA API) to provide correct and unique identifiers.
 
 endif # WIFI_CREDENTIALS_BACKEND_PSA
 
@@ -97,6 +100,9 @@ config WIFI_CREDENTIALS_STATIC_TYPE_PSK_SHA256
 
 config WIFI_CREDENTIALS_STATIC_TYPE_SAE
 	bool "SAE"
+
+config WIFI_CREDENTIALS_STATIC_TYPE_WPA_PSK
+	bool "WPA-PSK"
 
 endchoice
 

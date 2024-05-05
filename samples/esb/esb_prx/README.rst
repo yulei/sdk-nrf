@@ -48,7 +48,7 @@ Building and running
 
 The Receiver sample can be found under :file:`samples/esb/esb_prx` in the |NCS| folder structure.
 
-See :ref:`programming` for information about how to build and program the application.
+See :ref:`building` and :ref:`programming` for information about how to build and program the application, respectively.
 
 FEM support
 ===========
@@ -64,8 +64,8 @@ Complete the following steps to test both the Transmitter and Receiver samples:
 
 1. Power on both kits.
 #. Observe that the LEDs change synchronously on both kits.
-#. Optionally, connect to the kits with a terminal emulator (for example, PuTTY).
-   See :ref:`putty` for the required settings.
+#. Optionally, connect to the kits with a terminal emulator (for example, nRF Connect Serial Terminal).
+   See :ref:`test_and_optimize` for the required settings and steps.
 #. Observe the logging output for both kits.
 
 Dependencies

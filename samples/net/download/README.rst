@@ -10,6 +10,10 @@ Download client
 The Download client sample demonstrates how to download a file from an HTTP or a CoAP server, with optional TLS or DTLS.
 It uses the :ref:`lib_download_client` library.
 
+.. |wifi| replace:: Wi-Fi®
+
+.. include:: /includes/net_connection_manager.txt
+
 Requirements
 ************
 
@@ -46,6 +50,8 @@ By default, the :ref:`CONFIG_SAMPLE_SECURE_SOCKET <CONFIG_SAMPLE_SECURE_SOCKET>`
 The certificate file name is indicated by the :ref:`CONFIG_SAMPLE_CERT_FILE <CONFIG_SAMPLE_CERT_FILE>` option.
 This certificate will work for the default test files.
 If you are using a custom download test file, you must provision the correct certificate for the servers from which the certificates will be downloaded.
+
+|hex_format|
 
 See :ref:`cert_dwload` for more information.
 
@@ -89,6 +95,9 @@ CONFIG_SAMPLE_COMPARE_HASH - Hash compare configuration
 CONFIG_SAMPLE_SHA256_HASH - Hash configuration
    This option sets the SHA256 hash to be compared with :ref:`CONFIG_SAMPLE_COMPUTE_HASH <CONFIG_SAMPLE_COMPUTE_HASH>`.
 
+.. include:: /includes/wifi_credentials_shell.txt
+
+.. include:: /includes/wifi_credentials_static.txt
 
 .. include:: /libraries/modem/nrf_modem_lib/nrf_modem_lib_trace.rst
    :start-after: modem_lib_sending_traces_UART_start
@@ -107,8 +116,10 @@ Testing
 
 After programming the sample to your development kit, test it by performing the following steps:
 
-1. Connect the development kit to your PC using a USB cable and power on or reset the kit.
-#. Open a terminal emulator |ANSI| and observe that the sample starts, provisions certificates, and starts to download.
+1. |connect_kit|
+#. Power on or reset the kit.
+#. |connect_terminal_ANSI|
+#. Observe that the sample starts, provisions certificates, and starts to download.
 #. Observe that the progress bar fills up as the download progresses.
 #. Observe that the sample displays the message "Download completed" on the terminal when the download completes.
 

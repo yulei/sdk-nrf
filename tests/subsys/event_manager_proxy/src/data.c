@@ -4,7 +4,8 @@
  * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 #include <zephyr/ztest.h>
-#include <syscalls/rand32.h>
+#include <zephyr/random/random.h>
+#include <syscalls/random.h>
 
 #include <app_event_manager.h>
 #include <event_manager_proxy.h>

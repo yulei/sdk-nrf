@@ -12,6 +12,13 @@
 #include <zephyr/net/conn_mgr_connectivity.h>
 #include <zephyr/net/tls_credentials.h>
 
+#if defined(CONFIG_POSIX_API)
+#include <zephyr/posix/arpa/inet.h>
+#include <zephyr/posix/netdb.h>
+#include <zephyr/posix/unistd.h>
+#include <zephyr/posix/sys/socket.h>
+#endif
+
 #if CONFIG_MODEM_KEY_MGMT
 #include <modem/modem_key_mgmt.h>
 #endif
@@ -38,7 +45,12 @@ static char recv_buf[RECV_BUF_SIZE];
 static K_SEM_DEFINE(network_connected_sem, 0, 1);
 /* Certificate for `example.com` */
 static const char cert[] = {
-#include "../cert/DigiCertGlobalRootCA.pem"
+	#include "DigiCertGlobalG2.pem.inc"
+
+	/* Null terminate certificate if running Mbed TLS on the application core.
+	 * Required by TLS credentials API.
+	 */
+	IF_ENABLED(CONFIG_TLS_CREDENTIALS, (0x00))
 };
 
 /* Zephyr NET management event callback structures. */
@@ -71,7 +83,7 @@ int cert_provision(void)
 
 	if (exists) {
 		mismatch = modem_key_mgmt_cmp(TLS_SEC_TAG, MODEM_KEY_MGMT_CRED_TYPE_CA_CHAIN, cert,
-					      strlen(cert));
+					      sizeof(cert));
 		if (!mismatch) {
 			printk("Certificate match\n");
 			return 0;
@@ -98,7 +110,9 @@ int cert_provision(void)
 				 TLS_CREDENTIAL_CA_CERTIFICATE,
 				 cert,
 				 sizeof(cert));
-	if (err < 0) {
+	if (err == -EEXIST) {
+		printk("CA certificate already exists, sec tag: %d\n", TLS_SEC_TAG);
+	} else if (err < 0) {
 		printk("Failed to register CA certificate: %d\n", err);
 		return err;
 	}
@@ -335,6 +349,11 @@ int main(void)
 	err = conn_mgr_all_if_disconnect(true);
 	if (err) {
 		printk("conn_mgr_all_if_disconnect, error: %d\n", err);
+	}
+
+	err = conn_mgr_all_if_down(true);
+	if (err) {
+		printk("conn_mgr_all_if_down, error: %d\n", err);
 	}
 
 	return 0;

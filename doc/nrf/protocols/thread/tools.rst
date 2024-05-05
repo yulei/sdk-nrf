@@ -87,13 +87,13 @@ To program the nRF device with the RCP application, complete the following steps
 
          .. code-block:: console
 
-            west build -p always -b nrf52840dongle_nrf52840 nrf/samples/openthread/coprocessor/ -- -DOVERLAY_CONFIG="overlay-usb.conf" -DDTC_OVERLAY_FILE="usb.overlay"
+            west build -p always -b nrf52840dongle/nrf52840 nrf/samples/openthread/coprocessor/
 
       .. tab:: nRF52840 Development Kit (UART transport)
 
          .. code-block:: console
 
-            west build -p always -b nrf52840dk_nrf52840 nrf/samples/openthread/coprocessor/
+            west build -p always -b nrf52840dk/nrf52840 nrf/samples/openthread/coprocessor/
 
 #. Depending on the hardware platform, complete the following steps:
 
@@ -153,7 +153,7 @@ To set up and configure the OpenThread Border Router, follow the official `OpenT
 
       cd ot-br-posix
       git pull --unshallow
-      git checkout 9185bda
+      git checkout 98dda6c
 
 * After the *Build and install OTBR* section, configure RCP device's UART baud rate in *otbr-agent*.
   Modify the :file:`/etc/default/otbr-agent` configuration file with default RCP baud rate:
@@ -195,7 +195,7 @@ To install and configure the OpenThread Border Router using the Docker container
 
    .. code-block:: console
 
-      docker pull nrfconnect/otbr:84c6aff
+      docker pull nrfconnect/otbr:98dda6c
 
 #. Connect the radio co-processor that you configured in :ref:`ug_thread_tools_tbr_rcp` to the Border Router device.
 #. Start the OpenThread Border Router container using the following commands:
@@ -205,7 +205,7 @@ To install and configure the OpenThread Border Router using the Docker container
       sudo modprobe ip6table_filter
       sudo docker run -it --rm --privileged --name otbr --network otbr -p 8080:80 \
       --sysctl "net.ipv6.conf.all.disable_ipv6=0 net.ipv4.conf.all.forwarding=1 net.ipv6.conf.all.forwarding=1" \
-      --volume /dev/ttyACM0:/dev/radio nrfconnect/otbr:84c6aff --radio-url spinel+hdlc+uart:///dev/radio?uart-baudrate=1000000
+      --volume /dev/ttyACM0:/dev/radio nrfconnect/otbr:98dda6c --radio-url spinel+hdlc+uart:///dev/radio?uart-baudrate=1000000
 
    Replace ``/dev/ttyACM0`` with the device node name of the OpenThread radio co-processor.
 
@@ -281,13 +281,13 @@ Build the OpenThread POSIX applications by performing the following steps:
       ./script/bootstrap
 
 #. Build the applications with the required options.
-   For example, to build the ``ot-cli`` application with support for Thread v1.1, run the following command::
+   For example, to build the ``ot-cli`` application, run the following command::
 
-      ./script/cmake-build posix -DOT_THREAD_VERSION=1.1
+      ./script/cmake-build posix
 
-   Alternatively, to build the ``ot-daemon`` and ``ot-ctl`` applications with support for Thread v1.2, run the following command::
+   Alternatively, to build the ``ot-daemon`` and ``ot-ctl`` applications, run the following command::
 
-      ./script/cmake-build posix -DOT_THREAD_VERSION=1.2 -DOT_DAEMON=ON
+      ./script/cmake-build posix -DOT_DAEMON=ON
 
 You can find the generated applications in :file:`./build/posix/src/posix/`.
 
@@ -298,19 +298,21 @@ Use the following radio URL parameter to connect to an RCP node.
 
 .. code-block:: console
 
-   'spinel+hdlc+uart://\ *ncp_uart_device*\ ?uart-baudrate=\ *baud_rate*'
+   'spinel+hdlc+uart://\ *ncp_uart_device*\ ?uart-baudrate=\ *baud_rate*' -B *backbone_link*
 
 Replace the following parameters:
 
    * *ncp_uart_device* - Specifies the location of the device, for example: :file:`/dev/ttyACM0`.
    * *baud_rate* - Specifies the baud rate to use.
      The Thread Co-Processor sample supports baud rate ``1000000``.
+   * *backbone_link* - Specifies Backbone link for communication with external network.
+     This parameter can be omitted.
 
 For example, to use ``ot-daemon``, enter the following command:
 
 .. code-block:: console
 
-   sudo ./build/posix/src/posix/ot-daemon 'spinel+hdlc+uart:///dev/ttyACM0?uart-baudrate=1000000' --verbose
+   sudo ./build/posix/src/posix/ot-daemon 'spinel+hdlc+uart:///dev/ttyACM0?uart-baudrate=1000000' --verbose -B eth0
 
 And on a separate terminal window:
 
@@ -322,4 +324,4 @@ To use ``ot-cli``, enter the following command instead:
 
 .. code-block:: console
 
-   sudo ./build/posix/src/posix/ot-cli 'spinel+hdlc+uart:///dev/ttyACM0?uart-baudrate=1000000' --verbose
+   sudo ./build/posix/src/posix/ot-cli 'spinel+hdlc+uart:///dev/ttyACM0?uart-baudrate=1000000' --verbose -B eth0

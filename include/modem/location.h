@@ -3,6 +3,7 @@
  *
  * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
+
 #ifndef LOCATION_H_
 #define LOCATION_H_
 
@@ -42,6 +43,19 @@ enum location_method {
 	LOCATION_METHOD_GNSS,
 	/** Wi-Fi positioning. */
 	LOCATION_METHOD_WIFI,
+	/**
+	 * Wi-Fi and cellular positioning combined into one cloud request.
+	 *
+	 * Cannot be used in the method list passed to location_request(),
+	 * but this method can appear in the location event (@ref location_event_data.id)
+	 * to indicate that Wi-Fi and cellular positioning methods have been combined
+	 * into a single cloud location method.
+	 *
+	 * If the combined method is desired, set Wi-Fi and cellular methods next to each other
+	 * in the method list passed to location_request(). This also happens by default if
+	 * NULL configuration is passed to location_request().
+	 */
+	LOCATION_METHOD_WIFI_CELLULAR,
 };
 
 /** Location acquisition mode. */
@@ -63,25 +77,44 @@ enum location_event_id {
 	/**
 	 * Application has indicated that getting location has been completed,
 	 * the result is not known, and the Location library does not need to care about it.
+	 *
 	 * This event can occur only if @kconfig{CONFIG_LOCATION_SERVICE_EXTERNAL} is set.
 	 */
 	LOCATION_EVT_RESULT_UNKNOWN,
 	/**
-	 * GNSS is requesting A-GNSS data. Application should obtain the data and send it to
-	 * location_agnss_data_process().
+	 * GNSS is requesting A-GNSS data.
+	 *
+	 * Application should obtain the data and send it to location_agnss_data_process().
 	 */
 	LOCATION_EVT_GNSS_ASSISTANCE_REQUEST,
 	/**
-	 * GNSS is requesting P-GPS data. Application should obtain the data and send it to
-	 * location_pgps_data_process().
+	 * GNSS is requesting P-GPS data.
+	 *
+	 * Application should obtain the data and send it to location_pgps_data_process().
 	 */
 	LOCATION_EVT_GNSS_PREDICTION_REQUEST,
 	/**
 	 * Cloud location request with neighbor cell and/or Wi-Fi access point information
-	 * is available. The application should send the information to cloud services and
-	 * then call location_cloud_location_ext_result_set().
+	 * is available.
+	 *
+	 * The application should send the information to cloud services and then call
+	 * location_cloud_location_ext_result_set().
 	 */
-	LOCATION_EVT_CLOUD_LOCATION_EXT_REQUEST
+	LOCATION_EVT_CLOUD_LOCATION_EXT_REQUEST,
+	/**
+	 * Location request has been started.
+	 *
+	 * This event is only sent if @kconfig{CONFIG_LOCATION_DATA_DETAILS} is set.
+	 */
+	LOCATION_EVT_STARTED,
+	/**
+	 * A fallback from one method to another has occurred,
+	 * and the positioning procedure continues.
+	 *
+	 * This event is only sent if @kconfig{CONFIG_LOCATION_DATA_DETAILS} is set and
+	 * @ref location_config.mode is @ref LOCATION_REQ_MODE_FALLBACK.
+	 */
+	LOCATION_EVT_FALLBACK,
 };
 
 /** Result of the external cloud location request. */
@@ -89,8 +122,10 @@ enum location_ext_result {
 	/** Cloud location request was successful. */
 	LOCATION_EXT_RESULT_SUCCESS,
 	/**
-	 * The result of the cloud location request is unknown. From the fallback functionality
-	 * perspective, this is handled similarly to @ref LOCATION_EXT_RESULT_ERROR.
+	 * The result of the cloud location request is unknown.
+	 *
+	 * From the fallback functionality perspective, this is handled similarly to
+	 * @ref LOCATION_EXT_RESULT_ERROR.
 	 */
 	LOCATION_EXT_RESULT_UNKNOWN,
 	/** Cloud location request failed. */
@@ -111,6 +146,7 @@ enum location_accuracy {
 enum location_service {
 	/**
 	 * Use any location service that has been configured to be available.
+	 *
 	 * This is useful when only one service is configured but can also be used
 	 * even if several services are available.
 	 */
@@ -146,14 +182,66 @@ struct location_datetime {
 struct location_data_details_gnss {
 	/** Number of satellites tracked at the time of event. */
 	uint8_t satellites_tracked;
+	/** Number of satellites used at the time of event. */
+	uint8_t satellites_used;
 	/** PVT data. */
 	struct nrf_modem_gnss_pvt_data_frame pvt_data;
+	/**
+	 * Elapsed GNSS time in milliseconds.
+	 *
+	 * This is the time since last start of GNSS operation until the fix or timeout
+	 * including any time LTE has blocked GNSS.
+	 *
+	 * @ref pvt_data member has ``execution_time``, which indicates cumulative GNSS
+	 * execution time since last start excluding any time LTE has blocked GNSS.
+	 */
+	uint32_t elapsed_time_gnss;
 };
 
-/** Location details. */
+/** Location details for cellular. */
+struct location_data_details_cellular {
+	/** Number of neighbor cells. */
+	uint8_t ncells_count;
+	/** Number of GCI (surrounding) cells. */
+	uint8_t gci_cells_count;
+};
+
+/** Location details for Wi-Fi. */
+struct location_data_details_wifi {
+	/** Number of Wi-Fi APs. */
+	uint16_t ap_count;
+};
+
+/**
+ * Location details.
+ *
+ * Only one of the child structures is filled most of the time depending on the method
+ * found in @ref location_event_data.method member of the parent structure.
+ * For a combined method @ref LOCATION_METHOD_WIFI_CELLULAR both @ref cellular and
+ * @ref wifi are filled.
+ */
 struct location_data_details {
+	/**
+	 * Elapsed method time in milliseconds.
+	 *
+	 * This is the time from method start until it completes and includes any time
+	 * spent waiting for some conditions to happen before proceeding, such as
+	 * waiting for LTE connection to go idle for some methods.
+	 */
+	uint32_t elapsed_time_method;
+
+#if defined(CONFIG_LOCATION_METHOD_GNSS)
 	/** Location details for GNSS. */
 	struct location_data_details_gnss gnss;
+#endif
+#if defined(CONFIG_LOCATION_METHOD_CELLULAR)
+	/** Location details for cellular. */
+	struct location_data_details_cellular cellular;
+#endif
+#if defined(CONFIG_LOCATION_METHOD_WIFI)
+	/** Location details for Wi-Fi. */
+	struct location_data_details_wifi wifi;
+#endif
 };
 #endif
 
@@ -180,6 +268,26 @@ struct location_data_error {
 	/** Data details at the time of error. */
 	struct location_data_details details;
 };
+
+/** Information for an unknown location result. */
+struct location_data_unknown {
+	/** Data details at the time of an unknown location result. */
+	struct location_data_details details;
+};
+
+/** Location fallback information. */
+struct location_data_fallback {
+	/** New location method that is tried next. */
+	enum location_method next_method;
+	/**
+	 * Event ID indicating the cause for the fallback.
+	 *
+	 * Either @ref LOCATION_EVT_TIMEOUT and @ref LOCATION_EVT_ERROR.
+	 */
+	enum location_event_id cause;
+	/** Data details at the time of a timeout or an error that caused the fallback. */
+	struct location_data_details details;
+};
 #endif
 
 /** Cloud location information. */
@@ -198,13 +306,7 @@ struct location_data_cloud {
 struct location_event_data {
 	/** Event ID. */
 	enum location_event_id id;
-	/**
-	 * Used location method.
-	 *
-	 * When cellular and Wi-Fi positioning are used and they are combined into a single
-	 * cloud request by the library, the method is not known so there is some uncertainty
-	 * on the reported location method.
-	 */
+	/** Used location method. */
 	enum location_method method;
 
 	/** Event specific data. */
@@ -218,6 +320,19 @@ struct location_event_data {
 		 * Used with events @ref LOCATION_EVT_TIMEOUT and @ref LOCATION_EVT_ERROR.
 		 */
 		struct location_data_error error;
+
+		/**
+		 * Relevant location data when an unknown result occurs.
+		 * Used with event @ref LOCATION_EVT_RESULT_UNKNOWN.
+		 */
+		struct location_data_unknown unknown;
+
+		/**
+		 * Relevant location data when a fallback to another method occurs
+		 * due to a timeout or an error.
+		 * Used with event @ref LOCATION_EVT_FALLBACK.
+		 */
+		struct location_data_fallback fallback;
 #endif
 
 #if defined(CONFIG_LOCATION_SERVICE_EXTERNAL) && defined(CONFIG_NRF_CLOUD_AGNSS)
@@ -370,16 +485,17 @@ struct location_cellular_config {
 	 *
 	 * Maximum value is 15.
 	 *
-	 * Zero indicates that only normal neighbor cell search is performed but no GCI search.
-	 *
-	 * If there are less than requested number of neighbor cells (including current cell),
-	 * GCI (surrounding) cells are requested also.
+	 * The number of cells mean GCI cells including current cell.
+	 * Normal neighbor cells are received and used but they do not count towards the cell count.
+	 * If the number of cells is bigger than one, GCI (surrounding) cells are requested.
+	 * Hence, zero and one mean that only normal neighbor cell search is performed
+	 * but no GCI search.
 	 *
 	 * Note that even if there are a lot of cells available, the number of cells
 	 * used for positioning may be lower than the requested number of cells due to
 	 * the behavior of the search algorithm. Also, the number of cells used for
 	 * positioning may be higher than the requested number of cells if there are
-	 * more neighbor cells (including current cell).
+	 * more cells in the history information (including current cell).
 	 */
 	uint8_t cell_count;
 };
@@ -493,19 +609,44 @@ struct location_config {
 typedef void (*location_event_handler_t)(const struct location_event_data *event_data);
 
 /**
+ * Register handler for location events.
+ *
+ * This function is not needed for clients that call location_init() and pass event handler into it.
+ *
+ * Multiple event handlers can be registered.
+ *
+ * @param[in] handler Event handler.
+ *
+ * @return 0 on success, or negative error code on failure.
+ * @retval -EINVAL The handler was a @c NULL pointer.
+ * @retval -ENOMEM Out of memory.
+ */
+int location_handler_register(location_event_handler_t handler);
+
+/**
+ * Deregister handler for location events.
+ *
+ * @param[in] handler Event handler.
+ *
+ * @return 0 on success, or negative error code on failure.
+ * @retval -EINVAL The handler was not found or it was a @c NULL pointer.
+ */
+int location_handler_deregister(location_event_handler_t handler);
+
+/**
  * @brief Initializes the library.
  *
  * @details Initializes the library and sets the event handler function.
  * The first call to this function must be called before going to LTE normal mode.
  * This can be called multiple times, which sets the event handler again.
  *
- * @param[in] event_handler Event handler function.
+ * @param[in] handler Event handler function.
  *
  * @return 0 on success, or negative error code on failure.
  * @retval -EINVAL Given event_handler is NULL.
  * @retval -EFAULT Failed to obtain Wi-Fi interface.
  */
-int location_init(location_event_handler_t event_handler);
+int location_init(location_event_handler_t handler);
 
 /**
  * @brief Requests the current position or starts periodic position updates.
@@ -563,6 +704,21 @@ void location_config_defaults_set(
  * @return Location method in string format. Returns "Unknown" if given method is not known.
  */
 const char *location_method_str(enum location_method method);
+
+/**
+ * @brief Get location data details from the location event data.
+ *
+ * @details The @ref location_data_details structure is located in a different place in the
+ * @ref location_event_data structure depending on the event ID. This is a helper function
+ * to provide the @ref location_data_details structure.
+ *
+ * @param[in] event_data Event data.
+ *
+ * @return Location data details. NULL if there is no @ref location_data_details structure
+ *         for the provided event.
+ */
+const struct location_data_details *location_details_get(
+	const struct location_event_data *event_data);
 
 /**
  * @brief Feed in A-GNSS data to be processed by library.

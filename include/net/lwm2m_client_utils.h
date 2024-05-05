@@ -48,7 +48,7 @@ typedef int (*modem_mode_cb_t)(enum lte_lc_func_mode new_mode, void *user_data);
  * @brief Callback used for querying permission from the app to proceed when modem's state changes
  *
  * @param cb        The callback function
- * @param user_data App specific data to be fed to the callback once it's called
+ * @param user_data App-specific data to be fed to the callback once it is called
  */
 struct modem_mode_change {
 	modem_mode_cb_t cb;
@@ -118,11 +118,6 @@ bool lwm2m_security_needs_bootstrap(void);
 
 #if defined(CONFIG_LWM2M_CLIENT_UTILS_DEVICE_OBJ_SUPPORT)
 /**
- * @brief Initialize Device object
- */
-int lwm2m_init_device(void);
-
-/**
  * @brief Reboot handler for a device object
  *
  * All arguments are ignored.
@@ -136,15 +131,6 @@ int lwm2m_init_device(void);
 int lwm2m_device_reboot_cb(uint16_t obj_inst_id, uint8_t *args, uint16_t args_len);
 #endif
 
-#if defined(CONFIG_LWM2M_CLIENT_UTILS_LOCATION_OBJ_SUPPORT)
-/**
- * @brief Initialize Location object
- */
-int lwm2m_init_location(void);
-#endif
-
-#if defined(CONFIG_LWM2M_CLIENT_UTILS_FIRMWARE_UPDATE_OBJ_SUPPORT)
-
 /** Firmware update callback events. */
 enum lwm2m_fota_event_id {
 	/** Download process started */
@@ -155,7 +141,7 @@ enum lwm2m_fota_event_id {
 	LWM2M_FOTA_UPDATE_IMAGE_REQ,
 	/** Request to reconnect the modem and LwM2M client*/
 	LWM2M_FOTA_UPDATE_MODEM_RECONNECT_REQ,
-	/** Fota process fail or cancelled  */
+	/** FOTA process fail or cancelled  */
 	LWM2M_FOTA_UPDATE_ERROR
 };
 
@@ -196,7 +182,7 @@ struct lwm2m_fota_update_failure {
 };
 
 struct lwm2m_fota_event {
-	/** Fota event ID and indicate used Data structure */
+	/** FOTA event ID and indicate used Data structure */
 	enum lwm2m_fota_event_id id;
 	union {
 		/** LWM2M_FOTA_DOWNLOAD_START */
@@ -253,13 +239,6 @@ typedef int (*lwm2m_firmware_event_cb_t)(struct lwm2m_fota_event *event);
 void *firmware_read_cb(uint16_t obj_inst_id, size_t *data_len);
 
 /**
- * @brief Initialize Firmware update utils library
- *
- * @return Zero if success, negative error code otherwise.
- */
-int lwm2m_init_firmware(void);
-
-/**
  * @brief Initialize Firmware update utils library with callback
  *
  * @param[in] cb A callback function to receive firmware update state changes.
@@ -274,58 +253,13 @@ int lwm2m_init_firmware_cb(lwm2m_firmware_event_cb_t cb);
  * @return Zero if success, negative error code otherwise.
  */
 int lwm2m_init_image(void);
-#endif
 
-#if defined(CONFIG_LWM2M_CLIENT_UTILS_CONN_MON_OBJ_SUPPORT)
-/**
- * @brief Initialize Connectivity Monitoring object. Called in SYS_INIT.
- *
- * @return Zero if success, negative error code otherwise.
- */
-int lwm2m_init_connmon(void);
-#endif
-
-#if defined(CONFIG_LWM2M_CLIENT_UTILS_CELL_CONN_OBJ_SUPPORT)
 #define LWM2M_OBJECT_CELLULAR_CONNECTIVITY_ID 10
-int lwm2m_init_cellular_connectivity_object(void);
-#endif
 
 enum lwm2m_rai_mode {
 	LWM2M_RAI_MODE_DISABLED	= 0,
 	LWM2M_RAI_MODE_ENABLED	= 1
 };
-
-/**
- * @brief Initialize release assistance indication (RAI) module.
- *
- * @return Zero if success, negative error code otherwise.
- */
-int lwm2m_init_rai(void);
-
-/**
- * @brief Set socket option SO_RAI_NO_DATA to bypass
- * RRC Inactivity period and immediately switch to Idle mode.
- *
- * @return Zero if success, negative error code otherwise.
- */
-int lwm2m_rai_no_data(void);
-
-/**
- * @brief Set socket option SO_RAI_LAST and send dummy packet to bypass
- * RRC Inactivity period and immediately switch to Idle mode.
- *
- * @return Zero if success, negative error code otherwise.
- */
-int lwm2m_rai_last(void);
-
-/**
- * @brief Get the RAI mode.
- *
- * @param mode Pointer to RAI mode variable.
- *
- * @return Zero if success, negative error code otherwise.
- */
-int lwm2m_rai_get(enum lwm2m_rai_mode *mode);
 
 /**
  * @brief Function for requesting modem to enable or disable
@@ -382,6 +316,23 @@ int lwm2m_utils_conneval(struct lwm2m_ctx *client, enum lwm2m_rd_client_event *c
 void lwm2m_utils_connection_manage(struct lwm2m_ctx *client,
 				      enum lwm2m_rd_client_event *client_event);
 
+/**
+ * @brief LwM2M utils RAI event handler.
+ *
+ * Handle registration of the socket state callback and enabling/disabling of Release Assistance
+ * Indication depending on the state of LwM2M client.
+ *
+ * This function should be called from an event handler registered to lwm2m_rd_client_start()
+ * before normal event handler part.
+ * This is called from lwm2m_utils_connection_manage() if that module is enabled. Otherwise
+ * application should call this directly.
+ *
+ * @param client LwM2M context.
+ * @param client_event event.
+ */
+void lwm2m_utils_rai_event_cb(struct lwm2m_ctx *client,
+				      enum lwm2m_rd_client_event *client_event);
+
 /* Advanced firmare object support */
 uint8_t lwm2m_adv_firmware_get_update_state(uint16_t obj_inst_id);
 void lwm2m_adv_firmware_set_update_state(uint16_t obj_inst_id, uint8_t state);
@@ -425,6 +376,18 @@ int lwm2m_adv_firmware_create_inst(const char *component,
 #define LWM2M_ADV_FOTA_CURRENT_VERSION_ID 15
 #define LWM2M_ADV_FOTA_LINKED_INSTANCES_ID 16
 #define LWM2M_ADV_FOTA_CONFLICTING_INSTANCES_ID 17
+
+/********** DEPRECATED FUNCTIONS *************/
+/** @deprecated */
+__deprecated static inline int lwm2m_init_firmware(void) {return lwm2m_init_firmware_cb(NULL); }
+/** @deprecated */
+__deprecated static inline int lwm2m_init_device(void) {return 0; }
+/** @deprecated */
+__deprecated static inline int lwm2m_init_cellular_connectivity_object(void) {return 0; }
+/** @deprecated */
+__deprecated static inline int lwm2m_init_connmon(void) {return 0; }
+/** @deprecated */
+__deprecated static inline int lwm2m_init_location(void) {return 0; }
 
 #ifdef __cplusplus
 }

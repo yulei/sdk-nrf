@@ -73,9 +73,9 @@ The following block of code shows how you can use the API to establish an LTE co
 
            printk("Connecting to LTE network. This may take a few minutes...\n");
 
-           err = lte_lc_init_and_connect_async(lte_handler);
+           err = lte_lc_connect_async(lte_handler);
            if (err) {
-                   printk("lte_lc_init_and_connect_async, error: %d\n", err);
+                   printk("lte_lc_connect_async, error: %d\n", err);
                    return 0;
            }
 
@@ -100,6 +100,8 @@ The following list mentions some of the information that can be extracted from t
 .. note::
    Some of the functionalities might not be compatible with certain modem firmware versions.
    To check if a desired feature is compatible with a certain modem firmware version, see the AT commands that are documented in the `nRF91x1 AT Commands Reference Guide`_  or `nRF9160 AT Commands Reference Guide`_ depending on the SiP you are using.
+
+.. _lte_lc_power_saving:
 
 Enabling power-saving features
 ==============================
@@ -127,8 +129,8 @@ Connection pre-evaluation
 
 Modem firmware version 1.3.0 and higher supports connection a pre-evaluation feature that allows the application to get information about a cell that is likely to be used for an RRC connection.
 Based on the parameters received in the function call, the application can decide whether to send application data or not.
-The function :func:`lte_lc_conn_eval_params_get` populates a structure of type :c:struct:`lte_lc_conn_eval_params` that includes information on the current consumption cost by the data transmission when utilizing the given cell.
-The following code block shows a basic implementation of :c:func:`lte_lc_conn_eval_params_get`:
+The function :c:func:`lte_lc_conn_eval_params_get` populates a structure of type :c:struct:`lte_lc_conn_eval_params` that includes information on the current consumption cost by the data transmission when utilizing the given cell.
+The following code snippet shows a basic implementation of :c:func:`lte_lc_conn_eval_params_get`:
 
 .. code-block:: c
 
@@ -140,9 +142,9 @@ The following code block shows a basic implementation of :c:func:`lte_lc_conn_ev
 
            printk("Connecting to LTE network. This may take a few minutes...\n");
 
-           err = lte_lc_init_and_connect_async(lte_handler);
+           err = lte_lc_connect_async(lte_handler);
            if (err) {
-                   printk("lte_lc_init_and_connect_async, error: %d\n", err);
+                   printk("lte_lc_connect_async, error: %d\n", err);
                    return 0;
            }
 
@@ -161,12 +163,12 @@ The following code block shows a basic implementation of :c:func:`lte_lc_conn_ev
            /* Continue execution... */
    }
 
-:c:struct:`lte_lc_conn_eval_params` lists all information that is available when performing connection pre-evaluation.
+The :c:struct:`lte_lc_conn_eval_params` structure lists all information that is available when performing connection pre-evaluation.
 
 Modem sleep and TAU pre-warning notifications
 =============================================
 
-Modem firmware version 1.3.0 and higher supports receiving callbacks from the modem related to Tracking Area Updates (TAU) and modem sleep.
+Modem firmware v1.3.0 and higher supports receiving callbacks from the modem related to Tracking Area Updates (TAU) and modem sleep.
 Based on these notifications, the application can alter its behavior to optimize for a given metric.
 
 For instance, TAU pre-warning notifications can be used to schedule data transfers before a TAU so that data transfer and TAU occurs within the same RRC connection window, thereby saving the potential overhead associated with the additional data exchange.
@@ -198,6 +200,12 @@ The library allows the application to define compile-time callbacks to receive t
 These callbacks allow any part of the application to perform certain operations when the modem enters or re-enters a certain functional mode using the library :c:func:`lte_lc_func_mode_set` API.
 For example, one kind of operation that the application or a library may need to perform and repeat, whenever the modem enters a certain functional mode is the subscription to AT notifications.
 The application can set up a callback for modem`s functional mode changes using the :c:macro:`LTE_LC_ON_CFUN` macro.
+
+.. important::
+   When the :c:macro:`LTE_LC_ON_CFUN` macro is used, the application must not call :c:func:`nrf_modem_at_cfun_handler_set` as that will override the handler set by the modem library integration layer.
+
+.. note::
+   The CFUN callback is not supported with :c:func:`nrf_modem_at_cmd_async`.
 
 The following code snippet shows how to use the :c:macro:`LTE_LC_ON_CFUN` macro:
 

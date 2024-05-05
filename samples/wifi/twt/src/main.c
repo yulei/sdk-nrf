@@ -11,6 +11,13 @@
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(twt, CONFIG_LOG_DEFAULT_LEVEL);
 
+#if defined(CONFIG_POSIX_API)
+#include <zephyr/posix/arpa/inet.h>
+#include <zephyr/posix/netdb.h>
+#include <zephyr/posix/unistd.h>
+#include <zephyr/posix/sys/socket.h>
+#endif
+
 #include <nrfx_clock.h>
 #include <zephyr/kernel.h>
 #include <stdio.h>
@@ -23,6 +30,8 @@ LOG_MODULE_REGISTER(twt, CONFIG_LOG_DEFAULT_LEVEL);
 #include <zephyr/net/wifi_mgmt.h>
 #include <zephyr/net/net_event.h>
 #include <zephyr/drivers/gpio.h>
+
+#include<net/wifi_mgmt_ext.h>
 
 #include "net_private.h"
 #include "traffic_gen.h"
@@ -151,7 +160,7 @@ static int cmd_wifi_status(void)
 		       wifi_mode_txt(status.iface_mode));
 		LOG_INF("Link Mode: %s",
 		       wifi_link_mode_txt(status.link_mode));
-		LOG_INF("SSID: %-32s", status.ssid);
+		LOG_INF("SSID: %.32s", status.ssid);
 		LOG_INF("BSSID: %s",
 		       net_sprint_ll_addr_buf(
 				status.bssid, WIFI_MAC_ADDR_LEN,
@@ -245,8 +254,13 @@ static void handle_wifi_twt_event(struct net_mgmt_event_callback *cb)
 		(const struct wifi_twt_params *)cb->info;
 
 	if (resp->operation == WIFI_TWT_TEARDOWN) {
-		LOG_INF("TWT teardown received for flow ID %d\n",
-		      resp->flow_id);
+		if (resp->teardown_status == WIFI_TWT_TEARDOWN_SUCCESS) {
+			LOG_INF("TWT teardown success received for flow ID %d\n",
+				resp->flow_id);
+		} else {
+			LOG_INF("TWT teardown failed for flow ID %d\n",
+				resp->flow_id);
+		}
 		return;
 	}
 
@@ -333,51 +347,14 @@ static void net_mgmt_event_handler(struct net_mgmt_event_callback *cb,
 	}
 }
 
-static int __wifi_args_to_params(struct wifi_connect_req_params *params)
-{
-	params->timeout =  CONFIG_STA_CONN_TIMEOUT_SEC * MSEC_PER_SEC;
-
-	if (params->timeout == 0) {
-		params->timeout = SYS_FOREVER_MS;
-	}
-
-	/* SSID */
-	params->ssid = CONFIG_TWT_SAMPLE_SSID;
-	params->ssid_length = strlen(params->ssid);
-
-#if defined(CONFIG_TWT_STA_KEY_MGMT_WPA2)
-	params->security = 1;
-#elif defined(CONFIG_TWT_STA_KEY_MGMT_WPA2_256)
-	params->security = 2;
-#elif defined(CONFIG_TWT_STA_KEY_MGMT_WPA3)
-	params->security = 3;
-#else
-	params->security = 0;
-#endif
-
-#if !defined(CONFIG_TWT_STA_KEY_MGMT_NONE)
-	params->psk = CONFIG_TWT_SAMPLE_PASSWORD;
-	params->psk_length = strlen(params->psk);
-#endif
-	params->channel = WIFI_CHANNEL_ANY;
-
-	/* MFP (optional) */
-	params->mfp = WIFI_MFP_OPTIONAL;
-
-	return 0;
-}
-
 static int wifi_connect(void)
 {
-	struct net_if *iface = net_if_get_default();
-	static struct wifi_connect_req_params cnx_params;
+	struct net_if *iface = net_if_get_first_wifi();
 
 	context.connected = false;
 	context.connect_result = false;
-	__wifi_args_to_params(&cnx_params);
 
-	if (net_mgmt(NET_REQUEST_WIFI_CONNECT, iface,
-				&cnx_params, sizeof(struct wifi_connect_req_params))) {
+	if (net_mgmt(NET_REQUEST_WIFI_CONNECT_STORED, iface, NULL, 0)) {
 		LOG_ERR("Connection request failed");
 
 		return -ENOEXEC;

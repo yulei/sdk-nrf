@@ -230,6 +230,20 @@ int nrf_cloud_rest_log_send(struct nrf_cloud_rest_context *ctx, const char *dev_
 #if defined(CONFIG_NRF_CLOUD_COAP)
 int nrf_cloud_log_send(int log_level, const char *fmt, ...)
 {
+	va_list ap;
+	int err;
+
+	if ((log_level > nrf_cloud_log_level) || !enabled) {
+		return 0;
+	}
+
+#if defined(CONFIG_NRF_CLOUD_LOG_BACKEND)
+	/* Cloud logging backend is enabled, so send it through the main logging system. */
+	va_start(ap, fmt);
+	log_inject(log_level, fmt, ap);
+	va_end(ap);
+	err = 0;
+#else
 	struct nrf_cloud_log_context context = {0};
 	char buf[CONFIG_NRF_CLOUD_LOG_BUF_SIZE];
 	struct nrf_cloud_tx_data output = {
@@ -237,12 +251,6 @@ int nrf_cloud_log_send(int log_level, const char *fmt, ...)
 		.qos = MQTT_QOS_0_AT_MOST_ONCE,
 		.topic_type = NRF_CLOUD_TOPIC_MESSAGE
 	};
-	va_list ap;
-	int err;
-
-	if ((log_level > nrf_cloud_log_level) || !enabled) {
-		return 0;
-	}
 
 	/* Send it directly to the cloud. */
 	va_start(ap, fmt);
@@ -257,14 +265,15 @@ int nrf_cloud_log_send(int log_level, const char *fmt, ...)
 		LOG_INF("Failed to take semaphore");
 		return err; /* Caller should try again; busy or other error */
 	}
-	err = nrf_cloud_coap_json_message_send(output.data.ptr);
+	err = nrf_cloud_coap_json_message_send(output.data.ptr, false, true);
 	k_sem_give(&ncl_active);
 	nrf_cloud_free((void *)output.data.ptr);
 
 	if (err) {
 		LOG_ERR("Error sending log:%d", err);
 	}
-	return 0;
+#endif /* CONFIG_NRF_CLOUD_LOG_BACKEND */
+	return err;
 }
 #endif /* CONFIG_NRF_CLOUD_COAP */
 #endif /* CONFIG_NRF_CLOUD_LOG_DIRECT */
@@ -309,14 +318,10 @@ bool nrf_cloud_log_is_enabled(void)
 
 bool nrf_cloud_is_text_logging_enabled(void)
 {
-	return (IS_ENABLED(CONFIG_NRF_CLOUD_LOG_BACKEND) &&
-		IS_ENABLED(CONFIG_LOG_BACKEND_NRF_CLOUD_OUTPUT_TEXT)) ||
-		(IS_ENABLED(CONFIG_NRF_CLOUD_LOG_DIRECT) &&
-		 !IS_ENABLED(CONFIG_LOG_BACKEND_NRF_CLOUD_OUTPUT_DICTIONARY));
+	return IS_ENABLED(CONFIG_NRF_CLOUD_LOG_TEXT_LOGGING_ENABLED);
 }
 
 bool nrf_cloud_is_dict_logging_enabled(void)
 {
-	return IS_ENABLED(CONFIG_NRF_CLOUD_LOG_BACKEND) &&
-	       IS_ENABLED(CONFIG_LOG_BACKEND_NRF_CLOUD_OUTPUT_DICTIONARY);
+	return IS_ENABLED(CONFIG_NRF_CLOUD_LOG_DICTIONARY_LOGGING_ENABLED);
 }

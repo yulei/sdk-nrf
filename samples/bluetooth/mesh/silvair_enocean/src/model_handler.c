@@ -3,6 +3,7 @@
  *
  * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
+
 /**
  * @file
  * @brief Model handler for the Silvair EnOcean sample.
@@ -86,13 +87,13 @@ static void attention_blink(struct k_work *work)
 	}
 }
 
-static void attention_on(struct bt_mesh_model *mod)
+static void attention_on(const struct bt_mesh_model *mod)
 {
 	attention = true;
 	k_work_reschedule(&attention_blink_work, K_NO_WAIT);
 }
 
-static void attention_off(struct bt_mesh_model *mod)
+static void attention_off(const struct bt_mesh_model *mod)
 {
 	/* Will stop rescheduling blink timer */
 	attention = false;

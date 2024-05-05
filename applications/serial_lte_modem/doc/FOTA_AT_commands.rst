@@ -7,7 +7,7 @@ FOTA AT commands
    :local:
    :depth: 2
 
-The following commands list contains AT commands related to firmware-over-the-air updates (FOTA) requests.
+This page describes AT commands related to Firmware Over-The-Air (FOTA) updates.
 
 FOTA request #XFOTA
 ===================
@@ -28,11 +28,16 @@ Syntax
 
 * The ``<op>`` parameter must be one of the following values:
 
-  * ``0`` - Cancel FOTA (during download only).
+  * ``0`` - Stop FOTA (during download only).
+    Can be used as a way to pause and resume the download, by issuing the same FOTA start command to resume.
   * ``1`` - Start FOTA for application update.
   * ``2`` - Start FOTA for modem delta update.
   * ``3`` - Start FOTA for full modem update.
     Can only be used when the :file:`overlay-full_fota.conf` configuration file is used.
+
+    Not supported on the :ref:`Thingy:91 <thingy91_ug_intro>` or nRF9160 DK board revisions older than 0.14.0 as they lack an external flash to store the firmware image.
+    See :ref:`nrf9160_board_revisions` for more details.
+
   * ``7`` - Read modem DFU area size and firmware image offset (for modem delta update).
   * ``9`` - Erase modem DFU area (for modem delta update).
 
@@ -58,7 +63,7 @@ Syntax
    The firmware image is stored in external flash memory during a full modem update.
    The external flash is erased automatically after a new firmware activation.
 
-    Activating the new full modem firmware is done identically to a modem delta update, by resetting either the whole device or only the modem.
+   Activating the new modem firmware is done identically to a modem delta update, by resetting either the whole device or only the modem.
 
 Response syntax
 ~~~~~~~~~~~~~~~
@@ -109,7 +114,7 @@ Example
    #XFOTA: 294912,2621440
    OK
 
-   erase modem DFU area for next modem FOTA (optional)
+   erase modem DFU area for next modem delta update (optional)
    AT#XFOTA=9
    OK
 
@@ -124,8 +129,8 @@ Unsolicited notification
 
   * ``0`` - Init
   * ``1`` - Download
-  * ``2`` - Download, erase pending (modem FOTA only)
-  * ``3`` - Download, erased (modem FOTA only)
+  * ``2`` - Download, erase pending (modem delta update only)
+  * ``3`` - Download, erase complete (modem delta update only)
   * ``4`` - Downloaded, to be activated
   * ``5`` - Complete
 

@@ -45,9 +45,17 @@ enum net_event_wpa_supp_cmd {
 #define NET_EVENT_WPA_SUPP_INT_EVENT					\
 	(_NET_MGMT_WPA_SUPP_EVENT | NET_EVENT_WPA_SUPP_CMD_INT_EVENT)
 
+int send_wifi_mgmt_conn_event(void *ctx, int status_code);
+int send_wifi_mgmt_disc_event(void *ctx, int reason_code);
 int send_wifi_mgmt_event(const char *ifname, enum net_event_wifi_cmd event, void *status,
 			size_t len);
 int generate_supp_state_event(const char *ifname, enum net_event_wpa_supp_cmd event, int status);
+#ifdef CONFIG_AP
+int send_wifi_mgmt_ap_status(void *ctx,
+		enum net_event_wifi_cmd event, enum wifi_ap_status);
+int send_wifi_mgmt_ap_sta_event(void *ctx,
+		enum net_event_wifi_cmd event, void *data);
+#endif /* CONFIG_AP */
 
 #define REASON_CODE_LEN 18
 #define NM_WIFI_EVENT_STR_LEN 64

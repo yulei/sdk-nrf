@@ -16,12 +16,17 @@ target_include_directories(app
         PRIVATE
         ${ZEPHYR_NRF_MODULE_DIR}/include/net/
         ${ZEPHYR_BASE}/subsys/net/ip/
+        ${ZEPHYR_BASE}/subsys/net/lib/sockets
         src/
         )
 
 add_library(download_client STATIC
         ${ZEPHYR_NRF_MODULE_DIR}/subsys/net/lib/download_client/src/download_client.c
         ${ZEPHYR_NRF_MODULE_DIR}/subsys/net/lib/download_client/src/parse.c
+        )
+target_include_directories(download_client
+        PRIVATE
+        ${ZEPHYR_NRF_MODULE_DIR}/subsys/net/lib/download_client/include
         )
 
 target_link_libraries(download_client PUBLIC zephyr_interface)

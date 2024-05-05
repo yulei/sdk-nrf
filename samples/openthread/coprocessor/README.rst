@@ -10,7 +10,7 @@ Thread: Co-processor
 The :ref:`Thread <ug_thread>` Co-processor sample demonstrates how to implement OpenThread's :ref:`thread_architectures_designs_cp` inside the Zephyr environment.
 The sample uses the :ref:`thread_architectures_designs_cp_rcp` architecture.
 
-The sample is based on Zephyr's :ref:`zephyr:coprocessor-sample` sample.
+The sample is based on Zephyr's :zephyr:code-sample:`coprocessor` sample.
 However, it customizes Zephyr's sample to fulfill the |NCS| requirements (for example, by increasing the stack size dedicated for the user application), and also extends it with features such as:
 
 * Increased Mbed TLS heap size.
@@ -20,7 +20,7 @@ However, it customizes Zephyr's sample to fulfill the |NCS| requirements (for ex
 * Thread 1.2 features.
 
 This sample supports optional :ref:`logging extension <ot_coprocessor_sample_logging>`, which can be turned on or off independently.
-See :ref:`ot_coprocessor_sample_config_files` for details.
+See :ref:`ot_coprocessor_sample_activating_variants` for details.
 
 Requirements
 ************
@@ -43,7 +43,7 @@ The sample demonstrates using a co-processor target on the MCU to communicate wi
 According to the co-processor architecture, the MCU part must cooperate with user higher layer process to establish the complete full stack application.
 The sample shows how to set up the connection between the co-processor and the host.
 
-This sample comes with the :ref:`full set of OpenThread functionalities <thread_ug_feature_sets>` enabled (:kconfig:option:`CONFIG_OPENTHREAD_NORDIC_LIBRARY_MASTER`).
+By default, this sample comes with the :ref:`RCP set of OpenThread functionalities <thread_ug_feature_sets>` enabled (:kconfig:option:`CONFIG_OPENTHREAD_NORDIC_LIBRARY_RCP`).
 
 .. _ot_coprocessor_sample_logging:
 
@@ -56,7 +56,7 @@ Moreover, using the Spinel logging backend (by setting :kconfig:option:`CONFIG_L
 
 By default, the log levels for all modules are set to critical to not engage the microprocessor in unnecessary activities.
 To make the solution flexible, you can change independently the log levels for your modules, for the whole Zephyr system, and for OpenThread.
-Use the :file:`overlay-logging.conf` overlay file as reference for this purpose.
+Use the :file:`logging.conf` configuration file located in the :file:`snippets/logging/` directory as reference for this purpose.
 
 User interface
 **************
@@ -78,6 +78,13 @@ Diagnostic module
 The Co-processor sample enables a diagnostic module in a similar way as described in the :ref:`ot_cli_sample_diag_module` section of the :ref:`ot_cli_sample` sample documentation.
 However, the Co-processor and CLI samples use different commands for the module, as described in the :ref:`ot_coprocessor_testing` section.
 
+Rebooting to bootloader
+=======================
+
+The Co-processor sample enables rebooting to bootloader for the ``nrf52840dongle_nrf52840`` build target, similar to what is described in the :ref:`ot_cli_sample_bootloader` section of the :ref:`ot_cli_sample` sample documentation.
+However, the Co-processor and CLI samples use different commands, as described in the :ref:`ot_coprocessor_testing` section.
+Additionally, the :ref:`ug_thread_tools_ot_apps` should be built with ``-DOT_PLATFORM_BOOTLOADER_MODE=ON`` option.
+
 Configuration
 *************
 
@@ -87,23 +94,20 @@ Check and configure the following library option that is used by the sample:
 
 * :kconfig:option:`CONFIG_OPENTHREAD_COPROCESSOR_RCP` - Selects the RCP architecture for the sample.
 
-.. _ot_coprocessor_sample_config_files:
+.. _ot_coprocessor_sample_activating_variants:
 
-Configuration files
-===================
+Snippets
+========
 
-The sample provides predefined configuration files for typical use cases, and to activate sample extensions.
-You can find the configuration files in the root directory of the sample.
+.. include:: /includes/sample_snippets.txt
 
-Specify the corresponding file names in the :makevar:`OVERLAY_CONFIG` option when building.
-See :ref:`cmake_options` for instructions on how to add this option.
-For more information about using configuration overlay files, see :ref:`zephyr:important-build-vars` in the Zephyr documentation.
+The following snippets are available:
 
-The following configuration files are available:
-
-* :file:`overlay-logging.conf` - Enables logging using RTT.
+* ``debug`` - Enables debugging the Thread sample by enabling :c:func:`__ASSERT()` statements globally.
+* ``logging`` - Enables logging using RTT.
   For additional options, refer to :ref:`RTT logging <ug_logging_backends_rtt>`.
-* :file:`overlay-usb.conf` - Enables emulating a serial port over USB for Spinel communication with the host. Additionally, you need to set :makevar:`DTC_OVERLAY_FILE` to :file:`usb.overlay`.
+* ``usb`` - Enables emulating a serial port over USB for Spinel communication with the host.
+* ``hci`` - Enables support for the Bluetooth HCI interface parallel to :ref:`Thread RCP <thread_architectures_designs_cp_rcp>`.
 
 FEM support
 ===========
@@ -121,15 +125,25 @@ Building and running
 
 .. _ot_coprocessor_testing:
 
+HCI support
+===========
+
+Currently, HCI is only supported using the nRF USB interface.
+The device will show two virtual UART ports.
+Usually the first port will be associated with the HCI interface, and the second one with the Thread co-processor.
+
 Testing
 =======
 
 After building the sample and programming it to your development kit, complete the following steps to test it:
 
 1. Connect the development kit's SEGGER J-Link USB port to the PC USB port with a USB cable.
+   If you are using HCI, connect the kit's nRF USB port to the PC USB port instead.
 #. Get the kit's serial port name (for example, :file:`/dev/ttyACM0`).
 #. Run and configure ot-cli as described in :ref:`ug_thread_tools_ot_apps`.
 #. From this point, you can follow the :ref:`ot_cli_sample_testing` instructions in the CLI sample by removing the `ot` prefix for each command.
+   If you are using HCI, follow the instructions for the :ref:`zephyr:bluetooth-hci-uart-sample` sample in the Zephyr documentation.
+   You can follow these instead of or in addition to the CLI sample instructions.
 
 Dependencies
 ************
@@ -145,3 +159,5 @@ This sample uses the following Zephyr libraries:
 * :ref:`zephyr:logging_api`:
 
   * ``include/logging/log.h``
+
+* :ref:`zephyr:bluetooth-hci`

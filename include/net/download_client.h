@@ -53,16 +53,22 @@ enum download_client_evt_id {
 	 * - EPROTONOSUPPORT: Protocol is not supported
 	 * - EINVAL: Invalid configuration
 	 * - EAFNOSUPPORT: Unsupported address family (IPv4/IPv6)
+	 * - EHOSTUNREACH: Failed to resolve the target address
 	 *
 	 * In case of errors on the socket during send() or recv() (ECONNRESET),
 	 * returning zero from the callback will let the library attempt
 	 * to reconnect to the server and download the last fragment again.
 	 * Otherwise, the application may return any non-zero value
-	 * to stop the download.
+	 * to stop the download. On any other error code than ECONNRESET, the client
+	 * will not attempt to reconnect and ignores the return value.
 	 *
-	 * In case the download is stopped, the application should manually
-	 * disconnect (@ref download_client_disconnect) to clean up the
-	 * network socket as necessary before re-attempting the download.
+	 * In case the download is stopped, and it was started using @ref download_client_get,
+	 * the download client automatically closes the connection. The application should wait for
+	 * DOWNLOAD_CLIENT_EVT_CLOSED before attempting another download.
+	 * If download is stopped, and it was started using @ref download_client_start
+	 * the application should manually disconnect (@ref download_client_disconnect)
+	 * to clean up the network socket and wait for DOWNLOAD_CLIENT_EVT_CLOSED before attempting
+	 * another download.
 	 */
 	DOWNLOAD_CLIENT_EVT_ERROR,
 	/** Download complete. */
@@ -97,6 +103,7 @@ struct download_client_evt {
 struct download_client_cfg {
 	/** TLS security tag list.
 	 *  Pass NULL to disable TLS.
+	 * The list must be kept in scope while download is going on.
 	 */
 	const int *sec_tag_list;
 	/** Number of TLS security tags in list.
@@ -108,6 +115,11 @@ struct download_client_cfg {
 	 * Zero is the default PDN.
 	 */
 	uint8_t pdn_id;
+	/**
+	 * Address family to be used for the download, AF_INET6 or AF_INET.
+	 * Set to AF_UNSPEC (0) to fallback to AF_INET if AF_INET6 does not work.
+	 */
+	int family;
 	/** Maximum fragment size to download. 0 indicates that values
 	 * configured using Kconfig shall be used.
 	 */
@@ -155,9 +167,13 @@ struct download_client {
 	/** Download progress, number of bytes downloaded. */
 	size_t progress;
 
-	/** Server hosting the file, null-terminated. */
+	/** Server hosting the file, null-terminated.
+	 *  The host name must be kept in scope while download is going on.
+	 */
 	const char *host;
-	/** File name, null-terminated. */
+	/** File name, null-terminated.
+	 *  The file name must be kept in scope while download is going on.
+	 */
 	const char *file;
 	/** Configuration options. */
 	struct download_client_cfg config;
@@ -208,7 +224,7 @@ struct download_client {
 		DOWNLOAD_CLIENT_IDLE,
 		DOWNLOAD_CLIENT_CONNECTING,
 		DOWNLOAD_CLIENT_DOWNLOADING,
-		DOWNLOAD_CLIENT_FINNISHED,
+		DOWNLOAD_CLIENT_FINISHED,
 		DOWNLOAD_CLIENT_CLOSING
 	} state;
 };
@@ -256,6 +272,7 @@ int download_client_set_host(struct download_client *client, const char *host,
  */
 __deprecated int download_client_connect(struct download_client *client, const char *host,
 			    const struct download_client_cfg *config);
+
 /**
  * @brief Download a file.
  *
@@ -274,6 +291,7 @@ __deprecated int download_client_connect(struct download_client *client, const c
  */
 int download_client_start(struct download_client *client, const char *file,
 			  size_t from);
+
 /**
  * @brief Retrieve the size of the file being downloaded, in bytes.
  *
@@ -285,6 +303,18 @@ int download_client_start(struct download_client *client, const char *file,
  * @retval int Zero on success, a negative error code otherwise.
  */
 int download_client_file_size_get(struct download_client *client, size_t *size);
+
+/**
+ * @brief Retrieve the number of bytes downloaded so far.
+ *
+ * The progress is only available after the download has begun.
+ *
+ * @param[in]  client	Client instance.
+ * @param[out] size	Number of bytes downloaded so far.
+ *
+ * @retval int Zero on success, a negative error code otherwise.
+ */
+int download_client_downloaded_size_get(struct download_client *client, size_t *size);
 
 /**
  * @brief Initiate disconnection.
@@ -309,7 +339,7 @@ int download_client_disconnect(struct download_client *client);
  * separate calls to download_client_set_host(), download_client_start()
  * and download_client_disconnect().
  *
- * Downloads are handled one at a time. If previous download is not finnished
+ * Downloads are handled one at a time. If previous download is not finished
  * this returns -EALREADY.
  *
  * The download is carried out in fragments of up to

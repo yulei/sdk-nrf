@@ -1,13 +1,13 @@
 .. _bluetooth_mesh_light:
 
-Bluetooth mesh: Light
+Bluetooth Mesh: Light
 #####################
 
 .. contents::
    :local:
    :depth: 2
 
-The Bluetooth® mesh light sample demonstrates how to set up a mesh server model application, and control LEDs with Bluetooth mesh using the :ref:`bt_mesh_onoff_readme`.
+The Bluetooth® Mesh light sample demonstrates how to set up a mesh server model application, and control LEDs with Bluetooth Mesh using the :ref:`bt_mesh_onoff_readme`.
 
 .. note::
    This sample is self-contained, and can be tested on its own.
@@ -37,8 +37,9 @@ DFU requirements
 
 The configuration overlay :file:`overlay-dfu.conf` enables DFU support in the application, and applies for the following platforms:
 
-* nrf52840dk_nrf52840
-* nrf21540dk_nrf52840
+* nrf52840dk/nrf52840
+* nrf21540dk/nrf52840
+* nrf54l15pdk/nrf54l15/cpuapp
 
 While this overlay configuration is only applicable for the mentioned platforms in this sample, DFU over Bluetooth Low Energy may be used on other platforms as well.
 
@@ -64,7 +65,7 @@ The sample instantiates up to four instances of the Generic OnOff Server model f
 The number of OnOff Server instances depends on available LEDs, as defined in board DTS file.
 
 Provisioning is performed using the `nRF Mesh mobile app`_.
-This mobile application is also used to configure key bindings, and publication and subscription settings of the Bluetooth mesh model instances in the sample.
+This mobile application is also used to configure key bindings, and publication and subscription settings of the Bluetooth Mesh model instances in the sample.
 After provisioning and configuring the mesh models supported by the sample in the `nRF Mesh mobile app`_, you can control the LEDs on the development kit from the app.
 
 Provisioning
@@ -131,12 +132,12 @@ This sample is split into the following source files:
 DFU configuration
 =================
 
-To enable the DFU feature for the supported nRF52 Series development kits, set :makevar:`OVERLAY_CONFIG` to :file:`overlay-dfu.conf` when building the sample.
+To enable the DFU feature for the supported development kits, set :makevar:`EXTRA_CONF_FILE` to :file:`overlay-dfu.conf` when building the sample.
 For example, when building from the command line, use the following command:
 
   .. code-block:: console
 
-     west build -b <BOARD> -p -- -DOVERLAY_CONFIG="overlay-dfu.conf"
+     west build -b <BOARD> -p -- -DEXTRA_CONF_FILE="overlay-dfu.conf"
 
 The configuration overlay :file:`overlay-dfu.conf` enables the DFU feature.
 To review the required configuration alterations, open and inspect the :file:`overlay-dfu.conf` file.

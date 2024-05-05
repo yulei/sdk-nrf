@@ -21,40 +21,14 @@
 extern "C" {
 #endif
 
-static inline const struct bt_mesh_sensor_format *
-prop_format_get(enum bt_mesh_light_ctrl_prop id)
-{
-	switch (id) {
-	case BT_MESH_LIGHT_CTRL_PROP_ILLUMINANCE_ON:
-	case BT_MESH_LIGHT_CTRL_PROP_ILLUMINANCE_PROLONG:
-	case BT_MESH_LIGHT_CTRL_PROP_ILLUMINANCE_STANDBY:
-		return &bt_mesh_sensor_format_illuminance;
-	case BT_MESH_LIGHT_CTRL_PROP_LIGHTNESS_ON:
-	case BT_MESH_LIGHT_CTRL_PROP_LIGHTNESS_PROLONG:
-	case BT_MESH_LIGHT_CTRL_PROP_LIGHTNESS_STANDBY:
-		return &bt_mesh_sensor_format_perceived_lightness;
-	case BT_MESH_LIGHT_CTRL_PROP_REG_ACCURACY:
-		return &bt_mesh_sensor_format_percentage_8;
-	case BT_MESH_LIGHT_CTRL_PROP_TIME_FADE_PROLONG:
-	case BT_MESH_LIGHT_CTRL_PROP_TIME_FADE_ON:
-	case BT_MESH_LIGHT_CTRL_PROP_TIME_FADE_STANDBY_AUTO:
-	case BT_MESH_LIGHT_CTRL_PROP_TIME_FADE_STANDBY_MANUAL:
-	case BT_MESH_LIGHT_CTRL_PROP_TIME_OCCUPANCY_DELAY:
-	case BT_MESH_LIGHT_CTRL_PROP_TIME_PROLONG:
-	case BT_MESH_LIGHT_CTRL_PROP_TIME_ON:
-		return &bt_mesh_sensor_format_time_millisecond_24;
-	default:
-		return NULL;
-	}
-}
-
+#ifdef CONFIG_BT_MESH_SENSOR_USE_LEGACY_SENSOR_VALUE
 static inline int prop_encode(struct net_buf_simple *buf,
 			      enum bt_mesh_light_ctrl_prop id,
 			      const struct sensor_value *val)
 {
 	const struct bt_mesh_sensor_format *format;
 
-	format = prop_format_get(id);
+	format = bt_mesh_lc_prop_format_get(id);
 	if (!format) {
 		return -ENOENT;
 	}
@@ -68,13 +42,14 @@ static inline int prop_decode(struct net_buf_simple *buf,
 {
 	const struct bt_mesh_sensor_format *format;
 
-	format = prop_format_get(id);
+	format = bt_mesh_lc_prop_format_get(id);
 	if (!format) {
 		return -ENOENT;
 	}
 
 	return sensor_ch_decode(buf, format, val);
 }
+#endif
 
 #ifdef __cplusplus
 }

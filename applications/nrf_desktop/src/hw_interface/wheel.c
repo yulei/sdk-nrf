@@ -13,9 +13,7 @@
 #include <zephyr/drivers/sensor.h>
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/pm/device.h>
-#ifdef CONFIG_PINCTRL
 #include <pinctrl_soc.h>
-#endif
 
 #include <app_event_manager.h>
 #include "wheel_event.h"
@@ -27,7 +25,7 @@
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(MODULE, CONFIG_DESKTOP_WHEEL_LOG_LEVEL);
 
-
+#define PINS_PER_GPIO_PORT	32
 #define SENSOR_IDLE_TIMEOUT \
 	(CONFIG_DESKTOP_WHEEL_SENSOR_IDLE_TIMEOUT * MSEC_PER_SEC) /* ms */
 
@@ -39,32 +37,32 @@ enum state {
 	STATE_SUSPENDED
 };
 
-#ifdef CONFIG_PINCTRL
+#if DT_NODE_HAS_STATUS(DT_ALIAS(nrfdesktop_wheel_qdec), okay)
+  #define QDEC_DT_NODE_ID	DT_ALIAS(nrfdesktop_wheel_qdec)
+#elif DT_NODE_HAS_STATUS(DT_NODELABEL(qdec), okay)
+  #define QDEC_DT_NODE_ID	DT_NODELABEL(qdec)
+#else
+  #error DT node for QDEC must be specified.
+#endif
+
 #define QDEC_PIN_INIT(node_id, prop, idx) \
 	NRF_GET_PIN(DT_PROP_BY_IDX(node_id, prop, idx)),
 
 /* obtan qdec pins from default state */
 static const uint32_t qdec_pin[] = {
 	DT_FOREACH_CHILD_VARGS(
-		DT_PINCTRL_BY_NAME(DT_NODELABEL(qdec), default, 0),
+		DT_PINCTRL_BY_NAME(QDEC_DT_NODE_ID, default, 0),
 		DT_FOREACH_PROP_ELEM, psels, QDEC_PIN_INIT
 	)
 };
-#else
-static const uint32_t qdec_pin[] = {
-	DT_PROP(DT_NODELABEL(qdec), a_pin),
-	DT_PROP(DT_NODELABEL(qdec), b_pin)
-};
-#endif
 
 static const struct sensor_trigger qdec_trig = {
 	.type = SENSOR_TRIG_DATA_READY,
 	.chan = SENSOR_CHAN_ROTATION,
 };
 
-static const struct device *qdec_dev = DEVICE_DT_GET(DT_NODELABEL(qdec));
-static const struct device *const gpio_dev = DEVICE_DT_GET(DT_NODELABEL(gpio0));
-static struct gpio_callback gpio_cbs[2];
+static const struct device *qdec_dev = DEVICE_DT_GET(QDEC_DT_NODE_ID);
+static struct gpio_callback gpio_cbs[ARRAY_SIZE(qdec_pin)];
 static struct k_spinlock lock;
 static struct k_work_delayable idle_timeout;
 static bool qdec_triggered;
@@ -72,6 +70,39 @@ static enum state state;
 
 static int enable_qdec(enum state next_state);
 
+
+static const struct device *map_gpio_port(int pin_number)
+{
+	__ASSERT_NO_MSG(pin_number >= 0);
+
+	size_t port_idx = pin_number / PINS_PER_GPIO_PORT;
+	const struct device *dev = NULL;
+
+	switch (port_idx) {
+	case 0:
+		dev = DEVICE_DT_GET_OR_NULL(DT_NODELABEL(gpio0));
+		break;
+
+	case 1:
+		dev = DEVICE_DT_GET_OR_NULL(DT_NODELABEL(gpio1));
+		break;
+
+	default:
+		break;
+	}
+
+	/* Assert proper configuration. */
+	__ASSERT_NO_MSG(dev);
+
+	return dev;
+}
+
+static gpio_pin_t map_gpio_pin(int pin_number)
+{
+	__ASSERT_NO_MSG(pin_number >= 0);
+
+	return pin_number % PINS_PER_GPIO_PORT;
+}
 
 static void data_ready_handler(const struct device *dev, const struct sensor_trigger *trig)
 {
@@ -120,8 +151,11 @@ static int wakeup_int_ctrl_nolock(bool enable)
 	 * being fired before others are still not set up.
 	 */
 	for (size_t i = 0; (i < ARRAY_SIZE(qdec_pin)) && !err; i++) {
+		const struct device *port = map_gpio_port(qdec_pin[i]);
+		gpio_pin_t pin = map_gpio_pin(qdec_pin[i]);
+
 		if (enable) {
-			int val = gpio_pin_get_raw(gpio_dev, qdec_pin[i]);
+			int val = gpio_pin_get_raw(port, pin);
 
 			if (val < 0) {
 				LOG_ERR("Cannot read pin %zu", i);
@@ -129,12 +163,11 @@ static int wakeup_int_ctrl_nolock(bool enable)
 				continue;
 			}
 
-			err = gpio_pin_interrupt_configure(gpio_dev,
-				qdec_pin[i],
-				val ? GPIO_INT_LEVEL_LOW : GPIO_INT_LEVEL_HIGH);
+			err = gpio_pin_interrupt_configure(port, pin,
+							   val ? GPIO_INT_LEVEL_LOW :
+								 GPIO_INT_LEVEL_HIGH);
 		} else {
-			err = gpio_pin_interrupt_configure(gpio_dev, qdec_pin[i],
-							   GPIO_INT_DISABLE);
+			err = gpio_pin_interrupt_configure(port, pin, GPIO_INT_DISABLE);
 		}
 
 		if (err) {
@@ -183,23 +216,27 @@ static void wakeup_cb(const struct device *gpio_dev, struct gpio_callback *cb,
 
 static int setup_wakeup(void)
 {
-	int err = gpio_pin_configure(gpio_dev,
-				     DT_PROP(DT_NODELABEL(qdec), enable_pin),
-				     GPIO_OUTPUT);
+	int enable_pin = DT_PROP(QDEC_DT_NODE_ID, enable_pin);
+	const struct device *port = map_gpio_port(enable_pin);
+	gpio_pin_t pin = map_gpio_pin(enable_pin);
+
+	int err = gpio_pin_configure(port, pin, GPIO_OUTPUT);
 	if (err) {
 		LOG_ERR("Cannot configure enable pin");
 		return err;
 	}
 
-	err = gpio_pin_set_raw(gpio_dev,
-			       DT_PROP(DT_NODELABEL(qdec), enable_pin), 0);
+	err = gpio_pin_set_raw(port, pin, 0);
 	if (err) {
 		LOG_ERR("Failed to set enable pin");
 		return err;
 	}
 
 	for (size_t i = 0; i < ARRAY_SIZE(qdec_pin); i++) {
-		err = gpio_pin_configure(gpio_dev, qdec_pin[i], GPIO_INPUT);
+		const struct device *port = map_gpio_port(qdec_pin[i]);
+		gpio_pin_t pin = map_gpio_pin(qdec_pin[i]);
+
+		err = gpio_pin_configure(port, pin, GPIO_INPUT);
 
 		if (err) {
 			LOG_ERR("Cannot configure pin %zu", i);
@@ -311,20 +348,23 @@ static int init(void)
 		return -ENODEV;
 	}
 
-	if (!device_is_ready(gpio_dev)) {
-		LOG_ERR("GPIO device not ready");
-		return -ENODEV;
-	}
-
-	BUILD_ASSERT(ARRAY_SIZE(qdec_pin) == ARRAY_SIZE(gpio_cbs),
-		      "Invalid array size");
 	int err = 0;
 
 	for (size_t i = 0; (i < ARRAY_SIZE(qdec_pin)) && !err; i++) {
-		gpio_init_callback(&gpio_cbs[i], wakeup_cb, BIT(qdec_pin[i]));
-		err = gpio_add_callback(gpio_dev, &gpio_cbs[i]);
-		if (err) {
-			LOG_ERR("Cannot configure cb (pin:%zu)", i);
+		const struct device *port = map_gpio_port(qdec_pin[i]);
+		gpio_pin_t pin = map_gpio_pin(qdec_pin[i]);
+
+		if (!device_is_ready(port)) {
+			LOG_ERR("GPIO port %p not ready", (void *)port);
+			err = -ENODEV;
+		}
+
+		if (!err) {
+			gpio_init_callback(&gpio_cbs[i], wakeup_cb, BIT(pin));
+			err = gpio_add_callback(port, &gpio_cbs[i]);
+			if (err) {
+				LOG_ERR("Cannot configure cb (pin:%zu)", i);
+			}
 		}
 	}
 

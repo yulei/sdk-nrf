@@ -16,6 +16,7 @@
 #endif
 
 #include "location_core.h"
+#include "location_utils.h"
 
 LOG_MODULE_REGISTER(location, CONFIG_LOCATION_LOG_LEVEL);
 
@@ -84,14 +85,29 @@ static bool initialized;
 static const char LOCATION_METHOD_CELLULAR_STR[] = "Cellular";
 static const char LOCATION_METHOD_GNSS_STR[] = "GNSS";
 static const char LOCATION_METHOD_WIFI_STR[] = "Wi-Fi";
-static const char LOCATION_METHOD_INTERNAL_WIFI_CELLULAR_STR[] = "Wi-Fi + Cellular";
+static const char LOCATION_METHOD_WIFI_CELLULAR_STR[] = "Wi-Fi + Cellular";
 static const char LOCATION_METHOD_UNKNOWN_STR[] = "Unknown";
+
+int location_handler_register(location_event_handler_t handler)
+{
+	if (handler == NULL) {
+		LOG_ERR("NULL as a handler received");
+		return -EINVAL;
+	}
+
+	return location_utils_event_handler_append(handler);
+}
+
+int location_handler_deregister(location_event_handler_t handler)
+{
+	return location_utils_event_handler_remove(handler);
+}
 
 int location_init(location_event_handler_t handler)
 {
 	int err;
 
-	err = location_core_event_handler_set(handler);
+	err = location_handler_register(handler);
 	if (err) {
 		return err;
 	}
@@ -283,20 +299,46 @@ const char *location_method_str(enum location_method method)
 	case LOCATION_METHOD_WIFI:
 		return LOCATION_METHOD_WIFI_STR;
 
+	case LOCATION_METHOD_WIFI_CELLULAR:
+		return LOCATION_METHOD_WIFI_CELLULAR_STR;
+
 	default:
-		/* Wi-Fi + Cellular method cannot be checked in switch-case because
-		 * it's not defined in the enum
-		 */
-		if (method == LOCATION_METHOD_INTERNAL_WIFI_CELLULAR) {
-			return LOCATION_METHOD_INTERNAL_WIFI_CELLULAR_STR;
-		}
 		return LOCATION_METHOD_UNKNOWN_STR;
 	}
+}
+
+const struct location_data_details *location_details_get(
+	const struct location_event_data *event_data)
+{
+	const struct location_data_details *details = NULL;
+
+#if defined(CONFIG_LOCATION_DATA_DETAILS)
+	switch (event_data->id) {
+	case LOCATION_EVT_LOCATION:
+		details = &event_data->location.details;
+		break;
+	case LOCATION_EVT_TIMEOUT:
+	case LOCATION_EVT_ERROR:
+		details = &event_data->error.details;
+		break;
+	case LOCATION_EVT_RESULT_UNKNOWN:
+		details = &event_data->unknown.details;
+		break;
+	case LOCATION_EVT_FALLBACK:
+		details = &event_data->fallback.details;
+		break;
+	default:
+		break;
+	}
+#endif
+	return details;
 }
 
 int location_agnss_data_process(const char *buf, size_t buf_len)
 {
 #if defined(CONFIG_LOCATION_SERVICE_EXTERNAL) && defined(CONFIG_NRF_CLOUD_AGNSS)
+	int err;
+
 	if (!buf) {
 		LOG_ERR("A-GNSS data buffer cannot be a NULL pointer.");
 		return -EINVAL;
@@ -305,8 +347,21 @@ int location_agnss_data_process(const char *buf, size_t buf_len)
 		LOG_ERR("A-GNSS data buffer length cannot be zero.");
 		return -EINVAL;
 	}
-	return nrf_cloud_agnss_process(buf, buf_len);
+
+	err = nrf_cloud_agnss_process(buf, buf_len);
+	if (err) {
+		LOG_ERR("A-GNSS data processing failed, error: %d", err);
+	}
+
+#if defined(CONFIG_NRF_CLOUD_PGPS)
+	/* Ephemerides are handled by P-GPS, so request the P-GPS library to inject current
+	 * ephemerides as well.
+	 */
+	nrf_cloud_pgps_notify_prediction();
 #endif
+
+	return err;
+#endif /* CONFIG_LOCATION_SERVICE_EXTERNAL && CONFIG_NRF_CLOUD_AGNSS */
 	return -ENOTSUP;
 }
 
@@ -326,14 +381,13 @@ int location_pgps_data_process(const char *buf, size_t buf_len)
 	}
 
 	err = nrf_cloud_pgps_process(buf, buf_len);
-
 	if (err) {
 		nrf_cloud_pgps_request_reset();
 		LOG_ERR("P-GPS data processing failed, error: %d", err);
 	}
 
 	return err;
-#endif
+#endif /* CONFIG_LOCATION_SERVICE_EXTERNAL && CONFIG_NRF_CLOUD_PGPS */
 	return -ENOTSUP;
 }
 

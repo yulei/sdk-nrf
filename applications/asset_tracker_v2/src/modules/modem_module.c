@@ -36,9 +36,6 @@
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(MODULE, CONFIG_MODEM_MODULE_LOG_LEVEL);
 
-BUILD_ASSERT(!IS_ENABLED(CONFIG_LTE_AUTO_INIT_AND_CONNECT),
-		"The Modem module does not support this configuration");
-
 
 struct modem_msg_data {
 	union {
@@ -87,16 +84,6 @@ NRF_MODEM_LIB_ON_INIT(asset_tracker_init_hook, on_modem_lib_init, NULL);
 
 static void on_modem_lib_init(int ret, void *ctx)
 {
-	int err;
-
-	if (ret == 0) {
-		/* LTE LC is uninitialized on every modem shutdown. */
-		err = lte_lc_init();
-		if (err) {
-			LOG_ERR("lte_lc_init, error: %d", err);
-		}
-	}
-
 	k_sem_give(&nrf_modem_initialized);
 }
 
@@ -225,7 +212,7 @@ static void lte_evt_handler(const struct lte_lc_evt *const evt)
 
 		len = snprintf(log_buf, sizeof(log_buf),
 			       "eDRX parameter update: eDRX: %.2f, PTW: %.2f",
-			       evt->edrx_cfg.edrx, evt->edrx_cfg.ptw);
+			       (double)evt->edrx_cfg.edrx, (double)evt->edrx_cfg.ptw);
 		if (len > 0) {
 			LOG_DBG("%s", log_buf);
 		}
@@ -439,6 +426,12 @@ int lwm2m_carrier_event_handler(const lwm2m_carrier_event_t *evt)
 		 */
 		return 1;
 	}
+	case LWM2M_CARRIER_EVENT_MODEM_DOMAIN:
+		LOG_INF("LWM2M_CARRIER_EVENT_MODEM_DOMAIN");
+		break;
+	case LWM2M_CARRIER_EVENT_APP_DATA:
+		LOG_INF("LWM2M_CARRIER_EVENT_APP_DATA");
+		break;
 	case LWM2M_CARRIER_EVENT_MODEM_INIT:
 		LOG_INF("LWM2M_CARRIER_EVENT_MODEM_INIT");
 		err = nrf_modem_lib_init();

@@ -48,13 +48,13 @@ static void attention_blink(struct k_work *work)
 	}
 }
 
-static void attention_on(struct bt_mesh_model *mod)
+static void attention_on(const struct bt_mesh_model *mod)
 {
 	attention = true;
 	k_work_reschedule(&attention_blink_work, K_NO_WAIT);
 }
 
-static void attention_off(struct bt_mesh_model *mod)
+static void attention_off(const struct bt_mesh_model *mod)
 {
 	/* Will stop rescheduling blink timer */
 	attention = false;
@@ -93,9 +93,9 @@ static const uint8_t *presence_string[] = {
 /**
  * Returns true if the specified address is an address of the local element.
  */
-static bool address_is_local(struct bt_mesh_model *mod, uint16_t addr)
+static bool address_is_local(const struct bt_mesh_model *mod, uint16_t addr)
 {
-	return bt_mesh_model_elem(mod)->addr == addr;
+	return bt_mesh_model_elem(mod)->rt->addr == addr;
 }
 
 /**
@@ -241,7 +241,7 @@ static void print_client_status(void)
 	} else {
 		shell_print(chat_shell,
 			    "The mesh node is provisioned. The client address is 0x%04x.",
-			    bt_mesh_model_elem(chat.model)->addr);
+			    bt_mesh_model_elem(chat.model)->rt->addr);
 	}
 
 	shell_print(chat_shell, "Current presence: %s",

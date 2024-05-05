@@ -19,7 +19,7 @@ The sample supports the following development kits:
 
 .. include:: /includes/tfm.txt
 
-.. include:: /includes/hci_rpmsg_overlay.txt
+.. include:: /includes/hci_ipc_overlay.txt
 
 Overview
 ********
@@ -66,14 +66,17 @@ Setup
 
 The HID service specification does not require encryption (:kconfig:option:`CONFIG_BT_HIDS_DEFAULT_PERM_RW_ENCRYPT`), but some systems disconnect from the HID devices that do not support security.
 
+.. note::
+   If you want to pair the device with a computer running MacOS, set the :kconfig:option:`CONFIG_BT_HIDS_DEFAULT_PERM_RW_AUTHEN` Kconfig option to ``y``.
+
 Building and running
 ********************
 
-To build this sample with the :ref:`nrf_rpc_ipc_readme` library on the nRF5340 DK, set the :makevar:`OVERLAY_CONFIG` option to the :file:`overlay-nrf_rpc.conf` file.
+To build this sample with the :ref:`nrf_rpc_ipc_readme` library on the nRF5340 DK, set the :makevar:`EXTRA_CONF_FILE` option to the :file:`overlay-nrf_rpc.conf` file.
 
 .. code-block::
 
-   west build -b nrf5340dk_nrf5340_cpuapp -- -DOVERLAY_CONFIG=overlay-nrf_rpc.conf
+   west build -b nrf5340dk/nrf5340/cpuapp -- -DEXTRA_CONF_FILE=overlay-nrf_rpc.conf
 
 .. |sample path| replace:: :file:`samples/bluetooth/peripheral_hids_mouse`
 

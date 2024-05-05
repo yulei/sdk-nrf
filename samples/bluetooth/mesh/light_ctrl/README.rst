@@ -1,13 +1,13 @@
 .. _bluetooth_mesh_light_lc:
 
-Bluetooth mesh: Light fixture
+Bluetooth Mesh: Light fixture
 #############################
 
 .. contents::
    :local:
    :depth: 2
 
-The Bluetooth® mesh light fixture sample demonstrates how to set up a light control mesh server model application, and control a dimmable LED with Bluetooth mesh using the :ref:`bt_mesh_onoff_readme`.
+The Bluetooth® Mesh light fixture sample demonstrates how to set up a light control mesh server model application, and control a dimmable LED with Bluetooth Mesh using the :ref:`bt_mesh_onoff_readme`.
 
 This sample demonstrates how to implement the following :ref:`ug_bt_mesh_nlc`:
 
@@ -50,7 +50,7 @@ For more information, see documentation on :ref:`bt_mesh_light_ctrl_srv_readme`.
 
 Devices are nodes with a provisionee role in a mesh network.
 Provisioning is performed using the `nRF Mesh mobile app`_.
-This mobile application is also used to configure key bindings, and publication and subscription settings of the Bluetooth mesh model instances in the sample.
+This mobile application is also used to configure key bindings, and publication and subscription settings of the Bluetooth Mesh model instances in the sample.
 After provisioning and configuring the mesh models supported by the sample in the `nRF Mesh mobile app`_, you can control the dimmable LED on the development kit from the app.
 
 Provisioning
@@ -143,6 +143,9 @@ LEDs:
    :ref:`zephyr:thingy53_nrf5340` supports only one RGB LED.
    Each RGB LED channel is used as separate LED.
 
+.. note::
+   :ref:`zephyr:thingy53_nrf5340` and the :ref:`zephyr:nrf52840dongle_nrf52840` do not support emergency data storage.
+
 Configuration
 *************
 
@@ -150,7 +153,7 @@ Configuration
 
 |nrf5340_mesh_sample_note|
 
-The Kconfig option :kconfig:option:`CONFIG_BT_MESH_LIGHT_CTRL_REG_SPEC` is set by default as it is necessary for the :ref:`bt_mesh_light_ctrl_srv_readme` model according to the `Bluetooth mesh model specification`_.
+The Kconfig option :kconfig:option:`CONFIG_BT_MESH_LIGHT_CTRL_REG_SPEC` is set by default as it is necessary for the :ref:`bt_mesh_light_ctrl_srv_readme` model according to the `Bluetooth Mesh model specification`_.
 The option enables a separate module called illuminance regulator.
 For more information about the module, see the documentation on :ref:`bt_mesh_light_ctrl_reg_readme` and :ref:`bt_mesh_light_ctrl_reg_spec_readme`.
 
@@ -171,7 +174,7 @@ FEM support
 Emergency data storage
 ======================
 
-To build this sample with support for emergency data storage (EMDS), set ``OVERLAY_CONFIG`` to :file:`overlay-emds.conf`.
+To build this sample with support for emergency data storage (EMDS), set ``EXTRA_CONF_FILE`` to :file:`overlay-emds.conf`.
 This will save replay protection list (RPL) data and some of the :ref:`bt_mesh_lightness_srv_readme` data to the emergency data storage instead of to the :ref:`settings_api`.
 When using EMDS, certain considerations need to be taken regarding hardware choices in your application design.
 See :ref:`emds_readme_application_integration` in the EMDS documentation for more information.
@@ -222,9 +225,10 @@ You should now see the following actions:
 #. The LED stays at 100% for three seconds **On**.
 #. The LED fades from 100% to :kconfig:option:`CONFIG_BT_MESH_LIGHT_CTRL_SRV_LVL_PROLONG` over five seconds **On > Prolong**.
 #. The LED stays at :kconfig:option:`CONFIG_BT_MESH_LIGHT_CTRL_SRV_LVL_PROLONG` for three seconds **Prolong**.
-#. The LED fades from :kconfig:option:`CONFIG_BT_MESH_LIGHT_CTRL_SRV_LVL_PROLONG` to 0% over five seconds **Prolong > Standby**.
+#. The LED fades from :kconfig:option:`CONFIG_BT_MESH_LIGHT_CTRL_SRV_LVL_PROLONG` to :kconfig:option:`CONFIG_BT_MESH_LIGHT_CTRL_SRV_LVL_STANDBY` over five seconds **Prolong > Standby**.
 
 The default value of :kconfig:option:`CONFIG_BT_MESH_LIGHT_CTRL_SRV_LVL_PROLONG` is 10000 (~15%).
+The default value of :kconfig:option:`CONFIG_BT_MESH_LIGHT_CTRL_SRV_LVL_STANDBY` is 0 (0%).
 
 .. figure:: images/bt_mesh_light_ctrl_levels.svg
    :alt: Light level transitions over time
@@ -245,6 +249,45 @@ Configure the Sensor Setup Server model on the **Mesh Sensor** node:
 * Bind the model to **Application Key 1**. Make sure to bind the same application key to the peer Sensor Client.
 
 The Sensor Setup Server model is now configured and able to receive sensor setting messages from the Sensor Client.
+
+.. _bluetooth_mesh_light_lc_occupancy_mode:
+
+Occupancy mode
+--------------
+
+You can combine this sample with the :ref:`bluetooth_mesh_sensor_server` sample to trigger the :ref:`Occupancy On <bt_mesh_light_ctrl_srv_occupancy_on_event>` event on the Light LC Server by the Occupancy sensor.
+
+To do this, first configure the Light LC Server on the **Mesh Light Fixture** node:
+
+* Bind the model to **Application Key 1**.
+* Set the subscription parameters: Create a dedicated group address.
+
+Prepare the :ref:`bluetooth_mesh_sensor_server` sample:
+
+* Build, run and provision the **Occupancy Sensor** node as described in the sample's documentation.
+
+Configure the Occupancy Sensor Server that is instantiated on the Element 2 of the :ref:`bluetooth_mesh_sensor_server` sample:
+
+* Bind the model to **Application Key 1**.
+* Set the publication parameters:
+
+  * Destination/publish address: Select the same group as the Light LC Server is subscribed to.
+
+To evaluate occupancy inputs when light is not in **Standby** state:
+
+* Open the **Mesh Light Fixture** node in the mobile app.
+* Open the Generic OnOff Server in the second element, then tap :guilabel:`ON` at the bottom of the Generic On Off Controls.
+  This will bring the Light LC Server out of **Standby** state.
+* Now, when the Light LC Server is not in the **Standby** state, press ``Button 2`` on the **Occupancy Sensor** node to keep the light in the **On** state.
+* If the Light LC Server enters the **Standby** state, Occupancy sensor inputs will not have any effect because the default value of the Light LC Occupancy Mode state is ``0``.
+
+When using the `nRF Mesh mobile app for iOS`_, you can change the value of the Light LC Occupancy Mode state to ``1``, and see how Occupancy sensor inputs will turn the light ON from the **Standby** state.
+Do this in the following way:
+
+* Open the **Mesh Light Fixture** node in the mobile app for iOS.
+* Go to the Light LC Server configuration that is located on the Element 2.
+* Scroll down to the **OCCUPANCY MODE** and tap :guilabel:`ON` to enable the Occupancy mode in the **Standby** state.
+* When the Light LC Server is in the **Standby** state, press ``Button 2`` on the **Occupancy Sensor** node.
 
 Dependencies
 ************

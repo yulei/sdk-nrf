@@ -12,6 +12,9 @@ set(EDGE_IMPULSE_BINARY_DIR ${EDGE_IMPULSE_DIR}/src/edge_impulse_project-build)
 set(EDGE_IMPULSE_STAMP_DIR  ${EDGE_IMPULSE_DIR}/src/edge_impulse_project-stamp)
 set(EDGE_IMPULSE_LIBRARY    ${EDGE_IMPULSE_BINARY_DIR}/libedge_impulse.a)
 
+# Override Zephyr's Wdouble-promotion, as Edge Impulse gives warnings.
+zephyr_compile_options(-Wno-double-promotion)
+
 file(GENERATE OUTPUT ${EDGE_IMPULSE_DIR}/compile_options.$<COMPILE_LANGUAGE>.cmake CONTENT
 "set(EI_$<COMPILE_LANGUAGE>_COMPILE_OPTIONS \"$<TARGET_PROPERTY:zephyr_interface,INTERFACE_COMPILE_OPTIONS>\")"
 )
@@ -34,6 +37,10 @@ if(NOT ${EI_URI} MATCHES "^[a-z]+://")
 endif()
 
 file(GLOB_RECURSE  edge_impulse_all_headers "${EDGE_IMPULSE_SOURCE_DIR}/*.h")
+
+if(SYSBUILD)
+  zephyr_get(EI_API_KEY_HEADER SYSBUILD GLOBAL)
+endif()
 
 include(ExternalProject)
 ExternalProject_Add(edge_impulse_project
@@ -64,6 +71,9 @@ ExternalProject_Add(edge_impulse_project
     USES_TERMINAL_BUILD True
 )
 add_dependencies(edge_impulse_project zephyr_generated_headers)
+add_library(edge_impulse_imported STATIC IMPORTED)
+set_target_properties(edge_impulse_imported PROPERTIES IMPORTED_LOCATION ${EDGE_IMPULSE_LIBRARY})
+target_link_libraries(edge_impulse_imported INTERFACE kernel)
 
 # This targets remove the `edge_impulse_project-download` stamp file, which
 # causes the Edge impulse library to be fetched on each build invocation.
@@ -102,7 +112,7 @@ target_include_directories(edge_impulse INTERFACE
                            ${EDGE_IMPULSE_SOURCE_DIR}/edge-impulse-sdk/CMSIS/Core/Include
 )
 
-target_link_libraries(edge_impulse INTERFACE ${EDGE_IMPULSE_LIBRARY})
+target_link_libraries(edge_impulse INTERFACE edge_impulse_imported)
 
 add_dependencies(edge_impulse
                  zephyr_interface

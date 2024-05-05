@@ -4,15 +4,15 @@
  * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
+#ifndef LWM2M_CARRIER_H__
+#define LWM2M_CARRIER_H__
+
 /**
  * @file lwm2m_carrier.h
  *
  * @defgroup lwm2m_carrier_api LwM2M carrier library API
  * @{
  */
-
-#ifndef LWM2M_CARRIER_H__
-#define LWM2M_CARRIER_H__
 
 #include <stdint.h>
 #include <stddef.h>
@@ -60,21 +60,9 @@ extern "C" {
 /** @} */
 
 /**
- * @name LwM2M carrier library firmware update types.
- * @{
- */
-/** Receiving a modem firmware delta patch. */
-#define LWM2M_CARRIER_FOTA_START_MODEM_DELTA 0
-/** Receiving application firmware. */
-#define LWM2M_CARRIER_FOTA_START_APPLICATION 2
-/** @} */
-
-/**
  * @brief LwM2M carrier library firmware update event structure.
  */
 typedef struct {
-	/** Firmware type to be received. */
-	uint32_t type;
 	/** URI from where the firmware will be downloaded. Set to NULL if no URI will be used. */
 	const char *uri;
 } lwm2m_carrier_event_fota_start_t;
@@ -329,22 +317,24 @@ typedef struct {
  */
 #define LWM2M_CARRIER_GENERIC		0x00000001
 #define LWM2M_CARRIER_VERIZON		0x00000002
-#define LWM2M_CARRIER_ATT		0x00000004  /* AT&T specific support is deprecated. */
 #define LWM2M_CARRIER_LG_UPLUS		0x00000008
 #define LWM2M_CARRIER_T_MOBILE		0x00000010
 #define LWM2M_CARRIER_SOFTBANK		0x00000020
+#define LWM2M_CARRIER_BELL_CA		0x00000040
 /** @} */
 
 /**
  * @brief Structure holding LwM2M carrier library initialization parameters.
  */
 typedef struct {
-	/** Configure enabled carriers. All carriers except AT&T are enabled when no bits are set
+	/** Configure enabled carriers. All carriers are enabled when no bits are set
 	 *  or if all bits are set.
 	 */
 	uint32_t carriers_enabled;
 	/** Disable bootstrap from Smartcard mode when this is enabled by the carrier. */
 	bool disable_bootstrap_from_smartcard;
+	/** Disable queue mode. */
+	bool disable_queue_mode;
 	/** Denotes whether @c server_uri is an LwM2M Bootstrap-Server or an LwM2M Server. */
 	bool is_bootstrap_server;
 	/** Optional URI of the custom server. Null-terminated string of max 255 characters. */
@@ -359,6 +349,8 @@ typedef struct {
 	int32_t session_idle_timeout;
 	/** How often to send CON instead of NON in CoAP observables (in seconds). */
 	int32_t coap_con_interval;
+	/** Optional firmware download timeout (in minutes). Only applicable to PUSH delivery. */
+	uint16_t firmware_download_timeout;
 	/** Optional custom APN. Null-terminated string of max 63 characters. */
 	const char *apn;
 	/** Optional PDN type for custom APN. */
@@ -471,7 +463,7 @@ int lwm2m_carrier_utc_offset_read(void);
 char *lwm2m_carrier_timezone_read(void);
 
 /**
- * @brief Function to write current UTC time (LwM2M server write operation)
+ * @brief Function to write current UTC time (LwM2M Server write operation)
  *
  * @note This function can be implemented by the application, if custom time management is needed.
  *
@@ -482,7 +474,7 @@ char *lwm2m_carrier_timezone_read(void);
 int lwm2m_carrier_utc_time_write(int32_t time);
 
 /**
- * @brief Function to write UTC offset (LwM2M server write operation)
+ * @brief Function to write UTC offset (LwM2M Server write operation)
  *
  * @note This function can be implemented by the application, if custom time management is needed.
  *
@@ -493,7 +485,7 @@ int lwm2m_carrier_utc_time_write(int32_t time);
 int lwm2m_carrier_utc_offset_write(int offset);
 
 /**
- * @brief Function to write time zone (LwM2M server write operation).
+ * @brief Function to write time zone (LwM2M Server write operation).
  *
  * @note This function can be implemented by the application, if custom time management is needed.
  *
@@ -746,21 +738,21 @@ int lwm2m_carrier_velocity_set(int heading, float speed_h, float speed_v, float 
 			       float uncertainty_v);
 
 /**
- * @brief Schedule application data to be set using either the Binary App Data Container object
- *        or the App Data Container object.
+ * @brief Set application data in either the Binary App Data Container object or the App Data
+ *        Container object.
  *
  * @details This function sets the resource given by the path to the desired value. The resource
- *          can then be read by, or reported to, the LwM2M server.
+ *          can then be read by, or reported to, the LwM2M Server.
  *
  * @note Both the Binary App Data Container object and the App Data Container object will not be
  *       initialized for every carrier.
  *
- * @param[in]  path       The path of the resource or resource instance to be sent to. The path
+ * @param[in]  path       The path of the resource or resource instance which is to be set. The path
  *                        contains the object id, object instance id, resource id and resource
  *                        instance id in order. The resource instance id is not needed for the
  *                        App Data Container object.
  * @param[in]  path_len   The length of the path. Must be 3 or 4.
- * @param[in]  buffer     Buffer containing the application data to be sent. If this is set to null
+ * @param[in]  buffer     Buffer containing the application data to be set. If this is set to null
  *                        the resource instance is deleted instead when using the Binary App Data
  *                        Container object.
  * @param[in]  buffer_len Number of bytes in the buffer.
@@ -770,11 +762,28 @@ int lwm2m_carrier_velocity_set(int heading, float speed_h, float speed_v, float 
  * @retval -EINVAL If at least one input argument is incorrect.
  * @retval -ENOMEM If there is not enough memory to copy the buffer contents to the resource model.
  */
-int lwm2m_carrier_app_data_send(const uint16_t *path, uint16_t path_len, const uint8_t *buffer,
-				size_t buffer_len);
+int lwm2m_carrier_app_data_set(const uint16_t *path, uint16_t path_len, const uint8_t *buffer,
+			       size_t buffer_len);
 
 /**
- * @brief Send log data using the Event Log object.
+ * @brief Schedule data to be sent to a LwM2M Server.
+ *
+ * @note This is only supported for some resources, which may not be initialized for every carrier.
+ *
+ * @param[in]  path     The path of the resource or resource instance to be sent. The path contains
+ *                      the object id, object instance id, resource id and resource instance id in
+ *                      order.
+ * @param[in]  path_len The length of the path. Must be 3 or 4.
+ *
+ * @retval  0           If the data has been sent successfully.
+ * @retval -ENOENT      If the path points to something that is not yet initialized.
+ * @retval -EINVAL      If the operation was attempted on an unsupported resource.
+ * @retval -EINPROGRESS If the operation was attempted while a send request was already in progress.
+ */
+int lwm2m_carrier_data_send(const uint16_t *path, uint8_t path_len);
+
+/**
+ * @brief Set log data in the Event Log object.
  *
  * @note The Event Log object will not be initialized for every carrier.
  *

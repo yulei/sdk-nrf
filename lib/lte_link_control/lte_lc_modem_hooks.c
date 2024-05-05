@@ -9,16 +9,51 @@
 #include <modem/nrf_modem_lib.h>
 #include <zephyr/logging/log.h>
 
-LOG_MODULE_DECLARE(lte_lc);
+LOG_MODULE_DECLARE(lte_lc, CONFIG_LTE_LINK_CONTROL_LOG_LEVEL);
 
 NRF_MODEM_LIB_ON_INIT(lte_lc_init_hook, on_modem_init, NULL);
 NRF_MODEM_LIB_ON_SHUTDOWN(lte_lc_shutdown_hook, on_modem_shutdown, NULL);
 
 static void on_modem_init(int err, void *ctx)
 {
+	extern const enum lte_lc_system_mode lte_lc_sys_mode;
+	extern const enum lte_lc_system_mode_preference lte_lc_sys_mode_pref;
+
 	if (err) {
 		LOG_ERR("Modem library init error: %d, lte_lc not initialized", err);
 		return;
+	}
+
+	if (!IS_ENABLED(CONFIG_LTE_NETWORK_MODE_DEFAULT)) {
+		err = lte_lc_system_mode_set(lte_lc_sys_mode, lte_lc_sys_mode_pref);
+		if (err) {
+			LOG_ERR("Failed to set system mode and mode preference, err %d", err);
+			return;
+		}
+	}
+
+	if (IS_ENABLED(CONFIG_LTE_PSM_REQ_FORMAT_SECONDS)) {
+		err = lte_lc_psm_param_set_seconds(CONFIG_LTE_PSM_REQ_RPTAU_SECONDS,
+						   CONFIG_LTE_PSM_REQ_RAT_SECONDS);
+		if (err) {
+			LOG_ERR("Failed to set PSM params, err %d", err);
+			return;
+		}
+
+		LOG_DBG("PSM configs set from seconds: tau=%ds, rat=%ds",
+			CONFIG_LTE_PSM_REQ_RPTAU_SECONDS,
+			CONFIG_LTE_PSM_REQ_RAT_SECONDS);
+	} else {
+		__ASSERT_NO_MSG(IS_ENABLED(CONFIG_LTE_PSM_REQ_FORMAT_STRING));
+
+		err = lte_lc_psm_param_set(CONFIG_LTE_PSM_REQ_RPTAU, CONFIG_LTE_PSM_REQ_RAT);
+		if (err) {
+			LOG_ERR("Failed to set PSM params, err %d", err);
+			return;
+		}
+
+		LOG_DBG("PSM configs set from string: tau=%s, rat=%s",
+			CONFIG_LTE_PSM_REQ_RPTAU, CONFIG_LTE_PSM_REQ_RAT);
 	}
 
 	/* Request configured PSM and eDRX settings to save power. */
@@ -83,17 +118,28 @@ static void on_modem_init(int err, void *ctx)
 		LOG_ERR("Failed to configure RAI, err %d", err);
 		return;
 	}
-
-#if IS_ENABLED(CONFIG_LTE_AUTO_INIT_AND_CONNECT)
-	err = lte_lc_init_and_connect();
-	if (err) {
-		LOG_ERR("Lte_lc failed to initialize and connect, err %d", err);
-		return;
-	}
-#endif
 }
 
 static void on_modem_shutdown(void *ctx)
 {
-	(void)lte_lc_deinit();
+	/* Make sure the Modem library was in normal mode and not in bootloader mode. */
+	if (nrf_modem_is_initialized()) {
+		(void)lte_lc_power_off();
+	}
+}
+
+#if CONFIG_UNITY
+void lte_lc_on_modem_cfun(int mode, void *ctx)
+#else
+NRF_MODEM_LIB_ON_CFUN(lte_lc_cfun_hook, lte_lc_on_modem_cfun, NULL);
+
+static void lte_lc_on_modem_cfun(int mode, void *ctx)
+#endif
+{
+	ARG_UNUSED(ctx);
+
+	STRUCT_SECTION_FOREACH(lte_lc_cfun_cb, e) {
+		LOG_DBG("CFUN monitor callback: %p", e->callback);
+		e->callback(mode, e->context);
+	}
 }

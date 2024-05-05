@@ -66,7 +66,7 @@ Using pre-built variants can be useful for certification purposes.
 
 * :kconfig:option:`CONFIG_OPENTHREAD_LIBRARY` - This option enables OpenThread to use pre-built libraries.
 
-  You must select one of the :ref:`thread_ug_feature_sets` by enabling :kconfig:option:`CONFIG_OPENTHREAD_NORDIC_LIBRARY_MASTER`, :kconfig:option:`CONFIG_OPENTHREAD_NORDIC_LIBRARY_FTD`, or :kconfig:option:`CONFIG_OPENTHREAD_NORDIC_LIBRARY_MTD`.
+  You must select one of the :ref:`thread_ug_feature_sets` by enabling :kconfig:option:`CONFIG_OPENTHREAD_NORDIC_LIBRARY_MASTER`, :kconfig:option:`CONFIG_OPENTHREAD_NORDIC_LIBRARY_FTD`, :kconfig:option:`CONFIG_OPENTHREAD_NORDIC_LIBRARY_MTD`, or :kconfig:option:`CONFIG_OPENTHREAD_NORDIC_LIBRARY_RCP`.
 
   This disables building OpenThread from source files and links pre-built libraries instead.
 
@@ -195,10 +195,10 @@ You can enable the OpenThread stack logging for your project with the following 
 * :kconfig:option:`CONFIG_OPENTHREAD_DEBUG` - This option enables logging for the OpenThread stack.
 
 Both options must be enabled to allow logging.
-Use the :file:`overlay-logging.conf` configuration file to enable both options for the Thread samples in the |NCS|.
+Use the ``logging`` snippet to enable both options for the Thread samples in the |NCS|.
 
 After setting these options, you can choose one of several :ref:`logging backends <ug_logging_backends>` available in Zephyr and supported in the |NCS|.
-The :file:`overlay-logging.conf` configuration file enables :ref:`ug_logging_backends_rtt` as the logging backend by default.
+The ``logging`` snippet enables :ref:`ug_logging_backends_rtt` as the logging backend by default.
 
 .. note::
     If you are working with Thread samples, enabling logging and logging backend is optional.
@@ -260,11 +260,11 @@ Minimal Thread Device (MTD)
 Trusted Firmware-M support options
 ==================================
 
-To configure your Thread application on the nRF5340 DK to run with Trusted Firmware-M, use the ``nrf5340dk_nrf5340_cpuapp_ns`` build target and enable the following Kconfig options:
+To configure your Thread application on the nRF5340 DK to run with Trusted Firmware-M, use the ``nrf5340dk/nrf5340/cpuapp/ns`` build target and enable the following Kconfig options:
 
 * :kconfig:option:`CONFIG_BUILD_WITH_TFM`
 * :kconfig:option:`CONFIG_OPENTHREAD_CRYPTO_PSA`
 
-In the |NCS|, these options are enabled by default for the :ref:`application core <ug_nrf5340_intro_app_core>` of the :ref:`openthread_samples` that can be programmed with the ``nrf5340dk_nrf5340_cpuapp_ns`` build target.
+In the |NCS|, these options are enabled by default for the :ref:`application core <ug_nrf5340_intro_app_core>` of the :ref:`openthread_samples` that can be programmed with the ``nrf5340dk/nrf5340/cpuapp/ns`` build target.
 
 For more Trusted Firmware-M documentation, see :ref:`ug_tfm` and the official `TF-M documentation`_.

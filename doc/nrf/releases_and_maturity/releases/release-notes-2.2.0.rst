@@ -291,7 +291,7 @@ nRF5340 Audio
     The figure now correctly shows the interaction with the Bluetooth modules.
   * An issue with Simple Management Protocol (SMP) not advertising in the CIS mode.
   * An issue with the ``mcumgr`` command being unable to receive in the BIS mode.
-  * The :ref:`nrf53_audio_app_porting_guide` section in the documentation did not mention long-pressing **BTN 4** while resetting the development kit to start DFU.
+  * The :ref:`nrf53_audio_unicast_client_app_testing_steps_fota` section in the documentation did not mention long-pressing **BTN 4** while resetting the development kit to start DFU.
     This has now been added to the documentation.
 
 * Removed support for the nRF5340 Audio DK (PCA10121) board version 0.7.1 or older.
@@ -674,8 +674,8 @@ Modem libraries
 
   * Added:
 
-    * The :kconfig:option:`CONFIG_NRF_MODEM_LIB_IPC_IRQ_PRIO_OVERRIDE` Kconfig option to override the IPC IRQ priority from the devicetree.
-    * The :kconfig:option:`CONFIG_NRF_MODEM_LIB_IPC_IRQ_PRIO` Kconfig option to configure the IPC IRQ priority when the Kconfig option :kconfig:option:`CONFIG_NRF_MODEM_LIB_IPC_IRQ_PRIO_OVERRIDE` is enabled.
+    * The ``CONFIG_NRF_MODEM_LIB_IPC_IRQ_PRIO_OVERRIDE`` Kconfig option to override the IPC IRQ priority from the devicetree.
+    * The :kconfig:option:`CONFIG_NRF_MODEM_LIB_IPC_IRQ_PRIO` Kconfig option to configure the IPC IRQ priority when the Kconfig option ``CONFIG_NRF_MODEM_LIB_IPC_IRQ_PRIO_OVERRIDE`` is enabled.
     * The :kconfig:option:`CONFIG_NRF_MODEM_LIB_TRACE_BACKEND_BITRATE` Kconfig option to enable the measurement of the modem trace backend bitrate.
     * The :kconfig:option:`CONFIG_NRF_MODEM_LIB_TRACE_BACKEND_BITRATE_LOG` Kconfig option to enable logging of the modem trace backend bitrate.
     * The :kconfig:option:`CONFIG_NRF_MODEM_LIB_TRACE_BITRATE_LOG` Kconfig option to enable logging of the modem trace bitrate.
@@ -733,7 +733,7 @@ Modem libraries
 Libraries for networking
 ------------------------
 
-* Added :ref:`lib_lwm2m_location_assistance` library that supports using A-GPS, P-GPS, and ground fix assistance from nRF Cloud through an LwM2M server.
+* Added :ref:`lib_lwm2m_location_assistance` library that supports using A-GPS, P-GPS, and ground fix assistance from nRF Cloud through an LwM2M Server.
 
 * Multicell location library:
 

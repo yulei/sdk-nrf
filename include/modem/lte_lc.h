@@ -3,6 +3,7 @@
  *
  * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
+
 #ifndef LTE_LC_H__
 #define LTE_LC_H__
 
@@ -328,7 +329,7 @@ struct lte_lc_psm_cfg {
 	/** Periodic Tracking Area Update interval in seconds. */
 	int tau;
 
-	/** Active-time (time from RRC idle to PSM) in seconds. */
+	/** Active-time (time from RRC idle to PSM) in seconds or @c -1 if PSM is deactivated. */
 	int active_time;
 };
 
@@ -362,6 +363,8 @@ struct lte_lc_edrx_cfg {
 #define LTE_LC_CELL_EUTRAN_ID_INVALID		UINT32_MAX
 /** Maximum cell ID value. */
 #define LTE_LC_CELL_EUTRAN_ID_MAX		268435455
+/** Tracking Area Code value not valid. */
+#define LTE_LC_CELL_TAC_INVALID			UINT32_MAX
 /** Time difference not valid. */
 #define LTE_LC_CELL_TIME_DIFF_INVALID		0
 
@@ -1229,26 +1232,24 @@ int lte_lc_deregister_handler(lte_lc_evt_handler_t handler);
 /**
  * Initialize the library and configure the modem.
  *
+ * @deprecated There is no need to call this function anymore.
+ *
  * @note A follow-up call to lte_lc_connect() or lte_lc_connect_async() must be made to establish
  *       an LTE connection. The library can be initialized only once, and subsequent calls will
  *       return @c 0.
  *
  * @retval 0 if successful.
- * @retval -EFAULT if an AT command failed.
  */
-int lte_lc_init(void);
+__deprecated int lte_lc_init(void);
 
 /**
  * Connect to LTE network.
  *
- * @note Before calling this function, a call to lte_lc_init() must be made, otherwise @c -EPERM is
- *       returned.
  *
  * @note After initialization, the system mode will be set to the default mode selected with Kconfig
  *       and LTE preference set to automatic selection.
  *
  * @retval 0 if successful.
- * @retval -EPERM if the library was not initialized.
  * @retval -EFAULT if an AT command failed.
  * @retval -ETIMEDOUT if a connection attempt timed out before the device was
  *	   registered to a network.
@@ -1258,6 +1259,8 @@ int lte_lc_connect(void);
 
 /**
  * Initialize the library, configure the modem and connect to LTE network.
+ *
+ * @deprecated Use @ref lte_lc_connect instead.
  *
  * The function blocks until connection is established, or the connection attempt times out.
  *
@@ -1270,7 +1273,7 @@ int lte_lc_connect(void);
  *	   registered to a network.
  * @retval -EINPROGRESS if a connection establishment attempt is already in progress.
  */
-int lte_lc_init_and_connect(void);
+__deprecated int lte_lc_init_and_connect(void);
 
 /**
  * Connect to LTE network.
@@ -1291,6 +1294,8 @@ int lte_lc_connect_async(lte_lc_evt_handler_t handler);
 /**
  * Initialize the library, configure the modem and connect to LTE network.
  *
+ * @deprecated Use @ref lte_lc_connect_async instead.
+ *
  * The function returns immediately.
  *
  * @note The library can be initialized only once, and repeated calls will return @c 0.
@@ -1303,15 +1308,17 @@ int lte_lc_connect_async(lte_lc_evt_handler_t handler);
  * @retval -EFAULT if an AT command failed.
  * @retval -EINVAL if no event handler was registered.
  */
-int lte_lc_init_and_connect_async(lte_lc_evt_handler_t handler);
+__deprecated int lte_lc_init_and_connect_async(lte_lc_evt_handler_t handler);
 
 /**
  * Deinitialize the library and power off the modem.
  *
+ * @deprecated Use @ref lte_lc_power_off instead.
+ *
  * @retval 0 if successful.
  * @retval -EFAULT if an AT command failed.
  */
-int lte_lc_deinit(void);
+__deprecated int lte_lc_deinit(void);
 
 /**
  * Set the modem to offline mode.
@@ -1341,14 +1348,50 @@ int lte_lc_normal(void);
  * Set modem PSM parameters.
  *
  * Requested periodic TAU (RPTAU) and requested active time (RAT) are used when PSM mode is
- * subsequently enabled using lte_lc_psm_req().
+ * subsequently enabled using lte_lc_psm_req(). These are the requested values and network
+ * determines the final values.
  *
- * For reference see 3GPP 27.007 Ch. 7.38.
+ * For encoding of the variables, see nRF AT Commands Reference Guide, 3GPP 27.007 Ch. 7.38., and
+ * 3GPP 24.008 Ch. 10.5.7.4a and Ch. 10.5.7.3.
  *
- * @param[in] rptau Requested periodic TAU as a null-terminated string.
- *                  Set to @c NULL to use manufacturer-specific default value.
- * @param[in] rat Requested active time as a null-terminated string.
- *                Set to @c NULL to use manufacturer-specific default value.
+ * @param[in] rptau
+ * @parblock
+ *          Requested periodic TAU as a null-terminated 8 character long bit field string.
+ *          Set to @c NULL to use modem's default value.
+ *          See 3GPP 24.008 Ch. 10.5.7.4a for data format.
+ *
+ *          For example, value of 32400 s is represented as '00101001'.
+ *
+ *          Bits 5 to 1 represent the binary coded timer value that is multiplied by timer unit.
+ *
+ *          Bits 8 to 6 define the timer unit as follows:
+ *
+ *          - 000: 10 minutes
+ *          - 001: 1 hour
+ *          - 010: 10 hours
+ *          - 011: 2 seconds
+ *          - 100: 30 seconds
+ *          - 101: 1 minute
+ *          - 110: 320 hours
+ * @endparblock
+ *
+ * @param[in] rat
+ * @parblock
+ *          Requested active time as a null-terminated string.
+ *          Set to @c NULL to use modem's default value.
+ *          See 3GPP 24.008 Ch. 10.5.7.3 for data format.
+ *
+ *          For example, value of 120 s is represented as '00100010'.
+ *
+ *          Bits 5 to 1 represent the binary coded timer value that is multiplied by timer unit.
+ *
+ *          Bits 8 to 6 define the timer unit as follows:
+ *
+ *          - 000: 2 seconds
+ *          - 001: 1 minute
+ *          - 010: 6 minutes
+ *          - 111: Timer is deactivated
+ * @endparblock
  *
  * @retval 0 if successful.
  * @retval -EINVAL if an input parameter was invalid.
@@ -1356,10 +1399,56 @@ int lte_lc_normal(void);
 int lte_lc_psm_param_set(const char *rptau, const char *rat);
 
 /**
+ * Set modem PSM parameters.
+ *
+ * Requested periodic TAU (RPTAU) and requested active time (RAT) are used when PSM mode is
+ * subsequently enabled using lte_lc_psm_req(). These are the requested values and network
+ * determines the final values.
+ *
+ * This is a convenience function to set PSM parameters in seconds while lte_lc_psm_param_set()
+ * requires the caller to encode the values. However, note that 3GPP specifications do
+ * not support all possible integer values but the encoding limits the potential values.
+ * The values are rounded up to the next possible value. There may be significant
+ * rounding up, especially when rptau is tens and hundreds of hours.
+ *
+ * For more information about the encodings, see the description of the
+ * lte_lc_psm_param_set() function.
+ *
+ * @param[in] rptau
+ * @parblock
+ *          Requested periodic TAU in seconds as a non-negative integer. Range 0 - 35712000 s.
+ *          Set to @c -1 to use modem's default value.
+ *          The given value will be rounded up to the closest possible value that is
+ *          calculated by multiplying the timer unit with the timer value:
+ *
+ *          - Timer unit is one of: 2 s, 30 s, 60 s, 600 s (10 min), 3600 s (1 h), 36000 s (10 h),
+ *            1152000 s (320 h)
+ *          - Timer value range is 0-31
+ * @endparblock
+ *
+ * @param[in] rat
+ * @parblock
+ *          Requested active time in seconds as a non-negative integer. Range 0 - 11160s.
+ *          Set to @c -1 to use modem's default value.
+ *          The given value will be rounded up to the closest possible value that is
+ *          calculated by multiplying the timer unit with the timer value:
+ *
+ *          - Timer unit is one of: 2 s, 30 s, 360 s (6 min)
+ *          - Timer value range is 0-31
+ * @endparblock
+ *
+ * @retval 0 if successful.
+ * @retval -EINVAL if an input parameter was invalid.
+ */
+int lte_lc_psm_param_set_seconds(int rptau, int rat);
+
+/**
  * Request modem to enable or disable Power Saving Mode (PSM).
  *
- * PSM parameters can be set using @kconfig{CONFIG_LTE_PSM_REQ_RPTAU} and
- * @kconfig{CONFIG_LTE_PSM_REQ_RAT}, or by calling lte_lc_psm_param_set().
+ * PSM parameters can be set using @kconfig{CONFIG_LTE_PSM_REQ_FORMAT},
+ * @kconfig{CONFIG_LTE_PSM_REQ_RPTAU}, @kconfig{CONFIG_LTE_PSM_REQ_RAT},
+ * @kconfig{CONFIG_LTE_PSM_REQ_RPTAU_SECONDS} and @kconfig{CONFIG_LTE_PSM_REQ_RAT_SECONDS},
+ * or by calling lte_lc_psm_param_set() or lte_lc_psm_param_set_seconds().
  *
  * @note @kconfig{CONFIG_LTE_PSM_REQ} can be set to enable PSM, which is generally sufficient. This
  *       option allows explicit disabling/enabling of PSM requesting after modem initialization.
@@ -1377,10 +1466,9 @@ int lte_lc_psm_req(bool enable);
 /**
  * Get the current PSM (Power Saving Mode) configuration.
  *
- * @param[out] tau Periodic TAU interval in seconds. Positive integer,
- *                 or @c -1 if timer is deactivated.
- * @param[out] active_time Active time in seconds. Positive integer,
- *                         or @c -1 if timer is deactivated.
+ * @param[out] tau Periodic TAU interval in seconds. A non-negative integer.
+ * @param[out] active_time Active time in seconds. A non-negative integer,
+ *                         or @c -1 if PSM is deactivated.
  *
  * @retval 0 if successful.
  * @retval -EINVAL if input argument was invalid.
@@ -1429,7 +1517,7 @@ int lte_lc_proprietary_psm_req(bool enable);
  *
  * @param[in] mode LTE mode to which the PTW value applies.
  * @param[in] ptw Paging Time Window value as a null-terminated string.
- *                Set to @c NULL to use manufacturer-specific default value.
+ *                Set to @c NULL to use modem's default value.
  *
  * @retval 0 if successful.
  * @retval -EINVAL if an input parameter was invalid.
@@ -1446,7 +1534,7 @@ int lte_lc_ptw_set(enum lte_lc_lte_mode mode, const char *ptw);
  *
  * @param[in] mode LTE mode to which the eDRX value applies.
  * @param[in] edrx eDRX value as a null-terminated string.
- *                 Set to @c NULL to use manufacturer-specific default.
+ *                 Set to @c NULL to use modem's default value.
  *
  * @retval 0 if successful.
  * @retval -EINVAL if an input parameter was invalid.
@@ -1495,7 +1583,7 @@ int lte_lc_edrx_get(struct lte_lc_edrx_cfg *edrx_cfg);
  *
  * For reference see 3GPP 24.301 Ch. 9.9.4.25.
  *
- * @deprecated Use @kconfig{CONFIG_LTE_RAI_REQ} and socket options SO_RAI_* instead.
+ * @deprecated Use @kconfig{CONFIG_LTE_RAI_REQ} and socket option ``SO_RAI`` instead.
  *
  * @note This feature is only supported by modem firmware versions < 2.0.0.
  *
@@ -1512,7 +1600,7 @@ __deprecated int lte_lc_rai_param_set(const char *value);
  * Used RAI value can be set using @kconfig{CONFIG_LTE_RAI_REQ_VALUE} or by calling
  * lte_lc_rai_param_set().
  *
- * @deprecated Use @kconfig{CONFIG_LTE_RAI_REQ} and socket options SO_RAI_* instead.
+ * @deprecated Use @kconfig{CONFIG_LTE_RAI_REQ} and socket option ``SO_RAI`` instead.
  *
  * @note This feature is only supported by modem firmware versions < 2.0.0.
  *
@@ -1695,7 +1783,7 @@ int lte_lc_periodic_search_set(const struct lte_lc_periodic_search_cfg *const cf
  *
  * @retval 0 if a configuration was found and populated to the provided pointer.
  * @retval -EINVAL if input parameter was @c NULL.
- * @retval -ENOENT if no periodic search was not configured.
+ * @retval -ENOENT if periodic search configuration was not set.
  * @retval -EFAULT if an AT command failed.
  * @retval -EBADMSG if the modem responded with an error to an AT command or the
  *         response could not be parsed.

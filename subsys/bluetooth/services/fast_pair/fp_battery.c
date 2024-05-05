@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
-#include <bluetooth/services/fast_pair.h>
+#include <bluetooth/services/fast_pair/fast_pair.h>
 #include "fp_battery.h"
 
 static struct bt_fast_pair_battery_data fp_battery_data = {
@@ -50,5 +50,7 @@ int bt_fast_pair_battery_set(enum bt_fast_pair_battery_comp battery_comp,
 
 struct bt_fast_pair_battery_data fp_battery_get_battery_data(void)
 {
+	__ASSERT_NO_MSG(bt_fast_pair_is_ready());
+
 	return fp_battery_data;
 }

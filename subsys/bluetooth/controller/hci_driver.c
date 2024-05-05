@@ -127,14 +127,20 @@ BUILD_ASSERT(!IS_ENABLED(CONFIG_BT_PERIPHERAL) ||
 
 #if defined(CONFIG_BT_OBSERVER)
 	#if defined(CONFIG_BT_CTLR_ADV_EXT)
-		#define SDC_SCAN_BUF_SIZE \
-			SDC_MEM_SCAN_BUFFER_EXT(CONFIG_BT_CTLR_SDC_SCAN_BUFFER_COUNT)
+		#define SDC_SCAN_SIZE \
+			SDC_MEM_SCAN_EXT(CONFIG_BT_CTLR_SDC_SCAN_BUFFER_COUNT)
 	#else
-		#define SDC_SCAN_BUF_SIZE \
-			SDC_MEM_SCAN_BUFFER(CONFIG_BT_CTLR_SDC_SCAN_BUFFER_COUNT)
+		#define SDC_SCAN_SIZE \
+			SDC_MEM_SCAN(CONFIG_BT_CTLR_SDC_SCAN_BUFFER_COUNT)
 	#endif
 #else
-	#define SDC_SCAN_BUF_SIZE 0
+	#define SDC_SCAN_SIZE 0
+#endif
+
+#if defined(CONFIG_BT_CTLR_SDC_ALLOW_PARALLEL_SCANNING_AND_INITIATING)
+	#define SDC_INITIATOR_SIZE SDC_MEM_INITIATOR
+#else
+	#define SDC_INITIATOR_SIZE 0
 #endif
 
 #ifdef CONFIG_BT_CTLR_DATA_LENGTH_MAX
@@ -167,7 +173,8 @@ BUILD_ASSERT(!IS_ENABLED(CONFIG_BT_PERIPHERAL) ||
 #define SDC_MEM_CIG SDC_MEM_PER_CIG(CONFIG_BT_CTLR_CONN_ISO_GROUPS)
 #define SDC_MEM_CIS \
 	SDC_MEM_PER_CIS(CONFIG_BT_CTLR_CONN_ISO_STREAMS) + \
-	SDC_MEM_ISO_RX_SDU_POOL_SIZE(CONFIG_BT_CTLR_CONN_ISO_STREAMS)
+	SDC_MEM_ISO_RX_SDU_POOL_SIZE(CONFIG_BT_CTLR_CONN_ISO_STREAMS, \
+				     CONFIG_BT_ISO_RX_MTU)
 #define SDC_CIS_COUNT CONFIG_BT_CTLR_CONN_ISO_STREAMS
 #else
 #define SDC_MEM_CIG   0
@@ -179,7 +186,8 @@ BUILD_ASSERT(!IS_ENABLED(CONFIG_BT_PERIPHERAL) ||
 #define SDC_MEM_BIS_SINK \
 	SDC_MEM_PER_BIG(CONFIG_BT_CTLR_SCAN_SYNC_ISO_SET) +					\
 		SDC_MEM_PER_BIS(CONFIG_BT_CTLR_SYNC_ISO_STREAM_COUNT) +				\
-		SDC_MEM_ISO_RX_SDU_POOL_SIZE(CONFIG_BT_CTLR_SYNC_ISO_STREAM_COUNT)
+		SDC_MEM_ISO_RX_SDU_POOL_SIZE(CONFIG_BT_CTLR_SYNC_ISO_STREAM_COUNT,              \
+					     CONFIG_BT_ISO_RX_MTU)
 #define SDC_BIS_SINK_COUNT CONFIG_BT_CTLR_SYNC_ISO_STREAM_COUNT
 #else
 #define SDC_MEM_BIS_SINK   0
@@ -196,25 +204,32 @@ BUILD_ASSERT(!IS_ENABLED(CONFIG_BT_PERIPHERAL) ||
 #define SDC_BIS_SOURCE_COUNT 0
 #endif
 
-#if defined(CONFIG_BT_CTLR_SDC_ISO_RX_PDU_BUFFER_COUNT)
-	#define SDC_MEM_ISO_RX_POOL \
-		SDC_MEM_ISO_RX_PDU_POOL_SIZE(CONFIG_BT_CTLR_SDC_ISO_RX_PDU_BUFFER_COUNT)
+#if defined(CONFIG_BT_CTLR_SDC_ISO_RX_PDU_BUFFER_PER_STREAM_COUNT)
+#define SDC_MEM_ISO_RX_PDU_POOL                                                            \
+	SDC_MEM_ISO_RX_PDU_POOL_PER_STREAM_SIZE(                                               \
+		CONFIG_BT_CTLR_SDC_ISO_RX_PDU_BUFFER_PER_STREAM_COUNT,                             \
+		SDC_CIS_COUNT, SDC_BIS_SINK_COUNT)
 #else
-	#define SDC_MEM_ISO_RX_POOL 0
+#define SDC_MEM_ISO_RX_PDU_POOL 0
 #endif
 
 #if defined(CONFIG_BT_CTLR_SDC_ISO_TX_HCI_BUFFER_COUNT) && \
 	defined(CONFIG_BT_CTLR_SDC_ISO_TX_PDU_BUFFER_PER_STREAM_COUNT)
 #define SDC_MEM_ISO_TX_POOL                                                            \
-	SDC_MEM_ISO_TX_POOL_SIZE(CONFIG_BT_CTLR_SDC_ISO_TX_HCI_BUFFER_COUNT,               \
+	SDC_MEM_ISO_TX_PDU_POOL_SIZE(                                                          \
 		CONFIG_BT_CTLR_SDC_ISO_TX_PDU_BUFFER_PER_STREAM_COUNT,                         \
 		SDC_CIS_COUNT,                                                                 \
-		(SDC_BIS_SINK_COUNT + SDC_BIS_SOURCE_COUNT))
-/* We should not have to allocate TX pool memory for CONFIG_BT_CTLR_SYNC_ISO_STREAM_COUNT,
- * but currently bis_count does not differentiate between ADV or SYNC streams.
- */
+		SDC_BIS_SOURCE_COUNT) +							       \
+	SDC_MEM_ISO_TX_SDU_POOL_SIZE(CONFIG_BT_CTLR_SDC_ISO_TX_HCI_BUFFER_COUNT,               \
+		CONFIG_BT_ISO_TX_MTU)
 #else
 #define SDC_MEM_ISO_TX_POOL 0
+#endif
+
+#if defined(CONFIG_BT_CTLR_SDC_QOS_CHANNEL_SURVEY)
+#define SDC_MEM_CHAN_SURV SDC_MEM_QOS_CHANNEL_SURVEY
+#else
+#define SDC_MEM_CHAN_SURV 0
 #endif
 
 #define MEMPOOL_SIZE ((PERIPHERAL_COUNT * PERIPHERAL_MEM_SIZE) + \
@@ -224,13 +239,15 @@ BUILD_ASSERT(!IS_ENABLED(CONFIG_BT_PERIPHERAL) ||
 		      (SDC_PERIODIC_ADV_RSP_MEM_SIZE) + \
 		      (SDC_PERIODIC_SYNC_MEM_SIZE) + \
 		      (SDC_PERIODIC_ADV_LIST_MEM_SIZE) + \
-		      (SDC_SCAN_BUF_SIZE) + \
+		      (SDC_SCAN_SIZE) + \
+		      (SDC_INITIATOR_SIZE) + \
 		      (SDC_FAL_MEM_SIZE) + \
+		      (SDC_MEM_CHAN_SURV) + \
 		      (SDC_MEM_CIG) + \
 		      (SDC_MEM_CIS) + \
 		      (SDC_MEM_BIS_SINK) + \
 		      (SDC_MEM_BIS_SOURCE) + \
-		      (SDC_MEM_ISO_RX_POOL) + \
+		      (SDC_MEM_ISO_RX_PDU_POOL) + \
 		      (SDC_MEM_ISO_TX_POOL))
 
 #if defined(CONFIG_BT_SDC_ADDITIONAL_MEMORY)
@@ -250,8 +267,18 @@ void sdc_assertion_handler(const char *const file, const uint32_t line)
 #else /* !IS_ENABLED(CONFIG_BT_CTLR_ASSERT_HANDLER) */
 void sdc_assertion_handler(const char *const file, const uint32_t line)
 {
+#if defined(CONFIG_ASSERT) && defined(CONFIG_ASSERT_VERBOSE) && !defined(CONFIG_ASSERT_NO_MSG_INFO)
+	__ASSERT(false, "SoftDevice Controller ASSERT: %s, %d\n", file, line);
+#elif defined(CONFIG_LOG)
 	LOG_ERR("SoftDevice Controller ASSERT: %s, %d", file, line);
 	k_oops();
+#elif defined(CONFIG_PRINTK)
+	printk("SoftDevice Controller ASSERT: %s, %d\n", file, line);
+	printk("\n");
+	k_oops();
+#else
+	k_oops();
+#endif
 }
 #endif /* IS_ENABLED(CONFIG_BT_CTLR_ASSERT_HANDLER) */
 
@@ -541,23 +568,7 @@ static void receive_work_handler(struct k_work *work)
 	hci_driver_receive_process();
 }
 
-static const struct device *entropy_source = DEVICE_DT_GET(DT_NODELABEL(rng));
-
-static uint8_t rand_prio_low_vector_get(uint8_t *p_buff, uint8_t length)
-{
-	int ret = entropy_get_entropy_isr(entropy_source, p_buff, length, 0);
-
-	__ASSERT(ret >= 0, "The entropy source returned an error in the low priority context");
-	return ret >= 0 ? ret : 0;
-}
-
-static uint8_t rand_prio_high_vector_get(uint8_t *p_buff, uint8_t length)
-{
-	int ret = entropy_get_entropy_isr(entropy_source, p_buff, length, 0);
-
-	__ASSERT(ret >= 0, "The entropy source returned an error in the high priority context");
-	return ret >= 0 ? ret : 0;
-}
+static const struct device *entropy_source = DEVICE_DT_GET(DT_CHOSEN(zephyr_entropy));
 
 static void rand_prio_low_vector_get_blocking(uint8_t *p_buff, uint8_t length)
 {
@@ -821,12 +832,26 @@ static int configure_supported_features(void)
 		}
 	}
 
+	if (IS_ENABLED(CONFIG_BT_CTLR_SDC_IGNORE_HCI_ISO_DATA_TS_FROM_HOST)) {
+		err = sdc_iso_host_timestamps_ignore(true);
+		if (err) {
+			return -ENOTSUP;
+		}
+	}
+
 	if (IS_ENABLED(CONFIG_BT_CTLR_SYNC_ISO)) {
 		err = sdc_support_bis_sink();
 		if (err) {
 			return -ENOTSUP;
 		}
 	}
+
+#if defined(CONFIG_BT_CTLR_SDC_ALLOW_PARALLEL_SCANNING_AND_INITIATING)
+	err = sdc_support_parallel_scanning_and_initiating();
+	if (err) {
+		return -ENOTSUP;
+	}
+#endif
 
 	return 0;
 }
@@ -836,7 +861,7 @@ static int configure_memory_usage(void)
 	int required_memory;
 	sdc_cfg_t cfg;
 
-#if defined(CONFIG_BT_CTLR_SDC_ISO_RX_PDU_BUFFER_COUNT)
+#if defined(CONFIG_BT_CTLR_SDC_ISO_RX_PDU_BUFFER_PER_STREAM_COUNT)
 	uint8_t iso_rx_paths = 0;
 #endif
 
@@ -1040,45 +1065,52 @@ static int configure_memory_usage(void)
 		return required_memory;
 	}
 
-	cfg.bis_count.count = 0;
 #if defined(CONFIG_BT_CTLR_ADV_ISO)
-	cfg.bis_count.count += CONFIG_BT_CTLR_ADV_ISO_STREAM_COUNT;
-
+	cfg.bis_source_count.count = CONFIG_BT_CTLR_ADV_ISO_STREAM_COUNT;
+	required_memory = sdc_cfg_set(SDC_DEFAULT_RESOURCE_CFG_TAG,
+					  SDC_CFG_TYPE_BIS_SOURCE_COUNT, &cfg);
+	if (required_memory < 0) {
+		return required_memory;
+	}
 #endif /* CONFIG_BT_CTLR_ADV_ISO */
 #if defined(CONFIG_BT_CTLR_SYNC_ISO)
-	cfg.bis_count.count += CONFIG_BT_CTLR_SYNC_ISO_STREAM_COUNT;
+	cfg.bis_sink_count.count = CONFIG_BT_CTLR_SYNC_ISO_STREAM_COUNT;
 	iso_rx_paths += CONFIG_BT_CTLR_SYNC_ISO_STREAM_COUNT;
-#endif /* CONFIG_BT_CTLR_SYNC_ISO */
 	required_memory = sdc_cfg_set(SDC_DEFAULT_RESOURCE_CFG_TAG,
-					  SDC_CFG_TYPE_BIS_COUNT, &cfg);
+					  SDC_CFG_TYPE_BIS_SINK_COUNT, &cfg);
 	if (required_memory < 0) {
 		return required_memory;
 	}
+#endif /* CONFIG_BT_CTLR_SYNC_ISO */
 #endif /* CONFIG_BT_CTLR_BROADCAST_ISO */
 
-#if defined(CONFIG_BT_CTLR_SDC_ISO_RX_PDU_BUFFER_COUNT)
-	cfg.iso_rx_pdu_buffer_cfg.count = CONFIG_BT_CTLR_SDC_ISO_RX_PDU_BUFFER_COUNT;
-	required_memory = sdc_cfg_set(SDC_DEFAULT_RESOURCE_CFG_TAG,
-					  SDC_CFG_TYPE_ISO_RX_PDU_BUFFER_CFG, &cfg);
-	if (required_memory < 0) {
-		return required_memory;
-	}
+#if defined(CONFIG_BT_CTLR_SDC_ISO_RX_PDU_BUFFER_PER_STREAM_COUNT) ||                             \
+	(defined(CONFIG_BT_CTLR_SDC_ISO_TX_HCI_BUFFER_COUNT) &&                                   \
+	defined(CONFIG_BT_CTLR_SDC_ISO_TX_PDU_BUFFER_PER_STREAM_COUNT))
+	memset(&cfg.iso_buffer_cfg, 0, sizeof(cfg.iso_buffer_cfg));
+#endif
 
-	cfg.iso_rx_sdu_buffer_cfg.count = iso_rx_paths;
-	required_memory = sdc_cfg_set(SDC_DEFAULT_RESOURCE_CFG_TAG,
-					  SDC_CFG_TYPE_ISO_RX_SDU_BUFFER_CFG, &cfg);
-	if (required_memory < 0) {
-		return required_memory;
-	}
+#if defined(CONFIG_BT_CTLR_SDC_ISO_RX_PDU_BUFFER_PER_STREAM_COUNT)
+	cfg.iso_buffer_cfg.rx_pdu_buffer_per_stream_count =
+		CONFIG_BT_CTLR_SDC_ISO_RX_PDU_BUFFER_PER_STREAM_COUNT;
+
+	cfg.iso_buffer_cfg.rx_sdu_buffer_count = iso_rx_paths;
+	cfg.iso_buffer_cfg.rx_sdu_buffer_size = CONFIG_BT_ISO_RX_MTU;
 #endif
 
 #if defined(CONFIG_BT_CTLR_SDC_ISO_TX_HCI_BUFFER_COUNT) &&                                         \
 	defined(CONFIG_BT_CTLR_SDC_ISO_TX_PDU_BUFFER_PER_STREAM_COUNT)
-	cfg.iso_tx_buffer_cfg.tx_hci_buffer_count = CONFIG_BT_CTLR_SDC_ISO_TX_HCI_BUFFER_COUNT;
-	cfg.iso_tx_buffer_cfg.tx_pdu_buffer_per_stream_count =
+	cfg.iso_buffer_cfg.tx_sdu_buffer_count = CONFIG_BT_CTLR_SDC_ISO_TX_HCI_BUFFER_COUNT;
+	cfg.iso_buffer_cfg.tx_sdu_buffer_size = CONFIG_BT_ISO_TX_MTU;
+	cfg.iso_buffer_cfg.tx_pdu_buffer_per_stream_count =
 		CONFIG_BT_CTLR_SDC_ISO_TX_PDU_BUFFER_PER_STREAM_COUNT;
+#endif
+
+#if defined(CONFIG_BT_CTLR_SDC_ISO_RX_PDU_BUFFER_PER_STREAM_COUNT) ||                             \
+	(defined(CONFIG_BT_CTLR_SDC_ISO_TX_HCI_BUFFER_COUNT) &&                                   \
+	defined(CONFIG_BT_CTLR_SDC_ISO_TX_PDU_BUFFER_PER_STREAM_COUNT))
 	required_memory = sdc_cfg_set(SDC_DEFAULT_RESOURCE_CFG_TAG,
-					  SDC_CFG_TYPE_ISO_TX_BUFFER_CFG, &cfg);
+					  SDC_CFG_TYPE_ISO_BUFFER_CFG, &cfg);
 	if (required_memory < 0) {
 		return required_memory;
 	}
@@ -1122,8 +1154,6 @@ static int hci_driver_open(void)
 	}
 
 	sdc_rand_source_t rand_functions = {
-		.rand_prio_low_get = rand_prio_low_vector_get,
-		.rand_prio_high_get = rand_prio_high_vector_get,
 		.rand_poll = rand_prio_low_vector_get_blocking
 	};
 
@@ -1173,6 +1203,39 @@ static int hci_driver_open(void)
 		}
 	}
 
+	if (IS_ENABLED(CONFIG_BT_ISO_BROADCASTER)) {
+		sdc_hci_cmd_vs_big_reserved_time_set_t params = {
+			.reserved_time_us = CONFIG_BT_CTLR_SDC_BIG_RESERVED_TIME_US
+		};
+		err = sdc_hci_cmd_vs_big_reserved_time_set(&params);
+		if (err) {
+			MULTITHREADING_LOCK_RELEASE();
+			return -ENOTSUP;
+		}
+	}
+
+	if (IS_ENABLED(CONFIG_BT_CTLR_CONN_ISO)) {
+		sdc_hci_cmd_vs_cig_reserved_time_set_t params = {
+			.reserved_time_us = CONFIG_BT_CTLR_SDC_CIG_RESERVED_TIME_US
+		};
+		err = sdc_hci_cmd_vs_cig_reserved_time_set(&params);
+		if (err) {
+			MULTITHREADING_LOCK_RELEASE();
+			return -ENOTSUP;
+		}
+	}
+
+	if (IS_ENABLED(CONFIG_BT_CTLR_CONN_ISO)) {
+		sdc_hci_cmd_vs_cis_subevent_length_set_t params = {
+			.cis_subevent_length_us = CONFIG_BT_CTLR_SDC_CIS_SUBEVENT_LENGTH_US
+		};
+		err = sdc_hci_cmd_vs_cis_subevent_length_set(&params);
+		if (err) {
+			MULTITHREADING_LOCK_RELEASE();
+			return -ENOTSUP;
+		}
+	}
+
 	if (IS_ENABLED(CONFIG_BT_CONN)) {
 		sdc_hci_cmd_vs_event_length_set_t params = {
 			.event_length_us = CONFIG_BT_CTLR_SDC_MAX_CONN_EVENT_LEN_DEFAULT
@@ -1182,7 +1245,42 @@ static int hci_driver_open(void)
 			MULTITHREADING_LOCK_RELEASE();
 			return -ENOTSUP;
 		}
+
+		sdc_hci_cmd_vs_conn_event_extend_t event_extend_params = {
+			.enable = IS_ENABLED(CONFIG_BT_CTLR_SDC_CONN_EVENT_EXTEND_DEFAULT)
+		};
+		err = sdc_hci_cmd_vs_conn_event_extend(&event_extend_params);
+		if (err) {
+			MULTITHREADING_LOCK_RELEASE();
+			return -ENOTSUP;
+		}
 	}
+
+	if (IS_ENABLED(CONFIG_BT_CENTRAL)) {
+		sdc_hci_cmd_vs_central_acl_event_spacing_set_t params = {
+			.central_acl_event_spacing_us =
+				CONFIG_BT_CTLR_SDC_CENTRAL_ACL_EVENT_SPACING_DEFAULT
+		};
+		err = sdc_hci_cmd_vs_central_acl_event_spacing_set(&params);
+		if (err) {
+			MULTITHREADING_LOCK_RELEASE();
+			return -ENOTSUP;
+		}
+	}
+
+#if defined(BT_CTLR_MIN_VAL_OF_MAX_ACL_TX_PAYLOAD_DEFAULT)
+	if (CONFIG_BT_CTLR_MIN_VAL_OF_MAX_ACL_TX_PAYLOAD_DEFAULT != 27) {
+		sdc_hci_cmd_vs_min_val_of_max_acl_tx_payload_set_t params = {
+			.min_val_of_max_acl_tx_payload =
+				CONFIG_BT_CTLR_MIN_VAL_OF_MAX_ACL_TX_PAYLOAD_DEFAULT
+		};
+		err = sdc_hci_cmd_vs_min_val_of_max_acl_tx_payload_set(&params);
+		if (err) {
+			MULTITHREADING_LOCK_RELEASE();
+			return -ENOTSUP;
+		}
+	}
+#endif
 
 	MULTITHREADING_LOCK_RELEASE();
 
@@ -1232,42 +1330,25 @@ static const struct bt_hci_driver drv = {
 #if !defined(CONFIG_BT_HCI_VS_EXT)
 uint8_t bt_read_static_addr(struct bt_hci_vs_static_addr addrs[], uint8_t size)
 {
-	/* only one supported */
-	ARG_UNUSED(size);
+	uint8_t retval;
+	uint8_t return_buffer[sizeof(sdc_hci_cmd_vs_zephyr_read_static_addresses_return_t)
+			      + sizeof(sdc_hci_vs_zephyr_static_address_t)];
 
-	if (((NRF_FICR->DEVICEADDR[0] != UINT32_MAX) ||
-	    ((NRF_FICR->DEVICEADDR[1] & UINT16_MAX) != UINT16_MAX)) &&
-	     (NRF_FICR->DEVICEADDRTYPE & 0x01)) {
-		sys_put_le32(NRF_FICR->DEVICEADDR[0], &addrs[0].bdaddr.val[0]);
-		sys_put_le16(NRF_FICR->DEVICEADDR[1], &addrs[0].bdaddr.val[4]);
+	sdc_hci_cmd_vs_zephyr_read_static_addresses_return_t *return_params =
+		(sdc_hci_cmd_vs_zephyr_read_static_addresses_return_t *)return_buffer;
 
-		/* The FICR value is a just a random number, with no knowledge
-		 * of the Bluetooth Specification requirements for random
-		 * static addresses.
-		 */
-		BT_ADDR_SET_STATIC(&addrs[0].bdaddr);
+	retval = sdc_hci_cmd_vs_zephyr_read_static_addresses(
+		(sdc_hci_cmd_vs_zephyr_read_static_addresses_return_t *)return_buffer);
+	__ASSERT(retval == 0, "Expect command to succeed");
+	__ASSERT(return_params->num_addresses <= 1, "Avoid buffer overflow");
 
-		/* If no public address is provided and a static address is
-		 * available, then it is recommended to return an identity root
-		 * key (if available) from this command.
-		 */
-		if ((NRF_FICR->IR[0] != UINT32_MAX) &&
-		    (NRF_FICR->IR[1] != UINT32_MAX) &&
-		    (NRF_FICR->IR[2] != UINT32_MAX) &&
-		    (NRF_FICR->IR[3] != UINT32_MAX)) {
-			sys_put_le32(NRF_FICR->IR[0], &addrs[0].ir[0]);
-			sys_put_le32(NRF_FICR->IR[1], &addrs[0].ir[4]);
-			sys_put_le32(NRF_FICR->IR[2], &addrs[0].ir[8]);
-			sys_put_le32(NRF_FICR->IR[3], &addrs[0].ir[12]);
-		} else {
-			/* Mark IR as invalid */
-			(void)memset(addrs[0].ir, 0x00, sizeof(addrs[0].ir));
-		}
-
-		return 1;
+	if (return_params->num_addresses == 1 && size >= 1) {
+		BUILD_ASSERT(sizeof(sdc_hci_vs_zephyr_static_address_t) ==
+			     sizeof(struct bt_hci_vs_static_addr));
+		memcpy(&addrs[0], return_params->addresses, sizeof(struct bt_hci_vs_static_addr));
 	}
 
-	return 0;
+	return return_params->num_addresses;
 }
 #endif /* !defined(CONFIG_BT_HCI_VS_EXT) */
 

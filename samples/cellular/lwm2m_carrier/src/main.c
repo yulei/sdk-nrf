@@ -6,11 +6,11 @@
 
 #include <zephyr/kernel.h>
 #include <modem/nrf_modem_lib.h>
+#include <modem/lte_lc.h>
 
 #ifdef CONFIG_LWM2M_CARRIER
 #include <lwm2m_carrier.h>
 #include "carrier_certs.h"
-#include <modem/lte_lc.h>
 
 NRF_MODEM_LIB_ON_INIT(main_init_hook, on_modem_lib_init, NULL);
 
@@ -30,9 +30,6 @@ static void on_modem_lib_init(int ret, void *ctx)
 	if (ret != 0) {
 		return;
 	}
-
-	/* LTE Link Controller is uninitialized on every modem shutdown. */
-	lte_lc_init();
 
 	/* Let the application write the credentials first and then bring the link up. */
 	if (m_first_init) {
@@ -159,6 +156,12 @@ int lwm2m_carrier_event_handler(const lwm2m_carrier_event_t *event)
 		break;
 	case LWM2M_CARRIER_EVENT_REBOOT:
 		printk("LWM2M_CARRIER_EVENT_REBOOT\n");
+		break;
+	case LWM2M_CARRIER_EVENT_MODEM_DOMAIN:
+		printk("LWM2M_CARRIER_EVENT_MODEM_DOMAIN\n");
+		break;
+	case LWM2M_CARRIER_EVENT_APP_DATA:
+		printk("LWM2M_CARRIER_EVENT_APP_DATA\n");
 		break;
 	case LWM2M_CARRIER_EVENT_MODEM_INIT:
 		printk("LWM2M_CARRIER_EVENT_MODEM_INIT\n");

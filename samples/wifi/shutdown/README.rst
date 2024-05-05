@@ -7,8 +7,10 @@ Wi-Fi: Shutdown
    :local:
    :depth: 2
 
-The Shutdown sample demonstrates how to put the Nordic Semiconductor's Wi-Fi® chipset in shutdown mode.
-This also demonstrates how to achieve the lowest possible power consumption in the nRF5340 SoC when Wi-Fi is enabled but not in use.
+The Shutdown sample demonstrates how to put the Nordic Semiconductor's Wi-Fi® chipset in the Shutdown state, where the device is completely powered off.
+For more information, see the `nRF70 Series power states`_ page.
+
+This also demonstrates how to achieve the lowest possible power consumption in the Host SoC (nRF53, nRF52 or nRF91 Series) when Wi-Fi is enabled but not being used.
 
 Requirements
 ************
@@ -20,24 +22,25 @@ The sample supports the following development kits:
 Overview
 ********
 
-The sample can demonstrate Wi-Fi shutdown and achieve the lowest possible power consumption in the nRF5340 SoC.
+The sample can demonstrate Wi-Fi shutdown and achieve the lowest possible power consumption in the Host SoC.
 The sample:
 
 1. Initializes the Wi-Fi driver.
 #. Scans for available Wi-Fi networks to verify that the Wi-Fi driver is operational.
-#. Shuts down the Wi-Fi driver.
-#. Puts the nRF5340 SoC in the lowest possible power consumption mode.
+#. Brings down the Wi-Fi network interface, which automatically directs the Wi-Fi driver to power down the nRF70 device.
+#. Puts the Host SoC in the lowest possible power consumption mode.
+
 
 User Interface
 **************
 
 Button 1:
-   Wakes up the nRF5340 SoC and initializes the Wi-Fi chipset.
+   Wakes up the Host SoC, brings up the Wi-Fi network interface, which automatically directs the Wi-Fi driver to power on the nRF70 device.
    The sample then scans for available Wi-Fi networks to verify that the Wi-Fi driver is operational.
 
 Button 2:
-   Shuts down the Wi-Fi driver.
-   The nRF5340 SoC is put into the lowest possible power consumption mode.
+   Brings down the Wi-Fi network interface, which automatically directs the Wi-Fi driver to power down the nRF70 device.
+   The Host SoC is put into the lowest possible power consumption mode.
 
 
 Building and running
@@ -47,13 +50,25 @@ Building and running
 
 .. include:: /includes/build_and_run_ns.txt
 
-To build for the nRF7002 DK, use the ``nrf7002dk_nrf5340_cpuapp`` build target.
+To build for the nRF7002 DK, use the ``nrf7002dk/nrf5340/cpuapp`` build target.
 The following is an example of the CLI command to demonstrate Wi-Fi shutdown:
 
 .. code-block:: console
 
-   west build -b nrf7002dk_nrf5340_cpuapp
+   west build -b nrf7002dk/nrf5340/cpuapp
 
+Disable auto-start of the Wi-Fi driver
+--------------------------------------
+
+The Wi-Fi network interface is automatically brought up when the Wi-Fi driver is initialized by default.
+You can disable it by setting the :kconfig:option:`CONFIG_NRF_WIFI_IF_AUTO_START` Kconfig option to ``n``.
+
+.. code-block:: console
+
+   west build -b nrf7002dk/nrf5340/cpuapp -DCONFIG_NRF_WIFI_IF_AUTO_START=n
+
+With this configuration, the Wi-Fi network interface is not automatically brought up by the Zephyr networking stack.
+You must press **Button 1** to bring up the Wi-Fi network interface.
 
 Testing
 =======

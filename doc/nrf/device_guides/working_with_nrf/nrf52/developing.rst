@@ -20,6 +20,7 @@ To get started with your nRF52 Series DK, follow the steps in the :ref:`ug_nrf52
 If you are not familiar with the |NCS| and its development environment, see :ref:`installation` and :ref:`configuration_and_build` documentation.
 
 .. _ug_nrf52_developing_ble_fota:
+
 .. fota_upgrades_intro_start
 
 FOTA updates
@@ -27,6 +28,7 @@ FOTA updates
 
 |fota_upgrades_def|
 You can also use FOTA updates to replace the application.
+See the :ref:`app_dfu` page for general Device Firmware Update (DFU) information, such as supported methods for sending and receiving updates on the device.
 
 .. note::
    For the possibility of introducing an upgradable bootloader, refer to :ref:`ug_bootloader_adding`.
@@ -61,7 +63,7 @@ To enable support for FOTA updates, do the following:
 .. fota_upgrades_over_ble_mandatory_mcuboot_start
 
 * Use MCUboot as the upgradable bootloader (:kconfig:option:`CONFIG_BOOTLOADER_MCUBOOT` must be enabled).
-  For more information, go to the :doc:`mcuboot:index-ncs` page.
+  For more information, go to the :ref:`ug_bootloader_adding` page.
 
 .. fota_upgrades_over_ble_mandatory_mcuboot_end
 
@@ -78,14 +80,16 @@ Here is an example of how you can build for the :ref:`peripheral_lbs` sample:
     west build -b *build_target* -- -DCONFIG_BOOTLOADER_MCUBOOT=y -DCONFIG_NCS_SAMPLE_MCUMGR_BT_OTA_DFU=y
 
 When you connect to the device after the build has completed and the firmware has been programmed to it, the SMP Service is enabled with the ``UUID 8D53DC1D-1DB7-4CD3-868B-8A527460AA84``.
-If you want to add SMP Service to advertising data, refer to the :ref:`zephyr:smp_svr_sample`.
+If you want to add SMP Service to advertising data, refer to the :zephyr:code-sample:`smp-svr`.
 
 .. fota_upgrades_over_ble_additional_information_end
 
-.. fota_upgrades_over_ble_mcuboot_direct_xip_information_start
+.. _ug_nrf52_developing_ble_fota_mcuboot_direct_xip_mode:
 
 Build configuration additions for MCUboot in the direct-xip mode
 ----------------------------------------------------------------
+
+.. fota_upgrades_over_ble_mcuboot_direct_xip_information_start
 
 FOTA updates are also supported when MCUboot is in the direct-xip mode.
 In this mode, the MCUboot bootloader boots an image directly from a given slot, so the swap operation is not needed.
@@ -123,7 +127,7 @@ See how to build the :ref:`peripheral_lbs` sample with MCUboot in direct-xip mod
    It must, however, be disabled when building update images.
 
 Both the :kconfig:option:`CONFIG_MCUBOOT_BOOTLOADER_MODE_DIRECT_XIP` and :kconfig:option:`CONFIG_MCUBOOT_BOOTLOADER_MODE_DIRECT_XIP_WITH_REVERT` Kconfig options automatically enable :kconfig:option:`CONFIG_BOOT_BUILD_DIRECT_XIP_VARIANT`, which allows to build application update images for both slots.
-To see which files are built when the option is enabled, go to the :ref:`app_build_mcuboot_output` page.
+To read about the files that are built when the option is enabled, refer to the :ref:`app_build_mcuboot_output` page.
 
 .. fota_upgrades_over_ble_mcuboot_direct_xip_nrfcdm_note_start
 
@@ -154,7 +158,7 @@ To perform a FOTA update, complete the following steps:
       Otherwise, the DFU target may reject the FOTA process due to a downgrade prevention mechanism.
 
 #. Download the :file:`dfu_application.zip` archive to your device.
-   See :ref:`app_build_fota` for more information about the contents of update archive.
+   See :ref:`app_build_output_files` for more information about the contents of update archive.
 
    .. note::
       nRF Connect for Desktop does not currently support the FOTA process.
@@ -178,16 +182,16 @@ To perform a FOTA update, complete the following steps:
 FOTA update sample
 ==================
 
-The :ref:`zephyr:smp_svr_sample` demonstrates how to set up your project to support FOTA updates.
+The :zephyr:code-sample:`smp-svr` demonstrates how to set up your project to support FOTA updates.
 
 The sample documentation is from the Zephyr project and is incompatible with the :ref:`ug_multi_image`.
 When working in the |NCS| environment, ignore the part of the sample documentation that describes the building and programming steps.
-In |NCS|, you can build and program the :ref:`zephyr:smp_svr_sample` as any other sample using the following commands:
+In |NCS|, you can build and program the :zephyr:code-sample:`smp-svr` as any other sample using the following commands:
 
 .. parsed-literal::
    :class: highlight
 
-    west build -b *build_target* -- -DOVERLAY_CONFIG=overlay-bt.conf
+    west build -b *build_target* -- -DEXTRA_CONF_FILE=overlay-bt.conf
     west flash
 
 Make sure to indicate the :file:`overlay-bt.conf` overlay configuration for the Bluetooth transport like in the command example.
@@ -204,13 +208,12 @@ Consider using these features in your project to speed up the FOTA update proces
 .. _ug_nrf52_developing_fota_in_mesh:
 .. fota_upgrades_bt_mesh_start
 
-FOTA in Bluetooth mesh
+FOTA in Bluetooth Mesh
 ======================
 
-When performing a FOTA update when working with the Bluetooth mesh protocol, use one of the following DFU methods:
+When performing a FOTA update when working with the Bluetooth Mesh protocol, use one of the following DFU methods:
 
-* DFU over Bluetooth mesh using the Zephyr Bluetooth mesh DFU subsystem.
-  The specification that the Bluetooth mesh DFU subsystem is based on is not adopted yet, and therefore this feature should be used for experimental purposes only.
+* DFU over Bluetooth Mesh using the Zephyr Bluetooth Mesh DFU subsystem.
 * Point-to-point DFU over Bluetooth Low Energy as described in `FOTA over Bluetooth Low Energy`_ above.
 
 For more information about both methods, see :ref:`ug_bt_mesh_fota`.
@@ -298,7 +301,7 @@ To perform the test, :ref:`connect to the nRF52 Series DK <nrf52_gs_connecting>`
 Building and programming
 ************************
 
-You can program applications and samples on the nRF9160 DK after obtaining the corresponding firmware images.
+You can program applications and samples on the nRF52 Series DK after obtaining the corresponding firmware images.
 
 To program applications using the Programmer app from `nRF Connect for Desktop`_, follow the instructions in :ref:`nrf52_gs_installing_application`.
 In Step 5, choose the :file:`.hex` file for the application you are programming.

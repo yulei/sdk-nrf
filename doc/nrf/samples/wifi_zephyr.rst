@@ -10,22 +10,22 @@ Wi-Fi: Zephyr networking samples
 In addition to |NCS| samples, it is possible to run selected networking samples with Wi-Fi®, provided and maintained as part of the upstream Zephyr project.
 The following list specifies samples that are currently supported with the Wi-Fi driver:
 
-* :ref:`dhcpv4-client-sample`
-* :ref:`dns-resolve-sample`
-* :ref:`ipv4-autoconf-sample`
-* :ref:`mdns-responder-sample`
-* :ref:`mqtt-publisher-sample`
-* :ref:`mqtt-sn-publisher-sample`
-* :ref:`coap-client-sample`
-* :ref:`coap-server-sample`
-* :ref:`sockets-echo-sample`
-* :ref:`async-sockets-echo-sample`
-* :ref:`sockets-echo-client-sample`
-* :ref:`sockets-echo-server-sample`
-* :ref:`sockets-http-get`
-* :ref:`sntp-client-sample`
-* :ref:`syslog-net-sample`
-* :ref:`telnet-console-sample`
+* :zephyr:code-sample:`dhcpv4-client`
+* :zephyr:code-sample:`dns-resolve`
+* :zephyr:code-sample:`ipv4-autoconf`
+* :zephyr:code-sample:`mdns-responder`
+* :zephyr:code-sample:`mqtt-publisher`
+* :zephyr:code-sample:`mqtt-sn-publisher`
+* :zephyr:code-sample:`coap-client`
+* :zephyr:code-sample:`coap-server`
+* :zephyr:code-sample:`sockets-echo`
+* :zephyr:code-sample:`async-sockets-echo`
+* :zephyr:code-sample:`sockets-echo-client`
+* :zephyr:code-sample:`sockets-echo-server`
+* :zephyr:code-sample:`sockets-http-get`
+* :zephyr:code-sample:`sntp-client`
+* :zephyr:code-sample:`syslog-net`
+* :zephyr:code-sample:`telnet-console`
 
 Configuration
 *************
@@ -47,22 +47,22 @@ Building and running
 ********************
 
 To build the sample with |VSC|, follow the steps listed on the `How to build an application`_ page in the |nRFVSC| documentation.
-See :ref:`programming` for other building and programming scenarios and :ref:`testing` for general information about testing and debugging in the |NCS|.
+See :ref:`building` for other building scenarios, :ref:`programming` for programming steps, and :ref:`testing` for general information about testing and debugging in the |NCS|.
 
 An overlay file, ``overlay-nrf700x.conf`` is provided to all Zephyr samples, which configures the sample to run with the Wi-Fi driver.
 
-To build Zephyr samples for the nRF7002 DK, use the ``nrf7002dk_nrf5340_cpuapp`` build target.
+To build Zephyr samples for the nRF7002 DK, use the ``nrf7002dk/nrf5340/cpuapp`` build target.
 The following is an example of the CLI command:
 
 .. code-block:: console
 
-   west build -b nrf7002dk_nrf5340_cpuapp -- -DOVERLAY_CONFIG=overlay-nrf700x.conf
+   west build -b nrf7002dk/nrf5340/cpuapp -- -DEXTRA_CONF_FILE=overlay-nrf700x.conf
 
-To build for the nRF7002 EK with nRF5340 DK, use the ``nrf5340dk_nrf5340_cpuapp`` build target with the ``SHIELD`` CMake option set to ``nrf7002ek``.
+To build for the nRF7002 EK with nRF5340 DK, use the ``nrf5340dk/nrf5340/cpuapp`` build target with the ``SHIELD`` CMake option set to ``nrf7002ek``.
 The following is an example of the CLI command:
 
 .. code-block:: console
 
-   west build -b nrf5340dk_nrf5340_cpuapp -- -DSHIELD=nrf7002ek -DOVERLAY_CONFIG=overlay-nrf700x.conf
+   west build -b nrf5340dk/nrf5340/cpuapp -- -DSHIELD=nrf7002ek -DEXTRA_CONF_FILE=overlay-nrf700x.conf
 
 For additional details about running a sample, refer to the respective sample in Zephyr’s Samples and Demos documentation.

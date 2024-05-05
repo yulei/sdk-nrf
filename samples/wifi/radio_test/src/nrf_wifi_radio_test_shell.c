@@ -8,7 +8,7 @@
  * @brief NRF Wi-Fi radio test shell module
  */
 
-#include <zephyr_fmac_main.h>
+#include <fmac_main.h>
 #include <nrf_wifi_radio_test_shell.h>
 #include <util.h>
 #include "fmac_api_common.h"
@@ -161,7 +161,7 @@ static bool check_valid_chan_2g(unsigned char chan_num)
 }
 
 
-#ifndef CONFIG_BOARD_NRF7001
+#ifndef CONFIG_NRF70_2_4G_ONLY
 static bool check_valid_chan_5g(unsigned char chan_num)
 {
 	if ((chan_num == 32) ||
@@ -205,7 +205,7 @@ static bool check_valid_chan_5g(unsigned char chan_num)
 
 	return false;
 }
-#endif /* CONFIG_BOARD_NRF7001 */
+#endif /* CONFIG_NRF70_2_4G_ONLY */
 
 
 static bool check_valid_channel(unsigned char chan_num)
@@ -218,9 +218,9 @@ static bool check_valid_channel(unsigned char chan_num)
 		goto out;
 	}
 
-#ifndef CONFIG_BOARD_NRF7001
+#ifndef CONFIG_NRF70_2_4G_ONLY
 	ret = check_valid_chan_5g(chan_num);
-#endif /* CONFIG_BOARD_NRF7001 */
+#endif /* CONFIG_NRF70_2_4G_ONLY */
 
 out:
 	return ret;
@@ -289,41 +289,6 @@ enum nrf_wifi_status nrf_wifi_radio_test_conf_init(struct rpu_conf_params *conf_
 {
 	enum nrf_wifi_status status = NRF_WIFI_STATUS_FAIL;
 	unsigned char country_code[NRF_WIFI_COUNTRY_CODE_LEN] = {0};
-	struct nrf_wifi_tx_pwr_ceil_params tx_pwr_ceil_params;
-
-#if defined(CONFIG_BOARD_NRF7002DK_NRF7001_NRF5340_CPUAPP) || \
-defined(CONFIG_BOARD_NRF7002DK_NRF5340_CPUAPP) || \
-defined(CONFIG_BOARD_NRF5340DK_NRF5340_CPUAPP)
-	set_tx_pwr_ceil_default(&tx_pwr_ceil_params);
-	#if DT_NODE_EXISTS(DT_NODELABEL(nrf70_tx_power_ceiling))
-		tx_pwr_ceil_params.max_pwr_2g_dsss =
-				DT_PROP(DT_NODELABEL(nrf70_tx_power_ceiling), max_pwr_2g_dsss);
-		tx_pwr_ceil_params.max_pwr_2g_mcs7 =
-				DT_PROP(DT_NODELABEL(nrf70_tx_power_ceiling), max_pwr_2g_mcs7);
-		tx_pwr_ceil_params.max_pwr_2g_mcs0 =
-				DT_PROP(DT_NODELABEL(nrf70_tx_power_ceiling), max_pwr_2g_mcs0);
-		tx_pwr_ceil_params.rf_tx_pwr_ceil_params_override = 1;
-	#else
-		tx_pwr_ceil_params.rf_tx_pwr_ceil_params_override = 0;
-	#endif
-#endif
-
-#if defined(CONFIG_BOARD_NRF7002DK_NRF5340_CPUAPP) || defined(CONFIG_BOARD_NRF5340DK_NRF5340_CPUAPP)
-	#if DT_NODE_EXISTS(DT_NODELABEL(nrf70_tx_power_ceiling))
-		tx_pwr_ceil_params.max_pwr_5g_low_mcs7 =
-			DT_PROP(DT_NODELABEL(nrf70_tx_power_ceiling), max_pwr_5g_low_mcs7);
-		tx_pwr_ceil_params.max_pwr_5g_mid_mcs7 =
-			DT_PROP(DT_NODELABEL(nrf70_tx_power_ceiling), max_pwr_5g_mid_mcs7);
-		tx_pwr_ceil_params.max_pwr_5g_high_mcs7 =
-			DT_PROP(DT_NODELABEL(nrf70_tx_power_ceiling), max_pwr_5g_high_mcs7);
-		tx_pwr_ceil_params.max_pwr_5g_low_mcs0 =
-			DT_PROP(DT_NODELABEL(nrf70_tx_power_ceiling), max_pwr_5g_low_mcs0);
-		tx_pwr_ceil_params.max_pwr_5g_mid_mcs0 =
-			DT_PROP(DT_NODELABEL(nrf70_tx_power_ceiling), max_pwr_5g_mid_mcs0);
-		tx_pwr_ceil_params.max_pwr_5g_high_mcs0 =
-			DT_PROP(DT_NODELABEL(nrf70_tx_power_ceiling), max_pwr_5g_high_mcs0);
-	#endif
-#endif
 
 	/* Check and save regulatory country code currently set */
 	if (strlen(conf_params->country_code)) {
@@ -339,10 +304,9 @@ defined(CONFIG_BOARD_NRF5340DK_NRF5340_CPUAPP)
 	/* Initialize values which are other than 0 */
 	conf_params->op_mode = RPU_OP_MODE_RADIO_TEST;
 
-	status = nrf_wifi_fmac_rf_params_get(ctx->rpu_ctx,
-					     conf_params->rf_params,
-					     &tx_pwr_ceil_params);
-
+	status = nrf_wifi_fmac_rf_params_get(
+			ctx->rpu_ctx,
+			(struct nrf_wifi_phy_rf_params *)conf_params->rf_params);
 	if (status != NRF_WIFI_STATUS_SUCCESS) {
 		goto out;
 	}
@@ -356,7 +320,7 @@ defined(CONFIG_BOARD_NRF5340DK_NRF5340_CPUAPP)
 	conf_params->tx_mode = 1;
 	conf_params->tx_pkt_num = -1;
 	conf_params->tx_pkt_len = 1400;
-	conf_params->tx_pkt_preamble = 1;
+	conf_params->tx_pkt_preamble = 0;
 	conf_params->tx_pkt_rate = 6;
 	conf_params->he_ltf = 2;
 	conf_params->he_gi = 2;
@@ -831,41 +795,6 @@ static int nrf_wifi_radio_test_set_tx_pkt_num(const struct shell *shell,
 	ctx->conf_params.tx_pkt_num = val;
 
 	return 0;
-}
-
-void nrf_wifi_radio_test_get_max_tx_power_params(void)
-{
-	/*Max TX power is represented in 0.25dB resolution
-	 *So,multiply 4 to MAX_TX_PWR_RADIO_TEST and
-	 *configure the RF params corresponding to Max TX power
-	 */
-	ctx->conf_params.rf_params[NRF_WIFI_RF_PARAMS_OFF_CALIB_PWR2G] =
-	(MAX_TX_PWR_RADIO_TEST << 2);
-
-	ctx->conf_params.rf_params[NRF_WIFI_RF_PARAMS_OFF_CALIB_PWR2GM0M7] =
-	(MAX_TX_PWR_RADIO_TEST << 2);
-
-	ctx->conf_params.rf_params[NRF_WIFI_RF_PARAMS_OFF_CALIB_PWR2GM0M7+1] =
-	(MAX_TX_PWR_RADIO_TEST << 2);
-
-	ctx->conf_params.rf_params[NRF_WIFI_RF_PARAMS_OFF_CALIB_PWR5GM7] =
-	(MAX_TX_PWR_RADIO_TEST << 2);
-
-	ctx->conf_params.rf_params[NRF_WIFI_RF_PARAMS_OFF_CALIB_PWR5GM7+1] =
-	(MAX_TX_PWR_RADIO_TEST << 2);
-
-	ctx->conf_params.rf_params[NRF_WIFI_RF_PARAMS_OFF_CALIB_PWR5GM7+2] =
-	(MAX_TX_PWR_RADIO_TEST << 2);
-
-	ctx->conf_params.rf_params[NRF_WIFI_RF_PARAMS_OFF_CALIB_PWR5GM0] =
-	(MAX_TX_PWR_RADIO_TEST << 2);
-
-	ctx->conf_params.rf_params[NRF_WIFI_RF_PARAMS_OFF_CALIB_PWR5GM0+1] =
-	(MAX_TX_PWR_RADIO_TEST << 2);
-
-	ctx->conf_params.rf_params[NRF_WIFI_RF_PARAMS_OFF_CALIB_PWR5GM0+2] =
-	(MAX_TX_PWR_RADIO_TEST << 2);
-
 }
 
 static int nrf_wifi_radio_test_set_tx_pkt_len(const struct shell *shell,
@@ -1349,15 +1278,21 @@ static int nrf_wifi_radio_test_set_tx(const struct shell *shell,
 			return -ENOEXEC;
 		}
 
-		/*Max TX power values differ based on the test being performed.
-		 *For TX EVM Vs Power, Max TX power required is
-		 *"MAX_TX_PWR_RADIO_TEST" (24dB) whereas for testing the
-		 *Max TX power for which both EVM and spectrum mask are passing
-		 *for specific band and MCS/rate, TX power values will be read from
-		 *RF params string
+		/** Max TX power values differ based on the test being performed.
+		 * For TX EVM Vs Power, Max TX power required is
+		 * "MAX_TX_PWR_RADIO_TEST" (24dB) whereas for testing the
+		 * Max TX power for which both EVM and spectrum mask are passing
+		 * for specific band and MCS/rate, TX power values will be read from
+		 * RF params string.
 		 */
 		if (ctx->conf_params.tx_power != MAX_TX_PWR_SYS_TEST) {
-			nrf_wifi_radio_test_get_max_tx_power_params();
+			/** Max TX power is represented in 0.25dB resolution
+			 * So,multiply 4 to MAX_TX_PWR_RADIO_TEST and
+			 * configure the RF params corresponding to Max TX power.
+			 */
+			memset(&ctx->conf_params.rf_params[NRF_WIFI_TX_PWR_CEIL_BYTE_OFFSET],
+			(MAX_TX_PWR_RADIO_TEST << 2),
+			sizeof(struct nrf_wifi_tx_pwr_ceil));
 		}
 	}
 
@@ -1417,9 +1352,8 @@ static int nrf_wifi_radio_test_set_rx(const struct shell *shell,
 	return 0;
 }
 
-#if defined(CONFIG_BOARD_NRF7002DK_NRF7001_NRF5340_CPUAPP) || \
-	defined(CONFIG_BOARD_NRF7002DK_NRF5340_CPUAPP)
-static int nrf_wifi_radio_test_ble_ant_switch_ctrl(const struct shell *shell,
+#ifdef CONFIG_NRF700X_SR_COEX_RF_SWITCH
+static int nrf_wifi_radio_test_sr_ant_switch_ctrl(const struct shell *shell,
 					     size_t argc,
 					     const char *argv[])
 {
@@ -1432,11 +1366,11 @@ static int nrf_wifi_radio_test_ble_ant_switch_ctrl(const struct shell *shell,
 
 	val  = strtoul(argv[1], NULL, 0);
 
-	ctx->conf_params.ble_ant_switch_ctrl = val;
+	ctx->conf_params.sr_ant_switch_ctrl = val;
 
-	return ble_ant_switch(val);
+	return sr_ant_switch(val);
 }
-#endif /* CONFIG_BOARD_NRF700XDK_NRF5340 */
+#endif /* CONFIG_NRF700X_SR_COEX_RF_SWITCH */
 
 
 static int nrf_wifi_radio_test_rx_cap(const struct shell *shell,
@@ -1771,7 +1705,7 @@ static int nrf_wifi_radio_set_xo_val(const struct shell *shell,
 		goto out;
 	}
 
-	ctx->conf_params.rf_params[NRF_WIFI_RF_PARAMS_OFF_CALIB_X0] = val;
+	ctx->conf_params.rf_params[NRF_WIFI_XO_FREQ_BYTE_OFFSET] = val;
 
 	ret = 0;
 out:
@@ -1813,6 +1747,59 @@ out:
 	return ret;
 }
 
+static int nrf_wifi_radio_test_set_ant_gain(const struct shell *shell,
+					    size_t argc,
+					    const char *argv[])
+{
+	char *ptr = NULL;
+	unsigned long ant_gain = 0;
+
+	ant_gain = strtoul(argv[1], &ptr, 10);
+
+	if ((ant_gain < 0) || (ant_gain > 6)) {
+		shell_fprintf(shell,
+			      SHELL_ERROR,
+			      "Invalid antenna gain setting\n");
+		return -ENOEXEC;
+	}
+
+	if (!check_test_in_prog(shell)) {
+		return -ENOEXEC;
+	}
+
+	memset(&ctx->conf_params.rf_params[ANT_GAIN_2G_OFST],
+	       ant_gain,
+	       NUM_ANT_GAIN);
+
+	return 0;
+}
+
+static int nrf_wifi_radio_test_set_edge_bo(const struct shell *shell,
+					   size_t argc,
+					   const char *argv[])
+{
+	char *ptr = NULL;
+	unsigned long edge_bo = 0;
+
+	edge_bo = strtoul(argv[1], &ptr, 10);
+
+	if ((edge_bo < 0) || (edge_bo > 10)) {
+		shell_fprintf(shell,
+			      SHELL_ERROR,
+			      "Invalid edge backoff setting\n");
+		return -ENOEXEC;
+	}
+
+	if (!check_test_in_prog(shell)) {
+		return -ENOEXEC;
+	}
+
+	memset(&ctx->conf_params.rf_params[BAND_2G_LW_ED_BKF_DSSS_OFST],
+	       edge_bo,
+	       NUM_EDGE_BACKOFF);
+
+	return 0;
+}
 
 static int nrf_wifi_radio_test_show_cfg(const struct shell *shell,
 					size_t argc,
@@ -1922,7 +1909,7 @@ static int nrf_wifi_radio_test_show_cfg(const struct shell *shell,
 	shell_fprintf(shell,
 		      SHELL_INFO,
 		      "xo_val = %d\n",
-		      conf_params->rf_params[NRF_WIFI_RF_PARAMS_OFF_CALIB_X0]);
+		      conf_params->rf_params[NRF_WIFI_XO_FREQ_BYTE_OFFSET]);
 
 	shell_fprintf(shell,
 		      SHELL_INFO,
@@ -1951,7 +1938,7 @@ static int nrf_wifi_radio_test_show_cfg(const struct shell *shell,
 
 	shell_fprintf(shell,
 		      SHELL_INFO,
-		      "rx_lna_gain = %d\n",
+		      "rx_bb_gain = %d\n",
 		      conf_params->bb_gain);
 
 	shell_fprintf(shell,
@@ -1963,8 +1950,8 @@ static int nrf_wifi_radio_test_show_cfg(const struct shell *shell,
 	defined(CONFIG_BOARD_NRF7002DK_NRF5340_CPUAPP)
 	shell_fprintf(shell,
 		      SHELL_INFO,
-		      "ble_ant_switch_ctrl = %d\n",
-		      conf_params->ble_ant_switch_ctrl);
+		      "sr_ant_switch_ctrl = %d\n",
+		      conf_params->sr_ant_switch_ctrl);
 #endif /* CONFIG_BOARD_NRF700XDK_NRF5340 */
 
 	shell_fprintf(shell,
@@ -1986,6 +1973,17 @@ static int nrf_wifi_radio_test_show_cfg(const struct shell *shell,
 		      SHELL_INFO,
 		      "bypass_reg_domain = %d\n",
 		      conf_params->bypass_regulatory);
+
+	shell_fprintf(shell,
+		      SHELL_INFO,
+		      "ru_tone = %d\n",
+		      conf_params->ru_tone);
+
+	shell_fprintf(shell,
+		      SHELL_INFO,
+		      "ru_index = %d\n",
+		      conf_params->ru_index);
+
 	return 0;
 }
 
@@ -2076,7 +2074,7 @@ static int nrf_wifi_radio_test_wlan_switch_ctrl(const struct shell *shell,
 
 	ctx->conf_params.wlan_ant_switch_ctrl = params.switch_A;
 
-	status = nrf_wifi_fmac_conf_btcoex(ctx->rpu_ctx,
+	status = nrf_wifi_fmac_conf_srcoex(ctx->rpu_ctx,
 					   &params, sizeof(params));
 
 	if (status != NRF_WIFI_STATUS_SUCCESS) {
@@ -2229,9 +2227,9 @@ SHELL_STATIC_SUBCMD_SET_CREATE(
 		      NULL,
 		      "0 - Legacy mode\n"
 		      "1 - HT mode\n"
-#ifndef CONFIG_BOARD_NRF7001
+#ifndef CONFIG_NRF70_2_4G_ONLY
 		      "2 - VHT mode\n"
-#endif /* CONFIG_BOARD_NRF7001 */
+#endif /* CONFIG_NRF70_2_4G_ONLY */
 		      "3 - HE(SU) mode\n"
 		      "4 - HE(ER SU) mode\n"
 		      "5 - HE (TB) mode                                   ",
@@ -2247,8 +2245,8 @@ SHELL_STATIC_SUBCMD_SET_CREATE(
 		      0),
 	SHELL_CMD_ARG(tx_pkt_preamble,
 		      NULL,
-		      "0 - Short preamble\n"
-		      "1 - Long preamble\n"
+		      "0 - Long preamble\n"
+		      "1 - Short preamble\n"
 		      "2 - Mixed preamble                                   ",
 		      nrf_wifi_radio_test_set_tx_pkt_preamble,
 		      2,
@@ -2329,16 +2327,15 @@ SHELL_STATIC_SUBCMD_SET_CREATE(
 		      nrf_wifi_radio_test_set_rx,
 		      2,
 		      0),
-#if defined(CONFIG_BOARD_NRF7002DK_NRF7001_NRF5340_CPUAPP) || \
-	defined(CONFIG_BOARD_NRF7002DK_NRF5340_CPUAPP)
-	SHELL_CMD_ARG(ble_ant_switch_ctrl,
+#ifdef CONFIG_NRF700X_SR_COEX_RF_SWITCH
+	SHELL_CMD_ARG(sr_ant_switch_ctrl,
 		      NULL,
 		      "0 - Switch set to use the BLE antenna\n"
 		      "1 - Switch set to use the shared Wi-Fi antenna",
-		      nrf_wifi_radio_test_ble_ant_switch_ctrl,
+		      nrf_wifi_radio_test_sr_ant_switch_ctrl,
 		      2,
 		      0),
-#endif /* CONFIG_BOARD_NRF700XDK_NRF5340 */
+#endif /* CONFIG_NRF700X_SR_COEX_RF_SWITCH */
 	SHELL_CMD_ARG(rx_lna_gain,
 		      NULL,
 		      "<val> - LNA gain to be configured.\n"
@@ -2413,7 +2410,7 @@ SHELL_STATIC_SUBCMD_SET_CREATE(
 		      0),
 	SHELL_CMD_ARG(compute_optimal_xo_val,
 		      NULL,
-		      "Experimental",
+		      "Compute optimal XO trim value",
 		      nrf_wifi_radio_comp_opt_xo_val,
 		      1,
 		      0),
@@ -2455,6 +2452,18 @@ SHELL_STATIC_SUBCMD_SET_CREATE(
 			   "maximum TX power of channel in the configured regulatory domain.\n"
 		      "1 - Configured TX power value will be used for the channel.				",
 		      nrf_wifi_radio_test_set_bypass_reg,
+		      2,
+		      0),
+	SHELL_CMD_ARG(set_ant_gain,
+		      NULL,
+		      "<val> - Antenna gain in dB (Min: 0, Max: 6)",
+		      nrf_wifi_radio_test_set_ant_gain,
+		      2,
+		      0),
+	SHELL_CMD_ARG(set_edge_bo,
+		      NULL,
+		      "<val> - Edge backoff in dB (Min: 0, Max: 10)",
+		      nrf_wifi_radio_test_set_edge_bo,
 		      2,
 		      0),
 	SHELL_SUBCMD_SET_END);

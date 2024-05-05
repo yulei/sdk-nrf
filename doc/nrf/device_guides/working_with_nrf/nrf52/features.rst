@@ -17,63 +17,6 @@ For additional information, see the following documentation:
 * :ref:`ug_nrf52` for more advanced topics related to the nRF52 Series.
 * :ref:`installation` and :ref:`configuration_and_build` documentation to install the |NCS| and learn more about its development environment.
 
-.. _nrf52_supported_boards:
-
-Supported boards
-****************
-
-Devices in the nRF52 Series are supported by these boards in the Zephyr open source project and in |NCS|.
-
-.. list-table::
-   :header-rows: 1
-
-   * - DK
-     - PCA number
-     - Build target
-     - Documentation
-   * - :ref:`zephyr:nrf52840dk_nrf52840`
-     - PCA10056
-     - ``nrf52840dk_nrf52840``
-     - | `Product Specification <nRF52840 Product Specification_>`_
-       | `User Guide <nRF52840 DK User Guide_>`_
-   * - :ref:`zephyr:nrf52840dk_nrf52811`
-     - PCA10056
-     - ``nrf52840dk_nrf52811``
-     - `Product Specification <nRF52811 Product Specification_>`_
-   * - :ref:`zephyr:nrf52833dk_nrf52833`
-     - PCA10100
-     - ``nrf52833dk_nrf52833``
-     - | `Product Specification <nRF52833 Product Specification_>`_
-       | `User Guide <nRF52833 DK User Guide_>`_
-   * - :ref:`zephyr:nrf52833dk_nrf52820`
-     - PCA10100
-     - ``nrf52833dk_nrf52820``
-     - `Product Specification <nRF52820 Product Specification_>`_
-   * - :ref:`zephyr:nrf52dk_nrf52832`
-     - PCA10040
-     - ``nrf52dk_nrf52832``
-     - | `Product Specification <nRF52832 Product Specification_>`_
-       | `User Guide <nRF52 DK User Guide_>`_
-   * - :ref:`zephyr:nrf52dk_nrf52810`
-     - PCA10040
-     - ``nrf52dk_nrf52810``
-     - `Product Specification <nRF52810 Product Specification_>`_
-   * - :ref:`zephyr:nrf52dk_nrf52805`
-     - PCA10040
-     - ``nrf52dk_nrf52805``
-     - `Product Specification <nRF52805 Product Specification_>`_
-   * - :ref:`zephyr:nrf52840dongle_nrf52840`
-     - PCA10059
-     - ``nrf52840dongle_nrf52840``
-     - | `Product Specification <nRF52840 Product Specification_>`_
-       | `User Guide <nRF52840 Dongle User Guide_>`_
-   * - :ref:`zephyr:nrf21540dk_nrf52840`
-     - PCA10112
-     - ``nrf21540dk_nrf52840``
-     - `Product Specification <nRF21540 Product Specification_>`_
-
-See :ref:`ug_radio_fem_nrf21540ek` to learn how to use this RF front-end module (FEM) with the nRF52 Series devices.
-
 Secure bootloader chain
 ***********************
 
@@ -84,7 +27,7 @@ See :ref:`ug_bootloader` for more information and instructions on how to enable 
 Supported protocols
 *******************
 
-The nRF52 Series multiprotocol radio supports Bluetooth Low Energy (LE) including Bluetooth mesh, proprietary protocols (including Enhanced ShockBurst and Gazell), ANT, Thread, Zigbee, and 802.15.4.
+The nRF52 Series multiprotocol radio supports Bluetooth Low Energy (LE) including Bluetooth Mesh, proprietary protocols (including Enhanced ShockBurst and Gazell), ANT, Thread, Zigbee, and 802.15.4.
 Standard interface protocols like NFC and USB are supported on a range of the devices in the series and with supporting software.
 
 .. note::
@@ -111,24 +54,24 @@ In addition, you can run the :ref:`zephyr:bluetooth-samples` that are included f
 
 For available libraries, see :ref:`lib_bluetooth_services` (|NCS|) and :ref:`zephyr:bluetooth_api` (Zephyr).
 
-Bluetooth mesh
+Bluetooth Mesh
 ==============
 
-Bluetooth mesh is a mesh networking solution based on Bluetooth LE, developed by the Bluetooth Special Interest Group (SIG).
+Bluetooth Mesh is a mesh networking solution based on Bluetooth LE, developed by the Bluetooth Special Interest Group (SIG).
 It is optimized for creating large-scale device networks, and implemented according to Bluetooth Mesh Profile Specification v1.0.1 and Bluetooth Mesh Model Specification v1.0.1.
 
-Bluetooth mesh networking allows one-to-one, one-to-many, and many-to-many communication, using the Bluetooth LE protocol to exchange messages between the mesh nodes in the network.
+Bluetooth Mesh networking allows one-to-one, one-to-many, and many-to-many communication, using the Bluetooth LE protocol to exchange messages between the mesh nodes in the network.
 
 The |NCS| contains a variety of :ref:`bt_mesh_samples` that target nRF52 Series devices.
-In addition, you can run the :ref:`Bluetooth mesh samples <zephyr:bluetooth-samples>` that are included from Zephyr.
+In addition, you can run the :ref:`Bluetooth Mesh samples <zephyr:bluetooth-samples>` that are included from Zephyr.
 
 For available libraries, see :ref:`bt_mesh` (|NCS|) and :ref:`zephyr:bluetooth_mesh` (Zephyr).
-See the :ref:`ug_bt_mesh` user guide for information about how to use the supplied libraries and work with Bluetooth mesh.
+See the :ref:`ug_bt_mesh` user guide for information about how to use the supplied libraries and work with Bluetooth Mesh.
 
 Enhanced ShockBurst
 ===================
 
-.. include:: ../../../protocols/esb/index.rst
+.. include:: /protocols/esb/index.rst
    :start-after: esb_intro_start
    :end-before: esb_intro_end
 
@@ -138,7 +81,7 @@ To start developing, check out the :ref:`esb_ptx` and :ref:`esb_prx` samples.
 Gazell
 ======
 
-.. include:: ../../../protocols/gazell/index.rst
+.. include:: /protocols/gazell/index.rst
    :start-after: gz_intro_start
    :end-before: gz_intro_end
 
@@ -148,7 +91,7 @@ To start developing, check out the :ref:`gazell_samples`.
 Matter
 ======
 
-.. include:: ../../../protocols/matter/index.rst
+.. include:: /protocols/matter/index.rst
    :start-after: matter_intro_start
    :end-before: matter_intro_end
 
@@ -183,7 +126,7 @@ The nrfx repository is included in the |NCS| as a module of the Zephyr repositor
 Thread
 ======
 
-.. include:: ../../../protocols/thread/index.rst
+.. include:: /protocols/thread/index.rst
    :start-after: thread_intro_start
    :end-before: thread_intro_end
 
@@ -193,7 +136,7 @@ To start developing, refer to the :ref:`openthread_samples`.
 Zigbee
 ======
 
-.. include:: ../../../protocols/zigbee/index.rst
+.. include:: /protocols/zigbee/index.rst
    :start-after: zigbee_ug_intro_start
    :end-before: zigbee_ug_intro_end
 

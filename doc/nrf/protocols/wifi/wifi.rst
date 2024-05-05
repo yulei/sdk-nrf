@@ -1,7 +1,7 @@
+.. _ug_wifi_overview:
+
 Wi-Fi overview
 ##############
-
-.. _ug_wifi_overview:
 
 .. contents::
    :local:
@@ -13,7 +13,7 @@ Two network modes, infrastructure and peer-to-peer, are supported.
 The infrastructure mode is by far the most common mode, where multiple stations (STAs) communicate with an access point (AP), identified through its service set identifier (SSID).
 In addition, multiple APs can be used to service a SSID in order to improve coverage, but any individual STA will only be connected to a single AP at any time.
 In the infrastructure mode, the AP is the network coordinator, using regular transmission of beacon packets for the purpose of coordinating all connected STAs.
-The most common variant of peer-to-peer mode used is Wi-Fi Direct.
+The most common variant of peer-to-peer mode used is Wi-Fi Direct®.
 
 Wi-Fi is an Internet Protocol (IP) based network, with every device (AP or STA) having a unique 48-bit MAC address.
 Since the radio frequency (RF) communication channel is unreliable, a number of mechanisms are used in an attempt to achieve reliability not typically present in wired networks.
@@ -27,7 +27,7 @@ Acknowledgements (ACKs) are used for unicast packet transmissions, with every su
 
 The RF medium also necessitates security to achieve privacy of the over-the-air packet transmissions.
 Again, multiple schemes are available depending on the version of the standard in use, though over time the older schemes tend to be deprecated as vulnerabilities emerge.
-The schemes are referred to as Wi-Fi Protected Access (WPA), with WPA3 being the latest version (mandated for all new Wi-Fi Alliance certifications).
+The schemes are referred to as Wi-Fi Protected Access (WPA™), with WPA3™ being the latest version (mandated for all new Wi-Fi Alliance® certifications).
 
 .. _ug_wifi_stack:
 
@@ -139,16 +139,3 @@ The range of supported rates is vast, ranging from 86 Mbps for a single antenna 
 Wi-Fi has traditionally been single user (SU) based, which means that during any particular on-air packet transmission, the communication is between two users (excluding broadcast/multicast scenarios where the same information is delivered to multiple users).
 With the advent of Wi-Fi 6 (and to some extent Wi-Fi 5), multiuser (MU) support has been introduced.
 Through both MIMO and Orthogonal Frequency Division Multiple Access (OFDMA) techniques (and even a combination of both), it is now possible to send unique information to multiple users in the same on-air packet transmission, both in the downlink and uplink direction.
-
-.. _ug_wifi_certification:
-
-Wi-Fi certification
-*******************
-
-The Wi-Fi Alliance offers full `certification program <Wi-Fi Certification_>`_ that validates the interoperability of a Wi-Fi end product with other Wi-Fi Certified equipment.
-The program offers three different paths of certification to Contributor-level `members of the Wi-Fi Alliance <Join Wi-Fi Alliance_>`_.
-Implementer-level members can take advantage of the program by implementing Wi-Fi modules that have been previously certified by a Contributor-level member, for example one of the `Nordic third-party modules`_.
-
-For details about the Wi-Fi certification program and the available paths for the nRF70 Series, read the `Wi-Fi Alliance Certification for nRF70 Series`_ document.
-
-For instructions on how to specifically use the QuickTrack certification path, see the :ref:`wifi_wfa_qt_app_sample` page.

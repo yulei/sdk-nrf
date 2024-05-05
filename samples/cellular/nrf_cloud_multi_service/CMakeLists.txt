@@ -21,6 +21,8 @@ target_sources(app PRIVATE src/message_queue.c)
 target_sources(app PRIVATE src/temperature.c)
 target_sources(app PRIVATE src/fota_support.c)
 target_sources(app PRIVATE src/led_control.c)
+target_sources(app PRIVATE src/sample_reboot.c)
+target_sources(app PRIVATE src/shadow_config.c)
 
 if(CONFIG_LOCATION_TRACKING)
 target_sources(app PRIVATE src/location_tracking.c)
@@ -32,6 +34,10 @@ endif()
 
 if(CONFIG_COAP_FOTA)
 target_sources(app PRIVATE src/fota_support_coap.c)
+endif()
+
+if(CONFIG_NRF_PROVISIONING)
+target_sources(app PRIVATE src/provisioning_support.c)
 endif()
 
 # Include modem-specific features if supported

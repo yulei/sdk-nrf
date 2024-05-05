@@ -46,6 +46,12 @@ enum fota_download_evt_id {
 	 */
 	FOTA_DOWNLOAD_EVT_ERASE_PENDING,
 
+	/** Deletion of the downloaded FOTA image has reached the defined timeout. It will continue.
+	 *
+	 * Not fired for all FOTA types.
+	 */
+	FOTA_DOWNLOAD_EVT_ERASE_TIMEOUT,
+
 	/** Deletion of the downloaded FOTA image is complete.
 	 *
 	 * Not fired for all FOTA types.
@@ -65,6 +71,10 @@ enum fota_download_evt_id {
 enum fota_download_error_cause {
 	/** No error, used when event ID is not FOTA_DOWNLOAD_EVT_ERROR. */
 	FOTA_DOWNLOAD_ERROR_CAUSE_NO_ERROR,
+	/** Connecting to the FOTA server failed. A possible reason could be wrong
+	 *  TLS credentials. A retry is unlikely to help with the same credentials.
+	 */
+	FOTA_DOWNLOAD_ERROR_CAUSE_CONNECT_FAILED,
 	/** Downloading the update failed. The download may be retried. */
 	FOTA_DOWNLOAD_ERROR_CAUSE_DOWNLOAD_FAILED,
 	/** The update is invalid and was rejected. Retry will not help. */
@@ -106,10 +116,44 @@ typedef void (*fota_download_callback_t)(const struct fota_download_evt *evt);
  */
 int fota_download_init(fota_download_callback_t client_callback);
 
-/**@brief Start downloading the given file from the given host.
+/**@brief Download the given file with the specified image type from the given host.
+ *
+ * Validate that the file type matches the expected type before proceeding with the download.
+ * When the download is complete, the secondary slot of MCUboot is tagged as having
+ * valid firmware inside it. The completion is reported through an event.
+ *
+ * URI parameters (host and file) are not copied, so pointers must stay valid
+ * until download is finished.
+ *
+ * @param host Name of host to start downloading from. Can include scheme
+ *             and port number, for example https://google.com:443
+ * @param file Path to the file you wish to download. See fota_download_any()
+ *             for details on expected format.
+ * @param sec_tag_list Security tags that you want to use with HTTPS. Pass NULL to disable TLS.
+ * @param sec_tag_count Number of TLS security tags in list. Pass 0 to disable TLS.
+ * @param pdn_id Packet Data Network ID to use for the download, or 0 to use the default.
+ * @param fragment_size Fragment size to be used for the download.
+ *			If 0, @kconfig{CONFIG_DOWNLOAD_CLIENT_HTTP_FRAG_SIZE} is used.
+ * @param expected_type Type of firmware file to be downloaded and installed.
+ *
+ * @retval 0	     If download has started successfully.
+ * @retval -EALREADY If download is already ongoing.
+ * @retval -E2BIG    If sec_tag_count is larger than
+ *		     @kconfig{CONFIG_FOTA_DOWNLOAD_SEC_TAG_LIST_SIZE_MAX}
+ *                   Otherwise, a negative value is returned.
+ */
+int fota_download(const char *host, const char *file, const int *sec_tag_list,
+		  uint8_t sec_tag_count, uint8_t pdn_id, size_t fragment_size,
+		  const enum dfu_target_image_type expected_type);
+
+
+/**@brief Start downloading the given file of any image type from the given host.
  *
  * When the download is complete, the secondary slot of MCUboot is tagged as having
  * valid firmware inside it. The completion is reported through an event.
+ *
+ * URI parameters (host and file) are not copied, so pointers must stay valid
+ * until download is finished.
  *
  * @param host Name of host to start downloading from. Can include scheme
  *             and port number, e.g. https://google.com:443
@@ -124,7 +168,34 @@ int fota_download_init(fota_download_callback_t client_callback);
  *              See <a href="https://developer.nordicsemi.com/nRF_Connect_SDK/doc/latest/nrf/ug_bootloader.html">
  *              Secure Bootloader Chain Docs</a> for details regarding the upgradable
  *              bootloader slots.
- * @param sec_tag Security tag you want to use with HTTPS set to -1 to Disable.
+ * @param sec_tag_list Security tags that you want to use with HTTPS. Pass NULL to disable TLS.
+ * @param sec_tag_count Number of TLS security tags in list. Pass 0 to disable TLS.
+ * @param pdn_id Packet Data Network ID to use for the download, or 0 to use the default.
+ * @param fragment_size Fragment size to be used for the download.
+ *			If 0, @kconfig{CONFIG_DOWNLOAD_CLIENT_HTTP_FRAG_SIZE} is used.
+ *
+ * @retval 0	     If download has started successfully.
+ * @retval -EALREADY If download is already ongoing.
+ * @retval -E2BIG    If sec_tag_count is larger than
+ *		     @kconfig{CONFIG_FOTA_DOWNLOAD_SEC_TAG_LIST_SIZE_MAX}
+ *                   Otherwise, a negative value is returned.
+ */
+int fota_download_any(const char *host, const char *file, const int *sec_tag_list,
+		      uint8_t sec_tag_count, uint8_t pdn_id, size_t fragment_size);
+
+/**@brief Start downloading the given file of any image type from the given host.
+ *
+ * When the download is complete, the secondary slot of MCUboot is tagged as having
+ * valid firmware inside it. The completion is reported through an event.
+ *
+ * URI parameters (host and file) are not copied, so pointers must stay valid
+ * until download is finished.
+ *
+ * @param host Name of host to start downloading from. Can include scheme
+ *             and port number, e.g. https://google.com:443
+ * @param file Path to the file you wish to download. See fota_download_any()
+ *             for details on expected format.
+ * @param sec_tag Security tag you want to use with HTTPS. Pass -1 to disable TLS.
  * @param pdn_id Packet Data Network ID to use for the download, or 0 to use the default.
  * @param fragment_size Fragment size to be used for the download.
  *			If 0, @kconfig{CONFIG_DOWNLOAD_CLIENT_HTTP_FRAG_SIZE} is used.
@@ -136,9 +207,9 @@ int fota_download_init(fota_download_callback_t client_callback);
 int fota_download_start(const char *host, const char *file, int sec_tag,
 			uint8_t pdn_id, size_t fragment_size);
 
-/**@brief Start downloading the given file from the given host. Validate that the
- * file type matches the expected type before starting the installation.
+/**@brief Download the given file with the specified image type from the given host.
  *
+ * Validate that the file type matches the expected type before proceeding with the download.
  * When the download is complete, the secondary slot of MCUboot is tagged as having
  * valid firmware inside it. The completion is reported through an event.
  *
@@ -147,9 +218,9 @@ int fota_download_start(const char *host, const char *file, int sec_tag,
  *
  * @param host Name of host to start downloading from. Can include scheme
  *             and port number, for example https://google.com:443
- * @param file Path to the file you wish to download. See fota_download_start()
+ * @param file Path to the file you wish to download. See fota_download_any()
  *             for details on expected format.
- * @param sec_tag Security tag you want to use with HTTPS set to -1 to Disable.
+ * @param sec_tag Security tag you want to use with HTTPS. Pass -1 to disable TLS.
  * @param pdn_id Packet Data Network ID to use for the download, or 0 to use the default.
  * @param fragment_size Fragment size to be used for the download.
  *			If 0, @kconfig{CONFIG_DOWNLOAD_CLIENT_HTTP_FRAG_SIZE} is used.

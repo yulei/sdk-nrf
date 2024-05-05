@@ -12,7 +12,7 @@
 #include "mesh/access.h"
 #include "shell_utils.h"
 
-static struct bt_mesh_model *mod;
+static const struct bt_mesh_model *mod;
 
 static void dtt_print(const struct shell *shell, int err, int32_t rsp)
 {
@@ -27,7 +27,7 @@ static int cmd_dtt_get(const struct shell *shell, size_t argc, char *argv[])
 		return -ENODEV;
 	}
 
-	struct bt_mesh_dtt_cli *cli = mod->user_data;
+	struct bt_mesh_dtt_cli *cli = mod->rt->user_data;
 	int32_t rsp;
 
 	int err = bt_mesh_dtt_get(cli, NULL, &rsp);
@@ -50,7 +50,7 @@ static int dtt_set(const struct shell *shell, size_t argc, char *argv[], bool ac
 		return -ENODEV;
 	}
 
-	struct bt_mesh_dtt_cli *cli = mod->user_data;
+	struct bt_mesh_dtt_cli *cli = mod->rt->user_data;
 
 	if (acked) {
 		int32_t rsp;

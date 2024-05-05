@@ -11,14 +11,19 @@
 #include "matter_bridged_device.h"
 #include <lib/support/CHIPMem.h>
 
-#ifdef CONFIG_BRIDGE_HUMIDITY_SENSOR_BRIDGED_DEVICE
-#include "humidity_sensor.h"
-#include "simulated_humidity_sensor_data_provider.h"
-#endif
-
 #ifdef CONFIG_BRIDGE_ONOFF_LIGHT_BRIDGED_DEVICE
 #include "onoff_light.h"
 #include "simulated_onoff_light_data_provider.h"
+#endif
+
+#ifdef CONFIG_BRIDGE_GENERIC_SWITCH_BRIDGED_DEVICE
+#include "generic_switch.h"
+#include "simulated_generic_switch_data_provider.h"
+#endif
+
+#ifdef CONFIG_BRIDGE_ONOFF_LIGHT_SWITCH_BRIDGED_DEVICE
+#include "onoff_light_switch.h"
+#include "simulated_onoff_light_switch_data_provider.h"
 #endif
 
 #ifdef CONFIG_BRIDGE_TEMPERATURE_SENSOR_BRIDGED_DEVICE
@@ -26,12 +31,18 @@
 #include "temperature_sensor.h"
 #endif
 
+#ifdef CONFIG_BRIDGE_HUMIDITY_SENSOR_BRIDGED_DEVICE
+#include "humidity_sensor.h"
+#include "simulated_humidity_sensor_data_provider.h"
+#endif
+
 namespace SimulatedBridgedDeviceFactory
 {
-using UpdateAttributeCallback = BridgedDeviceDataProvider::UpdateAttributeCallback;
-using DeviceType = MatterBridgedDevice::DeviceType;
-using BridgedDeviceFactory = DeviceFactory<MatterBridgedDevice, DeviceType, const char *>;
-using SimulatedDataProviderFactory = DeviceFactory<BridgedDeviceDataProvider, DeviceType, UpdateAttributeCallback>;
+using UpdateAttributeCallback = Nrf::BridgedDeviceDataProvider::UpdateAttributeCallback;
+using InvokeCommandCallback = Nrf::BridgedDeviceDataProvider::InvokeCommandCallback;
+using DeviceType = uint16_t;
+using BridgedDeviceFactory = Nrf::DeviceFactory<Nrf::MatterBridgedDevice, DeviceType, const char *>;
+using SimulatedDataProviderFactory = Nrf::DeviceFactory<Nrf::BridgedDeviceDataProvider, DeviceType, UpdateAttributeCallback, InvokeCommandCallback>;
 
 BridgedDeviceFactory &GetBridgedDeviceFactory();
 SimulatedDataProviderFactory &GetDataProviderFactory();

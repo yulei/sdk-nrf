@@ -44,6 +44,336 @@ extern "C" {
 		const struct bt_mesh_sensor_type *volatile __unused val =      \
 			&_type;                                                \
 	}
+
+/** @defgroup bt_mesh_sensor_formats_percentage Percentage sensor formats
+ *  @{
+ */
+
+/** Percentage 8
+ *  - Unit: Percent
+ *  - Encoding: 8 bit unsigned scalar (Resolution: 0.5)
+ *  - Range: 0 to 100.0
+ */
+extern const struct bt_mesh_sensor_format bt_mesh_sensor_format_percentage_8;
+
+/** Percentage 16
+ *  - Unit: Percent
+ *  - Encoding: 16 bit unsigned scalar (Resolution: 0.01)
+ *  - Range: 0 to 100.0
+ */
+extern const struct bt_mesh_sensor_format bt_mesh_sensor_format_percentage_16;
+
+/** Percentage delta trigger
+ *  - Unit: Percent
+ *  - Encoding: 16 bit unsigned scalar (Resolution: 0.01)
+ *  - Range: 0 to 655.35
+ */
+extern const struct bt_mesh_sensor_format bt_mesh_sensor_format_percentage_delta_trigger;
+/** @} */
+
+/** @defgroup bt_mesh_sensor_formats_environmental Environmental sensor formats
+ *  @{
+ */
+
+/** Temp 8
+ *  - Unit: Celsius
+ *  - Encoding: 8 bit signed scalar (Resolution: 0.5)
+ *  - Range: -64.0 to 63.0
+ */
+extern const struct bt_mesh_sensor_format bt_mesh_sensor_format_temp_8;
+
+/** Temp
+ *  - Unit: Celsius
+ *  - Encoding: 16 bit signed scalar (Resolution: 0.01)
+ *  - Range: -273.15 to 327.67
+ */
+extern const struct bt_mesh_sensor_format bt_mesh_sensor_format_temp;
+
+/** Co2 concentration
+ *  - Unit: Parts per million
+ *  - Encoding: 16 bit unsigned scalar (Resolution: 1.0)
+ *  - Range: 0 to 65534
+ */
+extern const struct bt_mesh_sensor_format bt_mesh_sensor_format_co2_concentration;
+
+/** Noise
+ *  - Unit: Decibel
+ *  - Encoding: 8 bit unsigned scalar (Resolution: 1.0)
+ *  - Range: 0 to 254
+ */
+extern const struct bt_mesh_sensor_format bt_mesh_sensor_format_noise;
+
+/** Voc concentration
+ *  - Unit: Parts per billion
+ *  - Encoding: 16 bit unsigned scalar (Resolution: 1.0)
+ *  - Range: 0 to 65534
+ */
+extern const struct bt_mesh_sensor_format bt_mesh_sensor_format_voc_concentration;
+
+/** Wind speed
+ *  - Unit: Meters per second
+ *  - Encoding: 16 bit unsigned scalar (Resolution: 0.01)
+ *  - Range: 0 to 655.35
+ */
+extern const struct bt_mesh_sensor_format bt_mesh_sensor_format_wind_speed;
+
+/** Temp 8 wide
+ *  - Unit: Celsius
+ *  - Encoding: 8 bit signed scalar (Resolution: 1.0)
+ *  - Range: -128 to 127
+ */
+extern const struct bt_mesh_sensor_format bt_mesh_sensor_format_temp_8_wide;
+
+/** Gust factor
+ *  - Unit: Unitless
+ *  - Encoding: 8 bit unsigned scalar (Resolution: 0.1)
+ *  - Range: 0 to 25.5
+ */
+extern const struct bt_mesh_sensor_format bt_mesh_sensor_format_gust_factor;
+
+/** Magnetic flux density
+ *  - Unit: Microtesla
+ *  - Encoding: 16 bit signed scalar (Resolution: 0.1)
+ *  - Range: -3276.8 to 3276.7
+ */
+extern const struct bt_mesh_sensor_format bt_mesh_sensor_format_magnetic_flux_density;
+
+/** Pollen concentration
+ *  - Unit: Concentration per m3
+ *  - Encoding: 24 bit unsigned scalar (Resolution: 1.0)
+ *  - Range: 0 to 16777215
+ */
+extern const struct bt_mesh_sensor_format bt_mesh_sensor_format_pollen_concentration;
+
+/** Pressure
+ *  - Unit: Pascal
+ *  - Encoding: 32 bit unsigned scalar (Resolution: 0.1)
+ *  - Range: 0 to 429496729.5
+ */
+extern const struct bt_mesh_sensor_format bt_mesh_sensor_format_pressure;
+
+/** Rainfall
+ *  - Unit: Meter
+ *  - Encoding: 16 bit unsigned scalar (Resolution: 0.001)
+ *  - Range: 0 to 65.535
+ */
+extern const struct bt_mesh_sensor_format bt_mesh_sensor_format_rainfall;
+
+/** Uv index
+ *  - Unit: Unitless
+ *  - Encoding: 8 bit unsigned scalar (Resolution: 1.0)
+ *  - Range: 0 to 255
+ */
+extern const struct bt_mesh_sensor_format bt_mesh_sensor_format_uv_index;
+/** @} */
+
+/** @defgroup bt_mesh_sensor_formats_time Time sensor formats
+ *  @{
+ */
+
+/** Time decihour 8
+ *  - Unit: Hours
+ *  - Encoding: 8 bit unsigned scalar (Resolution: 0.1)
+ *  - Range: 0 to 23.9
+ */
+extern const struct bt_mesh_sensor_format bt_mesh_sensor_format_time_decihour_8;
+
+/** Time hour 24
+ *  - Unit: Hours
+ *  - Encoding: 24 bit unsigned scalar (Resolution: 1.0)
+ *  - Range: 0 to 16777214
+ */
+extern const struct bt_mesh_sensor_format bt_mesh_sensor_format_time_hour_24;
+
+/** Time second 16
+ *  - Unit: Seconds
+ *  - Encoding: 16 bit unsigned scalar (Resolution: 1.0)
+ *  - Range: 0 to 65534
+ */
+extern const struct bt_mesh_sensor_format bt_mesh_sensor_format_time_second_16;
+
+/** Time millisecond 24
+ *  - Unit: Seconds
+ *  - Encoding: 24 bit unsigned scalar (Resolution: 0.001)
+ *  - Range: 0 to 16777.214
+ */
+extern const struct bt_mesh_sensor_format bt_mesh_sensor_format_time_millisecond_24;
+
+/** Time exponential 8
+ *  - Unit: Seconds
+ *  - Encoding: 8 bit unsigned exponential time (pow(1.1, N - 64) seconds)
+ *  - Range: 0 to 73216705
+ */
+extern const struct bt_mesh_sensor_format bt_mesh_sensor_format_time_exp_8;
+/** @} */
+
+/** @defgroup bt_mesh_sensor_formats_electrical Electrical sensor formats
+ *  @{
+ */
+
+/** Electric current
+ *  - Unit: Ampere
+ *  - Encoding: 16 bit unsigned scalar (Resolution: 0.01)
+ *  - Range: 0 to 655.34
+ */
+extern const struct bt_mesh_sensor_format bt_mesh_sensor_format_electric_current;
+
+/** Voltage
+ *  - Unit: Volt
+ *  - Encoding: 16 bit unsigned scalar (Resolution: 1/64)
+ *  - Range: 0 to 1022.0
+ */
+extern const struct bt_mesh_sensor_format bt_mesh_sensor_format_voltage;
+
+/** Energy32
+ *  - Unit: kWh
+ *  - Encoding: 32 bit unsigned scalar (Resolution: 0.001)
+ *  - Range: 0 to 4294967.293
+ */
+extern const struct bt_mesh_sensor_format bt_mesh_sensor_format_energy32;
+
+/** Apparent energy32
+ *  - Unit: Kilovolt-ampere-hours
+ *  - Encoding: 32 bit unsigned scalar (Resolution: 0.001)
+ *  - Range: 0 to 4294967.293
+ */
+extern const struct bt_mesh_sensor_format bt_mesh_sensor_format_apparent_energy32;
+
+/** Apparent power
+ *  - Unit: Volt-ampere
+ *  - Encoding: 24 bit unsigned scalar (Resolution: 0.1)
+ *  - Range: 0 to 1677721.3
+ */
+extern const struct bt_mesh_sensor_format bt_mesh_sensor_format_apparent_power;
+
+/** Power
+ *  - Unit: Watt
+ *  - Encoding: 24 bit unsigned scalar (Resolution: 0.1)
+ *  - Range: 0 to 1677721.4
+ */
+extern const struct bt_mesh_sensor_format bt_mesh_sensor_format_power;
+
+/** Energy
+ *  - Unit: kWh
+ *  - Encoding: 24 bit unsigned scalar (Resolution: 1.0)
+ *  - Range: 0 to 16777214
+ */
+extern const struct bt_mesh_sensor_format bt_mesh_sensor_format_energy;
+
+/** @} */
+
+/** @defgroup bt_mesh_sensor_formats_lighting Lighting sensor formats
+ *  @{
+ */
+/** Chromatic distance
+ *  - Unit: Unitless
+ *  - Encoding: 16 bit signed scalar (Resolution: 0.00001)
+ *  - Range: -0.05 to 0.05
+ */
+extern const struct bt_mesh_sensor_format bt_mesh_sensor_format_chromatic_distance;
+
+/** Chromaticity coordinate
+ *  - Unit: Unitless
+ *  - Encoding: 16 bit unsigned scalar (Resolution: 1/65536)
+ *  - Range: 0 to 0.99998
+ */
+extern const struct bt_mesh_sensor_format bt_mesh_sensor_format_chromaticity_coordinate;
+
+/** Correlated color temp
+ *  - Unit: Kelvin
+ *  - Encoding: 16 bit unsigned scalar (Resolution: 1.0)
+ *  - Range: 800 to 65534
+ */
+extern const struct bt_mesh_sensor_format bt_mesh_sensor_format_correlated_color_temp;
+
+/** Illuminance
+ *  - Unit: Lux
+ *  - Encoding: 24 bit unsigned scalar (Resolution: 0.01)
+ *  - Range: 0 to 167772.14
+ */
+extern const struct bt_mesh_sensor_format bt_mesh_sensor_format_illuminance;
+
+/** Luminous efficacy
+ *  - Unit: Lumen per Watt
+ *  - Encoding: 16 bit unsigned scalar (Resolution: 0.1)
+ *  - Range: 0 to 1800.0
+ */
+extern const struct bt_mesh_sensor_format bt_mesh_sensor_format_luminous_efficacy;
+
+/** Luminous energy
+ *  - Unit: Lumen-hours
+ *  - Encoding: 24 bit unsigned scalar (Resolution: 1000.0)
+ *  - Range: 0 to 16777214000
+ */
+extern const struct bt_mesh_sensor_format bt_mesh_sensor_format_luminous_energy;
+
+/** Luminous exposure
+ *  - Unit: Lux-hours
+ *  - Encoding: 24 bit unsigned scalar (Resolution: 1000.0)
+ *  - Range: 0 to 16777214000
+ */
+extern const struct bt_mesh_sensor_format bt_mesh_sensor_format_luminous_exposure;
+
+/** Luminous flux
+ *  - Unit: Lumen
+ *  - Encoding: 16 bit unsigned scalar (Resolution: 1.0)
+ *  - Range: 0 to 65534
+ */
+extern const struct bt_mesh_sensor_format bt_mesh_sensor_format_luminous_flux;
+
+/** Perceived lightness
+ *  - Unit: Unitless
+ *  - Encoding: 16 bit unsigned scalar (Resolution: 1.0)
+ *  - Range: 0 to 65535
+ */
+extern const struct bt_mesh_sensor_format bt_mesh_sensor_format_perceived_lightness;
+/** @} */
+
+/** @defgroup bt_mesh_sensor_formats_miscellaneous Miscellaneous sensor formats
+ *  @{
+ */
+
+/** Direction 16
+ *  - Unit: Degrees
+ *  - Encoding: 16 bit unsigned scalar (Resolution: 0.01)
+ *  - Range: 0 to 359.99
+ */
+extern const struct bt_mesh_sensor_format bt_mesh_sensor_format_direction_16;
+
+/** Count 16
+ *  - Unit: Unitless
+ *  - Encoding: 16 bit unsigned scalar (Resolution: 1.0)
+ *  - Range: 0 to 65534
+ */
+extern const struct bt_mesh_sensor_format bt_mesh_sensor_format_count_16;
+
+/** Gen lvl
+ *  - Unit: Unitless
+ *  - Encoding: 16 bit unsigned scalar (Resolution: 1.0)
+ *  - Range: 0 to 65535
+ */
+extern const struct bt_mesh_sensor_format bt_mesh_sensor_format_gen_lvl;
+
+/** Cos of the angle
+ *  - Unit: Unitless
+ *  - Encoding: 8 bit signed scalar (Resolution: 1.0)
+ *  - Range: -100 to 100
+ */
+extern const struct bt_mesh_sensor_format bt_mesh_sensor_format_cos_of_the_angle;
+
+/** Boolean
+ *  - Unit: Unitless
+ *  - Encoding: boolean
+ */
+extern const struct bt_mesh_sensor_format bt_mesh_sensor_format_boolean;
+
+/** Coefficient
+ *  - Unit: Unitless
+ *  - Encoding: 32 bit float
+ */
+extern const struct bt_mesh_sensor_format bt_mesh_sensor_format_coefficient;
+/** @} */
+
 /** @defgroup bt_mesh_sensor_types_occupancy Occupancy sensor types
  *  @{
  */
@@ -94,8 +424,8 @@ extern const struct bt_mesh_sensor_type bt_mesh_sensor_presence_detected;
  *  Channels:
  *  - Time since motion detected
  *    - Unit: Seconds
- *    - Encoding: 16 bit unsigned scalar (Resolution: 1 second)
- *    - Range: 0 to 65533
+ *    - Encoding: 24 bit unsigned scalar (Resolution: 0.001 second)
+ *    - Range: 0 to 16777.214
  */
 extern const struct bt_mesh_sensor_type bt_mesh_sensor_time_since_motion_sensed;
 
@@ -129,11 +459,11 @@ extern const struct bt_mesh_sensor_type
  *  - Start time
  *    - Unit: Hours
  *    - Encoding: 8 bit unsigned scalar (Resolution: 0.1 hours)
- *    - Range: 0 to 24.0
+ *    - Range: 0 to 23.9
  *  - End time
  *    - Unit: Hours
  *    - Encoding: 8 bit unsigned scalar (Resolution: 0.1 hours)
- *    - Range: 0 to 24.0
+ *    - Range: 0 to 23.9
  */
 extern const struct bt_mesh_sensor_type bt_mesh_sensor_avg_amb_temp_in_day;
 
@@ -254,9 +584,9 @@ extern const struct bt_mesh_sensor_type bt_mesh_sensor_luminous_efficacy;
  *
  *  Channels:
  *  - Luminous Energy Since Turn On
- *    - Unit: Kilo Lumen hours
- *    - Encoding: 24 bit unsigned scalar (Resolution: 1 klmh)
- *    - Range: 0 to 16777213
+ *    - Unit: Lumen hours
+ *    - Encoding: 24 bit unsigned scalar (Resolution: 1000 lmh)
+ *    - Range: 0 to 16777214000
  */
 extern const struct bt_mesh_sensor_type
 	bt_mesh_sensor_luminous_energy_since_turn_on;
@@ -265,9 +595,9 @@ extern const struct bt_mesh_sensor_type
  *
  *  Channels:
  *  - Luminous Exposure
- *    - Unit: Kilo Lux hours
- *    - Encoding: 24 bit unsigned scalar (Resolution: 1 klxh)
- *    - Range: 0 to 16777213
+ *    - Unit: Lux hours
+ *    - Encoding: 24 bit unsigned scalar (Resolution: 1000 lxh)
+ *    - Range: 0 to 16777213000
  */
 extern const struct bt_mesh_sensor_type bt_mesh_sensor_luminous_exposure;
 
@@ -566,11 +896,11 @@ extern const struct bt_mesh_sensor_type bt_mesh_sensor_wind_chill;
  *  - Minimum Temperature
  *    - Unit: Celsius
  *    - Encoding: 16 bit signed scalar (Resolution: 0.01 C)
- *    - Range: -327.68 to 327.67
+ *    - Range: -273.15 to 327.67
  *  - Maximum Temperature
  *    - Unit: Celsius
  *    - Encoding: 16 bit signed scalar (Resolution: 0.01 C)
- *    - Range: -327.68 to 327.67
+ *    - Range: -273.15 to 327.67
  */
 extern const struct bt_mesh_sensor_type bt_mesh_sensor_dev_op_temp_range_spec;
 
@@ -580,19 +910,19 @@ extern const struct bt_mesh_sensor_type bt_mesh_sensor_dev_op_temp_range_spec;
  *  - Average Temperature
  *    - Unit: Celsius
  *    - Encoding: 16 bit signed scalar (Resolution: 0.01 C)
- *    - Range: -327.68 to 327.67
+ *    - Range: -273.15 to 327.67
  *  - Standard Deviation Temperature
  *    - Unit: Celsius
  *    - Encoding: 16 bit signed scalar (Resolution: 0.01 C)
- *    - Range: -327.68 to 327.67
+ *    - Range: -273.15 to 327.67
  *  - Minimum Temperature
  *    - Unit: Celsius
  *    - Encoding: 16 bit signed scalar (Resolution: 0.01 C)
- *    - Range: -327.68 to 327.67
+ *    - Range: -273.15 to 327.67
  *  - Maximum Temperature
  *    - Unit: Celsius
  *    - Encoding: 16 bit signed scalar (Resolution: 0.01 C)
- *    - Range: -327.68 to 327.67
+ *    - Range: -273.15 to 327.67
  *  - Sensing duration
  *    - Unit: Seconds
  *    - Encoding: 8 bit unsigned exponential time (pow(1.1, N - 64) seconds)
@@ -606,7 +936,7 @@ extern const struct bt_mesh_sensor_type bt_mesh_sensor_dev_op_temp_stat_values;
  *  - Temperature
  *    - Unit: Celsius
  *    - Encoding: 16 bit signed scalar (Resolution: 0.01 C)
- *    - Range: -327.68 to 327.67
+ *    - Range: -273.15 to 327.67
  */
 extern const struct bt_mesh_sensor_type bt_mesh_sensor_present_dev_op_temp;
 
@@ -622,11 +952,11 @@ extern const struct bt_mesh_sensor_type bt_mesh_sensor_present_dev_op_temp;
  *  - Minimum Temperature Value
  *    - Unit: Celsius
  *    - Encoding: 16 bit signed scalar (Resolution: 0.01 C)
- *    - Range: -327.68 to 327.67
+ *    - Range: -273.15 to 327.67
  *  - Maximum Temperature Value
  *    - Unit: Celsius
  *    - Encoding: 16 bit signed scalar (Resolution: 0.01 C)
- *    - Range: -327.68 to 327.67
+ *    - Range: -273.15 to 327.67
  */
 extern const struct bt_mesh_sensor_type
 	bt_mesh_sensor_rel_runtime_in_a_dev_op_temp_range;
@@ -673,11 +1003,11 @@ extern const struct bt_mesh_sensor_type bt_mesh_sensor_avg_input_voltage;
  *    - Unit: Ampere
  *    - Encoding: 16 bit unsigned scalar (Resolution: 0.01 A)
  *    - Range: 0 to 655.33
- *  - Maximum Electric Current Value
+ *  - Typical Electric Current Value
  *    - Unit: Ampere
  *    - Encoding: 16 bit unsigned scalar (Resolution: 0.01 A)
  *    - Range: 0 to 655.33
- *  - Typical Electric Current Value
+ *  - Maximum Electric Current Value
  *    - Unit: Ampere
  *    - Encoding: 16 bit unsigned scalar (Resolution: 0.01 A)
  *    - Range: 0 to 655.33
@@ -717,11 +1047,11 @@ extern const struct bt_mesh_sensor_type bt_mesh_sensor_input_current_stat;
  *    - Unit: Volt
  *    - Encoding: 16 bit unsigned scalar (Resolution: 1/64 V)
  *    - Range: 0 to 1023.95
- *  - Maximum Voltage Value
+ *  - Typical Voltage Value
  *    - Unit: Volt
  *    - Encoding: 16 bit unsigned scalar (Resolution: 1/64 V)
  *    - Range: 0 to 1023.95
- *  - Typical Voltage Value
+ *  - Maximum Voltage Value
  *    - Unit: Volt
  *    - Encoding: 16 bit unsigned scalar (Resolution: 1/64 V)
  *    - Range: 0 to 1023.95
@@ -791,7 +1121,7 @@ extern const struct bt_mesh_sensor_type bt_mesh_sensor_present_input_voltage;
  *  - Precise Present Ambient Temperature
  *    - Unit: Celsius
  *    - Encoding: 16 bit signed scalar (Resolution: 0.01 C)
- *    - Range: -327.68 to 327.67
+ *    - Range: -273.15 to 327.67
  */
 extern const struct bt_mesh_sensor_type bt_mesh_sensor_precise_present_amb_temp;
 
@@ -939,11 +1269,11 @@ extern const struct bt_mesh_sensor_type bt_mesh_sensor_power_factor;
  *  - Start Time
  *    - Unit: Hours
  *    - Encoding: 8 bit unsigned scalar (Resolution: 0.1 hours)
- *    - Range: 0 to 24.0
+ *    - Range: 0 to 23.9
  *  - End Time
  *    - Unit: Hours
  *    - Encoding: 8 bit unsigned scalar (Resolution: 0.1 hours)
- *    - Range: 0 to 24.0
+ *    - Range: 0 to 23.9
  */
 extern const struct bt_mesh_sensor_type
 	bt_mesh_sensor_rel_dev_energy_use_in_a_period_of_day;
@@ -1235,6 +1565,10 @@ extern const struct bt_mesh_sensor_type
  *    - Unit: Volt
  *    - Encoding: 16 bit unsigned scalar (Resolution: 1/64 V)
  *    - Range: 0 to 1023.95
+ *  - Typical Voltage Value
+ *    - Unit: Volt
+ *    - Encoding: 16 bit unsigned scalar (Resolution: 1/64 V)
+ *    - Range: 0 to 1023.95
  *  - Maximum Voltage Value
  *    - Unit: Volt
  *    - Encoding: 16 bit unsigned scalar (Resolution: 1/64 V)
@@ -1338,7 +1672,15 @@ extern const struct bt_mesh_sensor_type bt_mesh_sensor_gain;
 extern const struct bt_mesh_sensor_type
 	bt_mesh_sensor_rel_dev_runtime_in_a_generic_level_range;
 
-/** @} */
+/** Total device runtime
+ *
+ *  Channels:
+ *  - Total device runtime
+ *    - Unit: Hours
+ *    - Encoding: 8 bit unsigned scalar (Resolution: 0.1 hours)
+ *    - Range: 0 to 23.9
+ */
+extern const struct bt_mesh_sensor_type bt_mesh_sensor_total_dev_runtime;
 
 /** @} */
 
@@ -1347,3 +1689,5 @@ extern const struct bt_mesh_sensor_type
 #endif
 
 #endif /* BT_MESH_SENSOR_TYPES_H__ */
+
+/** @} */

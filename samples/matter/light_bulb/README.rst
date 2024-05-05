@@ -17,6 +17,9 @@ You can use this sample as a reference for creating your own application.
     This sample is self-contained and can be tested on its own.
     However, it is required when testing the :ref:`Matter light switch <matter_light_switch_sample>` sample.
 
+The sample can also communicate with `AWS IoT Core`_ over a Wi-Fi network using the nRF7002 DK.
+For more details, see the :ref:`matter_light_bulb_aws_iot` section.
+
 Requirements
 ************
 
@@ -36,8 +39,8 @@ IPv6 network support
 
 The development kits for this sample offer the following IPv6 network support for Matter:
 
-* Matter over Thread is supported for ``nrf52840dk_nrf52840``, ``nrf5340dk_nrf5340_cpuapp``, and ``nrf21540dk_nrf52840``.
-* Matter over Wi-Fi is supported for ``nrf5340dk_nrf5340_cpuapp`` with the ``nrf7002ek`` shield attached or for ``nrf7002dk_nrf5340_cpuapp``.
+* Matter over Thread is supported for ``nrf52840dk/nrf52840``, ``nrf5340dk/nrf5340/cpuapp``, ``nrf21540dk/nrf52840``, and ``nrf54l15pdk/nrf54l15``.
+* Matter over Wi-Fi is supported for ``nrf5340dk/nrf5340/cpuapp`` with the ``nrf7002ek`` shield attached or for ``nrf7002dk/nrf5340/cpuapp``.
 
 Overview
 ********
@@ -70,33 +73,38 @@ Configuration
 
 |config|
 
+
+.. _matter_light_bulb_build_types:
+
 Matter light bulb build types
 =============================
 
 .. matter_light_bulb_sample_configuration_file_types_start
 
-The sample uses different configuration files depending on the supported features.
-Configuration files are provided for different build types and they are located in the application root directory.
+The sample does not use a single :file:`prj.conf` file.
+Configuration files are provided for different build types, and they are located in the sample root directory.
+Before you start testing the application, you can select one of the build types supported by the application.
 
-The :file:`prj.conf` file represents a ``debug`` build type.
-Other build types are covered by dedicated files with the build type added as a suffix to the ``prj`` part, as per the following list.
-For example, the ``release`` build type file name is :file:`prj_release.conf`.
-If a board has other configuration files, for example associated with partition layout or child image configuration, these follow the same pattern.
+See :ref:`app_build_additions_build_types` and :ref:`cmake_options` for more information.
 
-.. include:: /config_and_build/modifying.rst
-   :start-after: build_types_overview_start
-   :end-before: build_types_overview_end
+The sample supports the following build types:
 
-Before you start testing the application, you can select one of the build types supported by the sample.
-This sample supports the following build types, depending on the selected board:
+.. list-table:: Sample build types
+   :widths: auto
+   :header-rows: 1
 
-* ``debug`` -- Debug version of the application - can be used to enable additional features for verifying the application behavior, such as logs or command-line shell.
-* ``release`` -- Release version of the application - can be used to enable only the necessary application functionalities to optimize its performance.
-* ``no_dfu`` -- Debug version of the application without Device Firmware Upgrade feature support - can be used for the nRF52840 DK, nRF5340 DK, nRF7002 DK, and nRF21540 DK.
-
-.. note::
-    `Selecting a build type`_ is optional.
-    The ``debug`` build type is used by default if no build type is explicitly selected.
+   * - Build type
+     - File name
+     - Supported board
+     - Description
+   * - Debug (default)
+     - :file:`prj.conf`
+     - All from `Requirements`_
+     - Debug version of the application; can be used to enable additional features for verifying the application behavior, such as logs or command-line shell.
+   * - Release
+     - :file:`prj_release.conf`
+     - All from `Requirements`_
+     - Release version of the application; can be used to enable only the necessary application functionalities to optimize its performance.
 
 .. matter_light_bulb_sample_configuration_file_types_end
 
@@ -106,6 +114,10 @@ Device Firmware Upgrade support
 .. include:: ../lock/README.rst
     :start-after: matter_door_lock_sample_build_with_dfu_start
     :end-before: matter_door_lock_sample_build_with_dfu_end
+
+.. include:: ../template/README.rst
+    :start-after: matter_template_nrf54l15_build_with_dfu_start
+    :end-before: matter_template_nrf54l15_build_with_dfu_end
 
 FEM support
 ===========
@@ -119,8 +131,78 @@ Factory data support
     :start-after: matter_door_lock_sample_factory_data_start
     :end-before: matter_door_lock_sample_factory_data_end
 
+.. _matter_light_bulb_aws_iot:
+
+AWS IoT integration
+===================
+
+The sample can be configured to communicate with `AWS IoT Core`_ to control attributes in supported clusters on the device.
+After a connection has been established, the sample will mirror these attributes in the AWS IoT shadow document.
+This makes it possible to remotely control the device using the `AWS IoT Device Shadow Service`_.
+The supported attributes are ``OnOff`` from the ``OnOff`` cluster and ``CurrentLevel`` from the ``LevelControl`` cluster.
+
+The following figure illustrates the relationship between the AWS IoT integration layer and the light bulb sample:
+
+.. figure:: /images/aws_matter_integration.svg
+   :alt: Sample implementation of the AWS IoT integration layer
+
+   AWS IoT integration layer implementation diagram
+
+The following figure illustrates the interaction with the AWS IoT shadow Service:
+
+
+.. figure:: /images/aws_matter_interaction.svg
+   :alt: Interaction with the AWS IoT shadow service
+
+   AWS IoT Shadow and Matter interaction diagram
+
+AWS IoT setup and configuration
+-------------------------------
+
+To set up an AWS IoT instance and configure the sample, complete the following steps:
+
+1. Complete the setup and configuration described in the :ref:`lib_aws_iot` documentation to get the host name, device ID, and certificates used in the connection.
+#. Set the :kconfig:option:`CONFIG_AWS_IOT_BROKER_HOST_NAME` and :kconfig:option:`CONFIG_AWS_IOT_CLIENT_ID_STATIC` Kconfig options in the :file:`overlay-aws-iot-integration.conf` file.
+#. Import the certificates to the :file:`light_bulb/src/aws_iot_integration/certs` folder.
+
+   The certificates will vary in size depending on the method you chose when generating the certificates.
+   Due to this, you might need to increase the value of the :kconfig:option:`CONFIG_MBEDTLS_SSL_OUT_CONTENT_LEN` option to be able to establish a connection.
+#. Build the sample using the following command:
+
+   .. code-block:: console
+
+      west build -p -b nrf7002dk/nrf5340/cpuapp -- -DEXTRA_CONF_FILE="overlay-aws-iot-integration.conf"
+
+#. Flash the firmware and boot the sample.
+#. |connect_kit|
+#. |connect_terminal_ANSI|
+#. Commission the device to the Matter network.
+   See `Commissioning the device`_ for more information.
+#. Observe that the device automatically connects to AWS IoT when an IP is obtained and the device is able to maintain the connection.
+#. Use the following bash function to populate the desired section of the shadow:
+
+   .. code-block:: console
+
+      function aws-update-desired() {
+            aws iot-data update-thing-shadow --cli-binary-format raw-in-base64-out --thing-name my-thing --payload "{\"state\":{\"desired\":{\"onoff\":$1,\"level_control\":$2}}}" "output.txt"
+      }
+
+   You can also use ``aws-update-desired 0 0``, or ``aws-update-desired 1 128 (onoff, levelcontrol)``.
+   Alternatively, you can alter the device shadow directly through the `AWS IoT console`_.
+
+#. Observe that the light bulb changes state.
+   The local changes to the attributes always take precedence over what is set in the shadow's desired state.
+
+.. note::
+   The integration layer has built-in reconnection logic and tries to maintain the connection as long as the device is connected to the internet.
+   The reconnection interval can be configured using the :kconfig:option:`CONFIG_AWS_IOT_RECONNECTION_INTERVAL_SECONDS` option.
+
 User interface
 **************
+
+.. include:: ../template/README.rst
+   :start-after: matter_template_nrf54l15_0_3_0_interface_start
+   :end-before: matter_template_nrf54l15_0_3_0_interface_end
 
 .. include:: ../lock/README.rst
     :start-after: matter_door_lock_sample_led1_start
@@ -141,17 +223,7 @@ LED 2:
     :end-before: matter_door_lock_sample_button1_end
 
 Button 2:
-    * On nRF52840 DK, nRF5340 DK, and nRF21540 DK: Changes the light bulb state to the opposite one.
-    * On nRF7002 DK:
-
-      * If pressed for less than three seconds, it changes the lock state to the opposite one.
-      * If pressed for more than three seconds, it starts the NFC tag emulation, enables Bluetooth LE advertising for the predefined period of time (15 minutes by default), and makes the device discoverable over Bluetooth LE.
-
-Button 4:
-    * On nRF52840 DK, nRF5340 DK, and nRF21540 DK: Starts the NFC tag emulation, enables Bluetooth LE advertising for the predefined period of time (15 minutes by default), and makes the device discoverable over Bluetooth LE.
-      This button is used during the :ref:`commissioning procedure <matter_light_bulb_sample_remote_control_commissioning>`.
-
-    * On nRF7002 DK: Not available.
+    * Changes the light bulb state to the opposite one.
 
 .. include:: ../lock/README.rst
     :start-after: matter_door_lock_sample_jlink_start
@@ -172,38 +244,8 @@ See `Configuration`_ for information about building the sample with the DFU supp
 Selecting a build type
 ======================
 
-Before you start testing the application, you can select one of the `Matter light bulb build types`_, depending on your building method.
-
-Selecting a build type in |VSC|
--------------------------------
-
-.. include:: /config_and_build/modifying.rst
-   :start-after: build_types_selection_vsc_start
-   :end-before: build_types_selection_vsc_end
-
-Selecting a build type from command line
-----------------------------------------
-
-.. include:: /config_and_build/modifying.rst
-   :start-after: build_types_selection_cmd_start
-   :end-before: For example, you can replace the
-
-For example, you can replace the *selected_build_type* variable to build the ``release`` firmware for ``nrf52840dk_nrf52840`` by running the following command in the project directory:
-
-.. parsed-literal::
-   :class: highlight
-
-   west build -b nrf52840dk_nrf52840 -d build_nrf52840dk_nrf52840 -- -DCONF_FILE=prj_release.conf
-
-The ``build_nrf52840dk_nrf52840`` parameter specifies the output directory for the build files.
-
-.. note::
-   If the selected board does not support the selected build type, the build is interrupted.
-   For example, if the ``shell`` build type is not supported by the selected board, the following notification appears:
-
-   .. code-block:: console
-
-      File not found: ./ncs/nrf/samples/matter/light_bulb/configuration/nrf52840dk_nrf52840/prj_shell.conf
+Before you start testing the application, you can select one of the :ref:`matter_light_bulb_build_types`.
+See :ref:`cmake_options` for information about how to select a build type.
 
 Testing
 =======
@@ -238,7 +280,7 @@ After building the sample and programming it to your development kit, complete t
       I: Turn Off Action has been initiated
       I: Turn Off Action has been completed
 
-#. Press **Button 1** to initiate the factory reset of the device.
+#. Keep the **Button 1** pressed for more than six seconds to initiate factory reset of the device.
 
 .. _matter_light_bulb_sample_light_switch_tests:
 
@@ -295,15 +337,7 @@ If you are new to Matter, the recommended approach is to use :ref:`CHIP Tool for
 
 Before starting the commissioning procedure, the device must be made discoverable over Bluetooth LE.
 The device becomes discoverable automatically upon the device startup, but only for a predefined period of time (15 minutes by default).
-If the Bluetooth LE advertising times out, use one of the following buttons to enable it again:
-
-   * On nRF52840 DK, nRF5340 DK and nRF21540 DK:
-
-     * Press **Button 4**.
-
-   * On nRF7002 DK:
-
-     * Press **Button 2** for at least three seconds.
+If the Bluetooth LE advertising times out, press **Button 1** to enable it again.
 
 Onboarding information
 ++++++++++++++++++++++

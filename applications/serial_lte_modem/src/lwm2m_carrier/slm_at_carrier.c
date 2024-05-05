@@ -3,6 +3,7 @@
  *
  * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
+#include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 #include <time.h>
@@ -16,96 +17,9 @@
 
 LOG_MODULE_REGISTER(slm_carrier, CONFIG_SLM_LOG_LEVEL);
 
-/**@brief LwM2M Carrier operations. */
-enum slm_carrier_operation {
-	/* LTE auto-connect operation for LwM2M Carrier */
-	CARRIER_OP_AUTO_CONNECT,
-	/* Carrier AppData Operation */
-	CARRIER_OP_APPDATA_SEND,
-	/* Carrier Device Operation */
-	CARRIER_OP_DEVICE_BATTERY_LEVEL,
-	CARRIER_OP_DEVICE_BATTERY_STATUS,
-	CARRIER_OP_DEVICE_CURRENT,
-	CARRIER_OP_DEVICE_ERROR,
-	CARRIER_OP_DEVICE_MEM_TOTAL,
-	CARRIER_OP_DEVICE_MEM_FREE,
-	CARRIER_OP_DEVICE_POWER_SOURCES,
-	CARRIER_OP_DEVICE_TIMEZONE,
-	CARRIER_OP_DEVICE_TIME,
-	CARRIER_OP_DEVICE_UTC_OFFSET,
-	CARRIER_OP_DEVICE_UTC_TIME,
-	CARRIER_OP_DEVICE_VOLTAGE,
-	/* Carrier Event Log Operation */
-	CARRIER_OP_EVENT_LOG_LOG_DATA,
-	/* Carrier Location Operation */
-	CARRIER_OP_LOCATION_POSITION,
-	CARRIER_OP_LOCATION_VELOCITY,
-	/* Carrier Portfolio Operation */
-	CARRIER_OP_PORTFOLIO,
-	/* Carrier Request Operation */
-	CARRIER_OP_REQUEST_REBOOT,
-	CARRIER_OP_REQUEST_LINK_DOWN,
-	CARRIER_OP_REQUEST_LINK_UP,
-	/* Count */
-	CARRIER_OP_MAX
-};
-
-struct carrier_op_list {
-	uint8_t op_code;
-	char *op_str;
-	int (*handler)(void);
-};
 
 /* Static variable to report the memory free resource. */
 static int m_mem_free;
-
-/** forward declaration of cmd handlers **/
-static int do_carrier_auto_connect(void);
-static int do_carrier_appdata_send(void);
-static int do_carrier_device_battery_level(void);
-static int do_carrier_device_battery_status(void);
-static int do_carrier_device_current(void);
-static int do_carrier_device_error(void);
-static int do_carrier_device_mem_total(void);
-static int do_carrier_device_mem_free(void);
-static int do_carrier_device_power_sources(void);
-static int do_carrier_device_timezone(void);
-static int do_carrier_device_time(void);
-static int do_carrier_device_utc_offset(void);
-static int do_carrier_device_utc_time(void);
-static int do_carrier_device_voltage(void);
-static int do_carrier_event_log_log_data(void);
-static int do_carrier_location_position(void);
-static int do_carrier_location_velocity(void);
-static int do_carrier_portfolio(void);
-static int do_carrier_request_reboot(void);
-static int do_carrier_request_link_down(void);
-static int do_carrier_request_link_up(void);
-
-/**@brief SLM AT Command list type. */
-static struct carrier_op_list op_list[CARRIER_OP_MAX] = {
-	{CARRIER_OP_AUTO_CONNECT, "auto_connect", do_carrier_auto_connect},
-	{CARRIER_OP_APPDATA_SEND, "app_data", do_carrier_appdata_send},
-	{CARRIER_OP_DEVICE_BATTERY_LEVEL, "battery_level", do_carrier_device_battery_level},
-	{CARRIER_OP_DEVICE_BATTERY_STATUS, "battery_status", do_carrier_device_battery_status},
-	{CARRIER_OP_DEVICE_CURRENT, "current", do_carrier_device_current},
-	{CARRIER_OP_DEVICE_ERROR, "error", do_carrier_device_error},
-	{CARRIER_OP_DEVICE_MEM_TOTAL, "memory_total", do_carrier_device_mem_total},
-	{CARRIER_OP_DEVICE_MEM_FREE, "memory_free", do_carrier_device_mem_free},
-	{CARRIER_OP_DEVICE_POWER_SOURCES, "power_sources", do_carrier_device_power_sources},
-	{CARRIER_OP_DEVICE_TIMEZONE, "timezone", do_carrier_device_timezone},
-	{CARRIER_OP_DEVICE_TIME, "time", do_carrier_device_time},
-	{CARRIER_OP_DEVICE_UTC_OFFSET, "utc_offset", do_carrier_device_utc_offset},
-	{CARRIER_OP_DEVICE_UTC_TIME, "utc_time", do_carrier_device_utc_time},
-	{CARRIER_OP_DEVICE_VOLTAGE, "voltage", do_carrier_device_voltage},
-	{CARRIER_OP_EVENT_LOG_LOG_DATA, "log_data", do_carrier_event_log_log_data},
-	{CARRIER_OP_LOCATION_POSITION, "position", do_carrier_location_position},
-	{CARRIER_OP_LOCATION_VELOCITY, "velocity", do_carrier_location_velocity},
-	{CARRIER_OP_PORTFOLIO, "portfolio", do_carrier_portfolio},
-	{CARRIER_OP_REQUEST_REBOOT, "reboot", do_carrier_request_reboot},
-	{CARRIER_OP_REQUEST_LINK_DOWN, "link_down", do_carrier_request_link_down},
-	{CARRIER_OP_REQUEST_LINK_UP, "link_up", do_carrier_request_link_up},
-};
 
 #define SLM_CARRIER_OP_STR_MAX (sizeof("battery_status") + 1)
 
@@ -181,7 +95,24 @@ static void on_event_app_data(const lwm2m_carrier_event_t *event)
 {
 	lwm2m_carrier_event_app_data_t *app_data = event->data.app_data;
 
-	rsp_send("\r\n#XCARRIEREVT: %d,%d\r\n", event->type, app_data->buffer_len);
+	if (app_data->path_len > ARRAY_SIZE(app_data->path)) {
+		LOG_ERR("on_event_app_data: invalid path length");
+		return;
+	}
+
+	/* Longest possible URI path. */
+	char uri_path[sizeof(STRINGIFY(65535)) * ARRAY_SIZE(app_data->path) + 1];
+	uint32_t off = 0;
+
+	for (int i = 0; i < app_data->path_len; i++) {
+		off += snprintf(&uri_path[off], sizeof(uri_path) - off, "/%hu", app_data->path[i]);
+		if (off >= sizeof(uri_path)) {
+			LOG_ERR("on_event_app_data: insufficient memory");
+			return;
+		}
+	}
+
+	rsp_send("\r\n#XCARRIEREVT: %d,%d,\"%s\"\r\n", event->type, app_data->buffer_len, uri_path);
 
 	memcpy(slm_data_buf, app_data->buffer, app_data->buffer_len);
 
@@ -217,7 +148,7 @@ int lwm2m_carrier_event_handler(const lwm2m_carrier_event_t *event)
 	case LWM2M_CARRIER_EVENT_LTE_POWER_OFF:
 		LOG_DBG("LWM2M_CARRIER_EVENT_LTE_POWER_OFF");
 		/* TODO: defer setting the modem to minimum funtional mode. */
-		err = nrf_modem_at_printf("AT+CFUN=0");
+		err = slm_util_at_printf("AT+CFUN=0");
 		break;
 	case LWM2M_CARRIER_EVENT_BOOTSTRAPPED:
 		LOG_DBG("LWM2M_CARRIER_EVENT_BOOTSTRAPPED");
@@ -239,6 +170,9 @@ int lwm2m_carrier_event_handler(const lwm2m_carrier_event_t *event)
 		LOG_DBG("LWM2M_CARRIER_EVENT_REBOOT");
 		/* Return -1 to defer the reboot until the application decides to do so. */
 		err = -1;
+		break;
+	case LWM2M_CARRIER_EVENT_MODEM_DOMAIN:
+		LOG_DBG("LWM2M_CARRIER_EVENT_MODEM_DOMAIN");
 		break;
 	case LWM2M_CARRIER_EVENT_APP_DATA:
 		LOG_DBG("LWM2M_CARRIER_EVENT_APP_DATA");
@@ -262,7 +196,7 @@ int lwm2m_carrier_event_handler(const lwm2m_carrier_event_t *event)
 	return err;
 }
 
-/* Carrier App Data Send data mode handler */
+/* Carrier App Data Set data mode handler */
 static int carrier_datamode_callback(uint8_t op, const uint8_t *data, int len, uint8_t flags)
 {
 	int ret = 0;
@@ -276,7 +210,7 @@ static int carrier_datamode_callback(uint8_t op, const uint8_t *data, int len, u
 		uint16_t path[3] = { LWM2M_CARRIER_OBJECT_APP_DATA_CONTAINER, 0, 0 };
 		uint8_t path_len = 3;
 
-		ret = lwm2m_carrier_app_data_send(path, path_len, data, len);
+		ret = lwm2m_carrier_app_data_set(path, path_len, data, len);
 		LOG_INF("datamode send: %d", ret);
 		if (ret < 0) {
 			(void)exit_datamode_handler(ret);
@@ -288,12 +222,12 @@ static int carrier_datamode_callback(uint8_t op, const uint8_t *data, int len, u
 	return ret;
 }
 
-/* AT#XCARRIER="app_data"[,<data>][,<instance_id>,<resource_instance_id>] */
-static int do_carrier_appdata_send(void)
+/* AT#XCARRIER="app_data_set"[,<data>][,<obj_inst_id>,<res_inst_id>] */
+SLM_AT_CMD_CUSTOM(xcarrier_app_data_set, "AT#XCARRIER=\"app_data_set\"", do_carrier_appdata_set);
+static int do_carrier_appdata_set(enum at_cmd_type, const struct at_param_list *param_list,
+				  uint32_t param_count)
 {
 	int ret = 0;
-
-	uint32_t param_count = at_params_valid_count_get(&slm_at_param_list);
 
 	if (param_count == 2) {
 		/* enter data mode */
@@ -308,12 +242,12 @@ static int do_carrier_appdata_send(void)
 		uint16_t path[3] = { LWM2M_CARRIER_OBJECT_APP_DATA_CONTAINER, 0, 0 };
 		uint8_t path_len = 3;
 
-		ret = util_string_get(&slm_at_param_list, 2, data, &size);
+		ret = util_string_get(param_list, 2, data, &size);
 		if (ret) {
 			return ret;
 		}
 
-		ret = lwm2m_carrier_app_data_send(path, path_len, data, size);
+		ret = lwm2m_carrier_app_data_set(path, path_len, data, size);
 	} else if (param_count == 4 || param_count == 5) {
 		uint8_t *data = NULL;
 		char buffer[CONFIG_SLM_CARRIER_APP_DATA_BUFFER_LEN] = {0};
@@ -322,12 +256,12 @@ static int do_carrier_appdata_send(void)
 		uint16_t inst_id;
 		uint16_t res_inst_id;
 
-		ret = at_params_unsigned_short_get(&slm_at_param_list, param_count - 2, &inst_id);
+		ret = at_params_unsigned_short_get(param_list, param_count - 2, &inst_id);
 		if (ret) {
 			return ret;
 		}
 
-		ret = at_params_unsigned_short_get(&slm_at_param_list, param_count - 1,
+		ret = at_params_unsigned_short_get(param_list, param_count - 1,
 						   &res_inst_id);
 		if (ret) {
 			return ret;
@@ -340,7 +274,7 @@ static int do_carrier_appdata_send(void)
 		if (param_count == 5) {
 			size = CONFIG_SLM_CARRIER_APP_DATA_BUFFER_LEN;
 
-			ret = util_string_get(&slm_at_param_list, 2, buffer, &size);
+			ret = util_string_get(param_list, 2, buffer, &size);
 			if (ret) {
 				return ret;
 			}
@@ -348,19 +282,22 @@ static int do_carrier_appdata_send(void)
 			data = buffer;
 		}
 
-		ret = lwm2m_carrier_app_data_send(path, path_len, data, size);
+		ret = lwm2m_carrier_app_data_set(path, path_len, data, size);
 	}
 
 	return ret;
 }
 
 /* AT#XCARRIER="battery_level",<battery_level> */
-static int do_carrier_device_battery_level(void)
+SLM_AT_CMD_CUSTOM(xcarrier_battery_level, "AT#XCARRIER=\"battery_level\"",
+	      do_carrier_device_battery_level);
+static int do_carrier_device_battery_level(enum at_cmd_type, const struct at_param_list *param_list,
+					   uint32_t)
 {
 	int ret;
 	uint16_t battery_level;
 
-	ret = at_params_unsigned_short_get(&slm_at_param_list, 2, &battery_level);
+	ret = at_params_unsigned_short_get(param_list, 2, &battery_level);
 	if (ret) {
 		return ret;
 	}
@@ -369,11 +306,14 @@ static int do_carrier_device_battery_level(void)
 }
 
 /* AT#XCARRIER="battery_status",<battery_status> */
-static int do_carrier_device_battery_status(void)
+SLM_AT_CMD_CUSTOM(xcarrier_battery_status, "AT#XCARRIER=\"battery_status\"",
+	      do_carrier_device_battery_status);
+static int do_carrier_device_battery_status(enum at_cmd_type,
+					    const struct at_param_list *param_list, uint32_t)
 {
 	int ret, battery_status;
 
-	ret = at_params_int_get(&slm_at_param_list, 2, &battery_status);
+	ret = at_params_int_get(param_list, 2, &battery_status);
 	if (ret) {
 		return ret;
 	}
@@ -382,17 +322,19 @@ static int do_carrier_device_battery_status(void)
 }
 
 /* AT#XCARRIER="current",<power_source>,<current> */
-static int do_carrier_device_current(void)
+SLM_AT_CMD_CUSTOM(xcarrier_current, "AT#XCARRIER=\"current\"", do_carrier_device_current);
+static int do_carrier_device_current(enum at_cmd_type, const struct at_param_list *param_list,
+				     uint32_t)
 {
 	int ret, current;
 	uint16_t power_source;
 
-	ret = at_params_unsigned_short_get(&slm_at_param_list, 2, &power_source);
+	ret = at_params_unsigned_short_get(param_list, 2, &power_source);
 	if (ret) {
 		return ret;
 	}
 
-	ret = at_params_int_get(&slm_at_param_list, 3, &current);
+	ret = at_params_int_get(param_list, 3, &current);
 	if (ret) {
 		return ret;
 	}
@@ -401,26 +343,28 @@ static int do_carrier_device_current(void)
 }
 
 /* AT#XCARRIER="error","add|remove",<error> */
-static int do_carrier_device_error(void)
+SLM_AT_CMD_CUSTOM(xcarrie_error, "AT#XCARRIER=\"error\"", do_carrier_device_error);
+static int do_carrier_device_error(enum at_cmd_type, const struct at_param_list *param_list,
+				   uint32_t)
 {
 	int ret;
 	int32_t error_code;
 	char operation[7];
 	int size = sizeof(operation);
 
-	ret = util_string_get(&slm_at_param_list, 2, operation, &size);
+	ret = util_string_get(param_list, 2, operation, &size);
 	if (ret) {
 		return ret;
 	}
 
-	ret = at_params_int_get(&slm_at_param_list, 3, &error_code);
+	ret = at_params_int_get(param_list, 3, &error_code);
 	if (ret) {
 		return ret;
 	}
 
-	if (slm_util_cmd_casecmp(operation, "ADD")) {
+	if (slm_util_casecmp(operation, "ADD")) {
 		return lwm2m_carrier_error_code_add(error_code);
-	} else if (slm_util_cmd_casecmp(operation, "REMOVE")) {
+	} else if (slm_util_casecmp(operation, "REMOVE")) {
 		return lwm2m_carrier_error_code_remove(error_code);
 	}
 
@@ -446,23 +390,25 @@ int lwm2m_carrier_memory_free_read(void)
 }
 
 /* AT#XCARRIER="memory_free","read|write"[,<memory>] */
-static int do_carrier_device_mem_free(void)
+SLM_AT_CMD_CUSTOM(xcarrier_memory_free, "AT#XCARRIER=\"memory_free\"", do_carrier_device_mem_free);
+static int do_carrier_device_mem_free(enum at_cmd_type, const struct at_param_list *param_list,
+				      uint32_t)
 {
 	int ret, memory;
 	char operation[6];
 	int size = sizeof(operation);
 
-	ret = util_string_get(&slm_at_param_list, 2, operation, &size);
+	ret = util_string_get(param_list, 2, operation, &size);
 	if (ret) {
 		return ret;
 	}
 
-	if (slm_util_cmd_casecmp(operation, "read")) {
+	if (slm_util_casecmp(operation, "read")) {
 		memory = lwm2m_carrier_memory_free_read();
 
 		rsp_send("\r\n#XCARRIER: %d\r\n", memory);
-	} else if (slm_util_cmd_casecmp(operation, "write")) {
-		ret = at_params_int_get(&slm_at_param_list, 3, &memory);
+	} else if (slm_util_casecmp(operation, "write")) {
+		ret = at_params_int_get(param_list, 3, &memory);
 		if (ret) {
 			return ret;
 		}
@@ -474,11 +420,14 @@ static int do_carrier_device_mem_free(void)
 }
 
 /* AT#XCARRIER="memory_total",<memory> */
-static int do_carrier_device_mem_total(void)
+SLM_AT_CMD_CUSTOM(xcarrier_memory_total, "AT#XCARRIER=\"memory_total\"",
+	      do_carrier_device_mem_total);
+static int do_carrier_device_mem_total(enum at_cmd_type, const struct at_param_list *param_list,
+				       uint32_t)
 {
 	int ret, memory_total;
 
-	ret = at_params_int_get(&slm_at_param_list, 2, &memory_total);
+	ret = at_params_int_get(param_list, 2, &memory_total);
 	if (ret) {
 		return ret;
 	}
@@ -487,20 +436,22 @@ static int do_carrier_device_mem_total(void)
 }
 
 /* AT#XCARRIER="power_sources"[,<source1>[<source2>[,...[,<source7>]]]] */
-static int do_carrier_device_power_sources(void)
+SLM_AT_CMD_CUSTOM(xcarrier_power_sources, "AT#XCARRIER=\"power_sources\"",
+	      do_carrier_device_power_sources);
+static int do_carrier_device_power_sources(enum at_cmd_type, const struct at_param_list *param_list,
+					   uint32_t param_count)
 {
 	int ret;
-	uint8_t sources[7], count;
+	uint8_t sources[7];
 	uint16_t source;
 
-	count = at_params_valid_count_get(&slm_at_param_list);
-	if (count - 2 > sizeof(sources)) {
+	if (param_count - 2 > sizeof(sources)) {
 		LOG_DBG("AT#XCARRIER=\"power_sources\" failed: too many parameters");
 		return -EINVAL;
 	}
 
-	for (int i = 2; i < count; i++) {
-		ret = at_params_unsigned_short_get(&slm_at_param_list, i, &source);
+	for (int i = 2; i < param_count; i++) {
+		ret = at_params_unsigned_short_get(param_list, i, &source);
 		if (ret) {
 			return ret;
 		}
@@ -508,22 +459,24 @@ static int do_carrier_device_power_sources(void)
 		sources[i - 2] = (uint8_t)source;
 	}
 
-	return lwm2m_carrier_avail_power_sources_set(sources, count - 2);
+	return lwm2m_carrier_avail_power_sources_set(sources, param_count - 2);
 }
 
-/* AT#XCARRIER="timezone","read|write"[,<timezone>] */
-static int do_carrier_device_timezone(void)
+/* AT#XCARRIER="timezone",<timezone> */
+SLM_AT_CMD_CUSTOM(xcarrier_timezone, "AT#XCARRIER=\"timezone\"", do_carrier_device_timezone);
+static int do_carrier_device_timezone(enum at_cmd_type, const struct at_param_list *param_list,
+				      uint32_t)
 {
 	int ret;
 	char operation[6];
 	size_t size = sizeof(operation);
 
-	ret = util_string_get(&slm_at_param_list, 2, operation, &size);
+	ret = util_string_get(param_list, 2, operation, &size);
 	if (ret) {
 		return ret;
 	}
 
-	if (slm_util_cmd_casecmp(operation, "READ")) {
+	if (slm_util_casecmp(operation, "READ")) {
 		const char *timezone;
 
 		timezone = lwm2m_carrier_timezone_read();
@@ -535,12 +488,12 @@ static int do_carrier_device_timezone(void)
 		}
 
 		return 0;
-	} else if (slm_util_cmd_casecmp(operation, "WRITE")) {
+	} else if (slm_util_casecmp(operation, "WRITE")) {
 		char timezone[64];
 
 		size = sizeof(timezone);
 
-		ret = util_string_get(&slm_at_param_list, 3, timezone, &size);
+		ret = util_string_get(param_list, 3, timezone, &size);
 		if (ret) {
 			return ret;
 		}
@@ -564,7 +517,8 @@ static void print_utc_time(char *output, int32_t timestamp)
 }
 
 /* AT#XCARRIER="time" */
-static int do_carrier_device_time(void)
+SLM_AT_CMD_CUSTOM(xcarrier_time, "AT#XCARRIER=\"time\"", do_carrier_device_time);
+static int do_carrier_device_time(enum at_cmd_type, const struct at_param_list *, uint32_t)
 {
 	int utc_time, utc_offset;
 	const char *timezone = NULL;
@@ -586,25 +540,28 @@ static int do_carrier_device_time(void)
 }
 
 /* AT#XCARRIER="utc_offset","read|write"[,<utc_offset>] */
-static int do_carrier_device_utc_offset(void)
+SLM_AT_CMD_CUSTOM(xcarrier_utc_offset, "AT#XCARRIER=\"utc_offset\"",
+	      do_carrier_device_utc_offset);
+static int do_carrier_device_utc_offset(enum at_cmd_type, const struct at_param_list *param_list,
+					uint32_t)
 {
 	int ret, utc_offset;
 	char operation[6];
 	size_t size = sizeof(operation);
 
-	ret = util_string_get(&slm_at_param_list, 2, operation, &size);
+	ret = util_string_get(param_list, 2, operation, &size);
 	if (ret) {
 		return ret;
 	}
 
-	if (slm_util_cmd_casecmp(operation, "READ")) {
+	if (slm_util_casecmp(operation, "READ")) {
 		utc_offset = lwm2m_carrier_utc_offset_read();
 
 		rsp_send("\r\n#XCARRIER: %d\r\n", utc_offset);
 
 		return 0;
-	} else if (slm_util_cmd_casecmp(operation, "WRITE")) {
-		ret = at_params_int_get(&slm_at_param_list, 3, &utc_offset);
+	} else if (slm_util_casecmp(operation, "WRITE")) {
+		ret = at_params_int_get(param_list, 3, &utc_offset);
 		if (ret) {
 			return ret;
 		}
@@ -618,27 +575,29 @@ static int do_carrier_device_utc_offset(void)
 }
 
 /* AT#XCARRIER="utc_time","read|write"[,<utc_time>] */
-static int do_carrier_device_utc_time(void)
+SLM_AT_CMD_CUSTOM(xcarrier_utc_time, "AT#XCARRIER=\"utc_time\"", do_carrier_device_utc_time);
+static int do_carrier_device_utc_time(enum at_cmd_type, const struct at_param_list *param_list,
+				      uint32_t)
 {
 	int ret, utc_time;
 	char operation[6];
 	size_t size = sizeof(operation);
 	char time_str[TIME_STR_SIZE];
 
-	ret = util_string_get(&slm_at_param_list, 2, operation, &size);
+	ret = util_string_get(param_list, 2, operation, &size);
 	if (ret) {
 		return ret;
 	}
 
-	if (slm_util_cmd_casecmp(operation, "READ")) {
+	if (slm_util_casecmp(operation, "READ")) {
 		utc_time = lwm2m_carrier_utc_time_read();
 		print_utc_time(time_str, utc_time);
 
 		rsp_send("\r\n#XCARRIER: %s\r\n", time_str);
 
 		return 0;
-	} else if (slm_util_cmd_casecmp(operation, "WRITE")) {
-		ret = at_params_int_get(&slm_at_param_list, 3, &utc_time);
+	} else if (slm_util_casecmp(operation, "WRITE")) {
+		ret = at_params_int_get(param_list, 3, &utc_time);
 		if (ret) {
 			return ret;
 		}
@@ -652,17 +611,19 @@ static int do_carrier_device_utc_time(void)
 }
 
 /* AT#XCARRIER="voltage",<power_source>,<voltage> */
-static int do_carrier_device_voltage(void)
+SLM_AT_CMD_CUSTOM(xcarrier_voltage, "AT#XCARRIER=\"voltage\"", do_carrier_device_voltage);
+static int do_carrier_device_voltage(enum at_cmd_type, const struct at_param_list *param_list,
+				     uint32_t)
 {
 	int ret, voltage;
 	uint16_t power_source;
 
-	ret = at_params_unsigned_short_get(&slm_at_param_list, 2, &power_source);
+	ret = at_params_unsigned_short_get(param_list, 2, &power_source);
 	if (ret) {
 		return ret;
 	}
 
-	ret = at_params_int_get(&slm_at_param_list, 3, &voltage);
+	ret = at_params_int_get(param_list, 3, &voltage);
 	if (ret) {
 		return ret;
 	}
@@ -671,12 +632,15 @@ static int do_carrier_device_voltage(void)
 }
 
 /* AT#XCARRIER="log_data",<data> */
-static int do_carrier_event_log_log_data(void)
+SLM_AT_CMD_CUSTOM(xcarrier_log_data, "AT#XCARRIER=\"log_data\"",
+	      do_carrier_event_log_log_data);
+static int do_carrier_event_log_log_data(enum at_cmd_type, const struct at_param_list *param_list,
+					 uint32_t)
 {
 	char data[CONFIG_SLM_CARRIER_APP_DATA_BUFFER_LEN] = {0};
 	int size = CONFIG_SLM_CARRIER_APP_DATA_BUFFER_LEN;
 
-	int ret = util_string_get(&slm_at_param_list, 2, data, &size);
+	int ret = util_string_get(param_list, 2, data, &size);
 
 	if (ret) {
 		return ret;
@@ -686,40 +650,42 @@ static int do_carrier_event_log_log_data(void)
 }
 
 /* AT#XCARRIER="position",<latitude>,<longitude>,<altitude>,<timestamp>,<uncertainty> */
-static int do_carrier_location_position(void)
+SLM_AT_CMD_CUSTOM(xcarrier_position, "AT#XCARRIER=\"position\"",
+	      do_carrier_location_position);
+static int do_carrier_location_position(enum at_cmd_type, const struct at_param_list *param_list,
+					uint32_t param_count)
 {
-	int ret, param_count;
+	int ret;
 	double latitude, longitude;
 	float altitude, uncertainty;
 	uint32_t timestamp;
 
-	param_count = at_params_valid_count_get(&slm_at_param_list);
 	if (param_count != 7) {
 		LOG_DBG("AT#XCARRIER=\"position\" failed: invalid number of arguments");
 		return -EINVAL;
 	}
 
-	ret = util_string_to_double_get(&slm_at_param_list, 2, &latitude);
+	ret = util_string_to_double_get(param_list, 2, &latitude);
 	if (ret) {
 		return ret;
 	}
 
-	ret = util_string_to_double_get(&slm_at_param_list, 3, &longitude);
+	ret = util_string_to_double_get(param_list, 3, &longitude);
 	if (ret) {
 		return ret;
 	}
 
-	ret = util_string_to_float_get(&slm_at_param_list, 4, &altitude);
+	ret = util_string_to_float_get(param_list, 4, &altitude);
 	if (ret) {
 		return ret;
 	}
 
-	ret = at_params_unsigned_int_get(&slm_at_param_list, 5, &timestamp);
+	ret = at_params_unsigned_int_get(param_list, 5, &timestamp);
 	if (ret) {
 		return ret;
 	}
 
-	ret = util_string_to_float_get(&slm_at_param_list, 6, &uncertainty);
+	ret = util_string_to_float_get(param_list, 6, &uncertainty);
 	if (ret) {
 		return ret;
 	}
@@ -728,38 +694,40 @@ static int do_carrier_location_position(void)
 }
 
 /* AT#XCARRIER="velocity",<heading>,<speed_h>,<speed_v>,<uncertainty_h>,<uncertainty_v> */
-static int do_carrier_location_velocity(void)
+SLM_AT_CMD_CUSTOM(xcarrier_velocity, "AT#XCARRIER=\"velocity\"",
+	      do_carrier_location_velocity);
+static int do_carrier_location_velocity(enum at_cmd_type, const struct at_param_list *param_list,
+					uint32_t param_count)
 {
-	int ret, param_count, heading;
+	int ret, heading;
 	float speed_h, speed_v, uncertainty_h, uncertainty_v;
 
-	param_count = at_params_valid_count_get(&slm_at_param_list);
 	if (param_count != 7) {
 		LOG_DBG("AT#XCARRIER=\"velocity\" failed: invalid number of arguments");
 		return -EINVAL;
 	}
 
-	ret = at_params_int_get(&slm_at_param_list, 2, &heading);
+	ret = at_params_int_get(param_list, 2, &heading);
 	if (ret) {
 		return ret;
 	}
 
-	ret = util_string_to_float_get(&slm_at_param_list, 3, &speed_h);
+	ret = util_string_to_float_get(param_list, 3, &speed_h);
 	if (ret) {
 		return ret;
 	}
 
-	ret = util_string_to_float_get(&slm_at_param_list, 4, &speed_v);
+	ret = util_string_to_float_get(param_list, 4, &speed_v);
 	if (ret) {
 		return ret;
 	}
 
-	ret = util_string_to_float_get(&slm_at_param_list, 5, &uncertainty_h);
+	ret = util_string_to_float_get(param_list, 5, &uncertainty_h);
 	if (ret) {
 		return ret;
 	}
 
-	ret = util_string_to_float_get(&slm_at_param_list, 6, &uncertainty_v);
+	ret = util_string_to_float_get(param_list, 6, &uncertainty_v);
 	if (ret) {
 		return ret;
 	}
@@ -767,34 +735,35 @@ static int do_carrier_location_velocity(void)
 	return lwm2m_carrier_velocity_set(heading, speed_h, speed_v, uncertainty_h, uncertainty_v);
 }
 
-/* AT#XCARRIER="portfolio","create|read|write",<instance_id>[,<identity_type>[,<identity>]] */
-static int do_carrier_portfolio(void)
+/* AT#XCARRIER="portfolio","create|read|write",<obj_inst_id>[,<identity_type>[,<identity>]] */
+SLM_AT_CMD_CUSTOM(xcarrier_portfolio, "AT#XCARRIER=\"portfolio\"", do_carrier_portfolio);
+static int do_carrier_portfolio(enum at_cmd_type, const struct at_param_list *param_list,
+				uint32_t param_count)
 {
-	int ret, param_count;
+	int ret;
 	uint16_t instance_id, identity_type;
 	char operation[7], buffer[64];
 	size_t size = sizeof(operation);
 	uint16_t buf_len = sizeof(buffer);
 
-	ret = util_string_get(&slm_at_param_list, 2, operation, &size);
+	ret = util_string_get(param_list, 2, operation, &size);
 	if (ret) {
 		return ret;
 	}
 
-	ret = at_params_unsigned_short_get(&slm_at_param_list, 3, &instance_id);
+	ret = at_params_unsigned_short_get(param_list, 3, &instance_id);
 	if (ret) {
 		return ret;
 	}
 
-	param_count = at_params_valid_count_get(&slm_at_param_list);
 	if (param_count > 4) {
-		ret = at_params_unsigned_short_get(&slm_at_param_list, 4, &identity_type);
+		ret = at_params_unsigned_short_get(param_list, 4, &identity_type);
 		if (ret) {
 			return ret;
 		}
 	}
 
-	if (slm_util_cmd_casecmp(operation, "READ") && (param_count > 4)) {
+	if (slm_util_casecmp(operation, "READ") && (param_count > 4)) {
 		ret = lwm2m_carrier_identity_read(instance_id, identity_type, buffer, &buf_len);
 		if (ret) {
 			return ret;
@@ -803,16 +772,16 @@ static int do_carrier_portfolio(void)
 		rsp_send("\r\n#XCARRIER: %s\r\n", buffer);
 
 		return 0;
-	} else if (slm_util_cmd_casecmp(operation, "WRITE") && (param_count > 4)) {
+	} else if (slm_util_casecmp(operation, "WRITE") && (param_count > 4)) {
 		size = sizeof(buffer);
 
-		ret = util_string_get(&slm_at_param_list, 5, buffer, &size);
+		ret = util_string_get(param_list, 5, buffer, &size);
 		if (ret) {
 			return ret;
 		}
 
 		return lwm2m_carrier_identity_write(instance_id, identity_type, buffer);
-	} else if (slm_util_cmd_casecmp(operation, "CREATE")) {
+	} else if (slm_util_casecmp(operation, "CREATE")) {
 		return lwm2m_carrier_portfolio_instance_create(instance_id);
 	}
 
@@ -822,78 +791,52 @@ static int do_carrier_portfolio(void)
 }
 
 /* AT#XCARRIER="reboot" */
-static int do_carrier_request_reboot(void)
+SLM_AT_CMD_CUSTOM(xcarrier_reboot, "AT#XCARRIER=\"reboot\"", do_carrier_request_reboot);
+static int do_carrier_request_reboot(enum at_cmd_type, const struct at_param_list *, uint32_t)
 {
 	return lwm2m_carrier_request(LWM2M_CARRIER_REQUEST_REBOOT);
 }
 
 /* AT#XCARRIER="link_down" */
-static int do_carrier_request_link_down(void)
+SLM_AT_CMD_CUSTOM(xcarrier_link_down, "AT#XCARRIER=\"link_down\"",
+	      do_carrier_request_link_down);
+static int do_carrier_request_link_down(enum at_cmd_type, const struct at_param_list *, uint32_t)
 {
 	return lwm2m_carrier_request(LWM2M_CARRIER_REQUEST_LINK_DOWN);
 }
 
 /* AT#XCARRIER="link_up" */
-static int do_carrier_request_link_up(void)
+SLM_AT_CMD_CUSTOM(xcarrier_link_up, "AT#XCARRIER=\"link_up\"", do_carrier_request_link_up);
+static int do_carrier_request_link_up(enum at_cmd_type, const struct at_param_list *, uint32_t)
 {
 	return lwm2m_carrier_request(LWM2M_CARRIER_REQUEST_LINK_UP);
 }
 
-/* AT#XCARRIER="auto_connect","read|write"[,<auto-connect-flag>] */
-static int do_carrier_auto_connect(void)
+/* AT#XCARRIER="send",<obj_id>,<obj_inst_id>,<res_id>[,<res_inst_id>] */
+SLM_AT_CMD_CUSTOM(xcarrier_send, "AT#XCARRIER=\"send\"", do_carrier_send);
+static int do_carrier_send(enum at_cmd_type, const struct at_param_list *param_list,
+			   uint32_t param_count)
 {
 	int ret = 0;
-	int flag;
-	char operation[6];
-	size_t size = sizeof(operation);
 
-	ret = util_string_get(&slm_at_param_list, 2, operation, &size);
-	if (ret) {
-		return ret;
+	if (param_count != 5 && param_count != 6) {
+		LOG_DBG("AT#XCARRIER=\"send\" failed: invalid number of arguments");
+		return -EINVAL;
 	}
 
-	if (slm_util_cmd_casecmp(operation, "READ")) {
-		rsp_send("\r\n#XCARRIER: auto_connect %d\r\n", slm_carrier_auto_connect);
-	} else if (slm_util_cmd_casecmp(operation, "WRITE")) {
-		ret = at_params_int_get(&slm_at_param_list, 3, &flag);
+	uint16_t path[4];
+	uint8_t path_len = 0;
+
+	for (int i = 2; i < param_count; i++) {
+		ret = at_params_unsigned_short_get(param_list, i, &path[i - 2]);
 		if (ret) {
 			return ret;
 		}
-		if (flag == 0 || flag == 1) {
-			slm_carrier_auto_connect = flag;
-			(void)slm_settings_auto_connect_save();
-		} else {
-			ret = -EINVAL;
-		}
+
+		++path_len;
 	}
 
-	return ret;
-}
-
-/**@brief API to handle Carrier AT command
- */
-int handle_at_carrier(enum at_cmd_type cmd_type)
-{
-	int ret;
-	char op_str[SLM_CARRIER_OP_STR_MAX];
-	int size = sizeof(op_str);
-
-	if (cmd_type != AT_CMD_TYPE_SET_COMMAND) {
-		return -EINVAL;
-	}
-	ret = util_string_get(&slm_at_param_list, 1, op_str, &size);
-	if (ret) {
-		return ret;
-	}
-	ret = -EINVAL;
-	for (int i = 0; i < CARRIER_OP_MAX; i++) {
-		if (slm_util_casecmp(op_str, op_list[i].op_str)) {
-			ret = op_list[i].handler();
-			break;
-		}
-	}
-
-	return ret;
+	return lwm2m_carrier_data_send(path, path_len);
 }
 
 int slm_at_carrier_init(void)

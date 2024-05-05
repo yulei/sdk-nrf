@@ -21,9 +21,9 @@
 
 void MatterIdentifyPluginServerInitCallback();
 void MatterGroupsPluginServerInitCallback();
-void MatterScenesPluginServerInitCallback();
 void MatterOnOffPluginServerInitCallback();
 void MatterDescriptorPluginServerInitCallback();
+void MatterBindingPluginServerInitCallback();
 void MatterAccessControlPluginServerInitCallback();
 void MatterBasicInformationPluginServerInitCallback();
 void MatterOtaSoftwareUpdateRequestorPluginServerInitCallback();
@@ -33,6 +33,7 @@ void MatterGeneralDiagnosticsPluginServerInitCallback();
 void MatterSoftwareDiagnosticsPluginServerInitCallback();
 void MatterWiFiNetworkDiagnosticsPluginServerInitCallback();
 void MatterBridgedDeviceBasicInformationPluginServerInitCallback();
+void MatterSwitchPluginServerInitCallback();
 void MatterAdministratorCommissioningPluginServerInitCallback();
 void MatterOperationalCredentialsPluginServerInitCallback();
 void MatterGroupKeyManagementPluginServerInitCallback();
@@ -42,9 +43,9 @@ void MatterRelativeHumidityMeasurementPluginServerInitCallback();
 #define MATTER_PLUGINS_INIT                                                                                            \
 	MatterIdentifyPluginServerInitCallback();                                                                      \
 	MatterGroupsPluginServerInitCallback();                                                                        \
-	MatterScenesPluginServerInitCallback();                                                                        \
 	MatterOnOffPluginServerInitCallback();                                                                         \
 	MatterDescriptorPluginServerInitCallback();                                                                    \
+	MatterBindingPluginServerInitCallback();                                                                       \
 	MatterAccessControlPluginServerInitCallback();                                                                 \
 	MatterBasicInformationPluginServerInitCallback();                                                              \
 	MatterOtaSoftwareUpdateRequestorPluginServerInitCallback();                                                    \
@@ -54,6 +55,7 @@ void MatterRelativeHumidityMeasurementPluginServerInitCallback();
 	MatterSoftwareDiagnosticsPluginServerInitCallback();                                                           \
 	MatterWiFiNetworkDiagnosticsPluginServerInitCallback();                                                        \
 	MatterBridgedDeviceBasicInformationPluginServerInitCallback();                                                 \
+	MatterSwitchPluginServerInitCallback();                                                                        \
 	MatterAdministratorCommissioningPluginServerInitCallback();                                                    \
 	MatterOperationalCredentialsPluginServerInitCallback();                                                        \
 	MatterGroupKeyManagementPluginServerInitCallback();                                                            \

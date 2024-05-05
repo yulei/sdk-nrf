@@ -15,6 +15,7 @@
 
 #include "cmock_date_time.h"
 #include "cmock_lte_lc.h"
+#include "cmock_modem_attest_token.h"
 #include "cmock_modem_key_mgmt.h"
 #include "cmock_modem_info.h"
 #include "cmock_nrf_modem_lib.h"
@@ -22,6 +23,7 @@
 #include "cmock_nrf_provisioning_at.h"
 #include "cmock_rest_client.h"
 #include "cmock_settings.h"
+#include "cmock_nrf_provisioning_jwt.h"
 
 #include "nrf_provisioning_codec.h"
 #include "nrf_provisioning_http.h"
@@ -29,24 +31,25 @@
 #include "net/nrf_provisioning.h"
 
 #define AUTH_HDR_BEARER "Authorization: Bearer "
-#define AUTH_HDR_BEARER_PREFIX_ATT AUTH_HDR_BEARER "att."
-#define AUTH_HDR_BEARER_ATT_DUMMY "dummy_attestation_token"
+#define AUTH_HDR_BEARER_JWT_DUMMY "dummy_json_web_token"
 
 #define CRLF "\r\n"
 
 #define QUERY_ITEMS_MAX 5
 
-char tok_att_plain[] = AUTH_HDR_BEARER_ATT_DUMMY;
-char http_auth_hdr[] = AUTH_HDR_BEARER_PREFIX_ATT AUTH_HDR_BEARER_ATT_DUMMY CRLF;
-char http_auth_hdr_invalid1[] = AUTH_HDR_BEARER_ATT_DUMMY CRLF;
-char http_auth_hdr_invalid2[] = "att." AUTH_HDR_BEARER_ATT_DUMMY CRLF;
+char tok_jwt_plain[] = AUTH_HDR_BEARER_JWT_DUMMY;
+char http_auth_hdr[] = AUTH_HDR_BEARER AUTH_HDR_BEARER_JWT_DUMMY CRLF;
+char http_auth_hdr_invalid1[] = AUTH_HDR_BEARER_JWT_DUMMY CRLF;
+char http_auth_hdr_invalid2[] = "att." AUTH_HDR_BEARER_JWT_DUMMY CRLF;
 
 char MFW_VER[] = "mfw_nrf9161_99.99.99-DUMMY";
 char MFW_VER_NMB[] = "99.99.99";
 
-static void dummy_nrf_provisioning_device_mode_cb(void *user_data)
+static void dummy_nrf_provisioning_device_mode_cb(enum nrf_provisioning_event event,
+						  void *user_data)
 {
 	(void)user_data;
+	(void)event;
 }
 
 static int dummy_nrf_provisioning_modem_mode_cb(enum lte_lc_func_mode new_mode, void *user_data)
@@ -406,9 +409,9 @@ static int rest_client_request_url_valid(struct rest_client_req_context *req_ctx
 }
 
 /*
- * - Attestation token is generated and placed as one of the HTTP headers
+ * - JWT token is generated and placed as one of the HTTP headers
  * - To have a valid token for authentication
- * - Retrieves a dummy attestation token and writes an authentication header based on it
+ * - Retrieves a dummy JWT token and writes an authentication header based on it
  */
 void test_http_commands_auth_hdr_valid(void)
 {
@@ -420,9 +423,10 @@ void test_http_commands_auth_hdr_valid(void)
 	__cmock_modem_info_string_get_ExpectAnyArgsAndReturn(sizeof(MFW_VER));
 	__cmock_modem_info_string_get_ReturnArrayThruPtr_buf(MFW_VER, strlen(MFW_VER) + 1);
 
-	__cmock_nrf_provisioning_at_attest_token_get_ExpectAnyArgsAndReturn(0);
-	__cmock_nrf_provisioning_at_attest_token_get_ReturnArrayThruPtr_buff(
-		tok_att_plain, strlen(tok_att_plain) + 1);
+	__cmock_nrf_provisioning_jwt_generate_ExpectAnyArgsAndReturn(0);
+	__cmock_nrf_provisioning_jwt_generate_CMockReturnMemThruPtr_jwt_buf(
+		CONFIG_NRF_PROVISIONING_JWT_MAX_VALID_TIME_S, tok_jwt_plain,
+		strlen(tok_jwt_plain) + 1);
 
 	__cmock_rest_client_request_ExpectAnyArgsAndReturn(0);
 	__cmock_rest_client_request_AddCallback(rest_client_request_auth_hdr_valid);
@@ -433,9 +437,8 @@ void test_http_commands_auth_hdr_valid(void)
 }
 
 /*
- * - Having plain attestation token as authentication header without the 'att.'-prefix is detected
- * - The protocol requires a token specific prefix.
- * - Retrieves a dummy attestation token and writes an authentication header based on it
+ * - Having JWT token as authentication header with the 'att.'-prefix is detected
+ * - Retrieves a dummy JWT token and writes an authentication header based on it
  */
 void test_http_commands_auth_hdr_invalid(void)
 {
@@ -447,9 +450,10 @@ void test_http_commands_auth_hdr_invalid(void)
 	__cmock_modem_info_string_get_ExpectAnyArgsAndReturn(sizeof(MFW_VER));
 	__cmock_modem_info_string_get_ReturnArrayThruPtr_buf(MFW_VER, strlen(MFW_VER) + 1);
 
-	__cmock_nrf_provisioning_at_attest_token_get_ExpectAnyArgsAndReturn(0);
-	__cmock_nrf_provisioning_at_attest_token_get_ReturnArrayThruPtr_buff(
-		tok_att_plain, strlen(tok_att_plain) + 1);
+	__cmock_nrf_provisioning_jwt_generate_ExpectAnyArgsAndReturn(0);
+	__cmock_nrf_provisioning_jwt_generate_CMockReturnMemThruPtr_jwt_buf(
+		CONFIG_NRF_PROVISIONING_JWT_MAX_VALID_TIME_S, tok_jwt_plain,
+		strlen(tok_jwt_plain) + 1);
 
 	__cmock_rest_client_request_ExpectAnyArgsAndReturn(0);
 	__cmock_rest_client_request_AddCallback(rest_client_request_auth_hdr_invalid);
@@ -475,9 +479,10 @@ void test_http_commands_url_valid(void)
 	__cmock_modem_info_string_get_ExpectAnyArgsAndReturn(sizeof(MFW_VER));
 	__cmock_modem_info_string_get_ReturnArrayThruPtr_buf(MFW_VER, strlen(MFW_VER) + 1);
 
-	__cmock_nrf_provisioning_at_attest_token_get_ExpectAnyArgsAndReturn(0);
-	__cmock_nrf_provisioning_at_attest_token_get_ReturnArrayThruPtr_buff(
-		tok_att_plain, strlen(tok_att_plain) + 1);
+	__cmock_nrf_provisioning_jwt_generate_ExpectAnyArgsAndReturn(0);
+	__cmock_nrf_provisioning_jwt_generate_CMockReturnMemThruPtr_jwt_buf(
+		CONFIG_NRF_PROVISIONING_JWT_MAX_VALID_TIME_S, tok_jwt_plain,
+		strlen(tok_jwt_plain) + 1);
 
 	__cmock_rest_client_request_ExpectAnyArgsAndReturn(0);
 	__cmock_rest_client_request_AddCallback(rest_client_request_url_valid);
@@ -502,7 +507,7 @@ void test_http_commands_no_content_valid(void)
 	__cmock_modem_info_string_get_ExpectAnyArgsAndReturn(sizeof(MFW_VER));
 	__cmock_modem_info_string_get_ReturnArrayThruPtr_buf(MFW_VER, strlen(MFW_VER) + 1);
 
-	__cmock_nrf_provisioning_at_attest_token_get_ExpectAnyArgsAndReturn(0);
+	__cmock_nrf_provisioning_jwt_generate_ExpectAnyArgsAndReturn(0);
 
 	__cmock_rest_client_request_ExpectAnyArgsAndReturn(0);
 	__cmock_rest_client_request_AddCallback(rest_client_request_resp_no_content);
@@ -529,7 +534,7 @@ void test_http_commands_internal_server_error_invalid(void)
 	__cmock_modem_info_string_get_ExpectAnyArgsAndReturn(sizeof(MFW_VER));
 	__cmock_modem_info_string_get_ReturnArrayThruPtr_buf(MFW_VER, strlen(MFW_VER) + 1);
 
-	__cmock_nrf_provisioning_at_attest_token_get_ExpectAnyArgsAndReturn(0);
+	__cmock_nrf_provisioning_jwt_generate_ExpectAnyArgsAndReturn(0);
 
 	__cmock_rest_client_request_ExpectAnyArgsAndReturn(0);
 	__cmock_rest_client_request_AddCallback(rest_client_request_resp_internal_server_err);
@@ -558,7 +563,7 @@ void test_http_commands_unknown_error_invalid(void)
 	__cmock_modem_info_string_get_ExpectAnyArgsAndReturn(sizeof(MFW_VER));
 	__cmock_modem_info_string_get_ReturnArrayThruPtr_buf(MFW_VER, strlen(MFW_VER) + 1);
 
-	__cmock_nrf_provisioning_at_attest_token_get_ExpectAnyArgsAndReturn(0);
+	__cmock_nrf_provisioning_jwt_generate_ExpectAnyArgsAndReturn(0);
 
 	__cmock_rest_client_request_ExpectAnyArgsAndReturn(0);
 	__cmock_rest_client_request_AddCallback(rest_client_request_resp_unknown_err1);
@@ -571,7 +576,7 @@ void test_http_commands_unknown_error_invalid(void)
 	__cmock_modem_info_string_get_ExpectAnyArgsAndReturn(sizeof(MFW_VER));
 	__cmock_modem_info_string_get_ReturnArrayThruPtr_buf(MFW_VER, strlen(MFW_VER) + 1);
 
-	__cmock_nrf_provisioning_at_attest_token_get_ExpectAnyArgsAndReturn(0);
+	__cmock_nrf_provisioning_jwt_generate_ExpectAnyArgsAndReturn(0);
 
 	__cmock_rest_client_request_ExpectAnyArgsAndReturn(0);
 	__cmock_rest_client_request_AddCallback(rest_client_request_resp_unknown_err2);
@@ -611,7 +616,7 @@ void test_http_responses_valid(void)
 	__cmock_modem_info_string_get_ExpectAnyArgsAndReturn(sizeof(MFW_VER));
 	__cmock_modem_info_string_get_ReturnArrayThruPtr_buf(MFW_VER, strlen(MFW_VER) + 1);
 
-	__cmock_nrf_provisioning_at_attest_token_get_ExpectAnyArgsAndReturn(0);
+	__cmock_nrf_provisioning_jwt_generate_ExpectAnyArgsAndReturn(0);
 
 	__cmock_rest_client_request_ExpectAnyArgsAndReturn(0);
 	__cmock_rest_client_request_AddCallback(rest_client_request_finished);
@@ -621,7 +626,7 @@ void test_http_responses_valid(void)
 	__cmock_nrf_provisioning_at_cmee_enable_ExpectAndReturn(true);
 	__cmock_nrf_provisioning_at_cmee_control_ExpectAnyArgsAndReturn(0);
 
-	__cmock_nrf_provisioning_at_attest_token_get_ExpectAnyArgsAndReturn(0);
+	__cmock_nrf_provisioning_jwt_generate_ExpectAnyArgsAndReturn(0);
 
 	__cmock_rest_client_request_ExpectAnyArgsAndReturn(0);
 	__cmock_rest_client_request_AddCallback(rest_client_request_finished);
@@ -1004,7 +1009,7 @@ void test_provisioning_init_wo_cert_change_valid(void)
 	__cmock_lte_lc_register_handler_ExpectAnyArgs();
 	__cmock_modem_info_init_IgnoreAndReturn(0);
 	__cmock_nrf_modem_lib_init_IgnoreAndReturn(0);
-	__cmock_lte_lc_init_and_connect_IgnoreAndReturn(0);
+	__cmock_lte_lc_connect_IgnoreAndReturn(0);
 
 	__cmock_settings_subsys_init_ExpectAndReturn(0);
 	__cmock_settings_register_ExpectAnyArgsAndReturn(0);
@@ -1016,7 +1021,7 @@ void test_provisioning_init_wo_cert_change_valid(void)
 
 	__cmock_modem_info_init_StopIgnore();
 	__cmock_nrf_modem_lib_init_StopIgnore();
-	__cmock_lte_lc_init_and_connect_StopIgnore();
+	__cmock_lte_lc_connect_StopIgnore();
 }
 
 /*
@@ -1159,9 +1164,10 @@ void test_provisioning_task_valid(void)
 	__cmock_modem_info_string_get_ExpectAnyArgsAndReturn(sizeof(MFW_VER));
 	__cmock_modem_info_string_get_ReturnArrayThruPtr_buf(MFW_VER, strlen(MFW_VER) + 1);
 
-	__cmock_nrf_provisioning_at_attest_token_get_ExpectAnyArgsAndReturn(0);
-	__cmock_nrf_provisioning_at_attest_token_get_ReturnArrayThruPtr_buff(
-		tok_att_plain, strlen(tok_att_plain) + 1);
+	__cmock_nrf_provisioning_jwt_generate_ExpectAnyArgsAndReturn(0);
+	__cmock_nrf_provisioning_jwt_generate_CMockReturnMemThruPtr_jwt_buf(
+		CONFIG_NRF_PROVISIONING_JWT_MAX_VALID_TIME_S, tok_jwt_plain,
+		strlen(tok_jwt_plain) + 1);
 
 	__cmock_rest_client_request_ExpectAnyArgsAndReturn(0);
 	__cmock_rest_client_request_AddCallback(rest_client_request_auth_hdr_valid);
@@ -1230,12 +1236,14 @@ void test_provisioning_task_server_busy_invalid(void)
 	__cmock_modem_info_string_get_ExpectAnyArgsAndReturn(sizeof(MFW_VER));
 	__cmock_modem_info_string_get_ReturnArrayThruPtr_buf(MFW_VER, strlen(MFW_VER) + 1);
 
-	__cmock_nrf_provisioning_at_attest_token_get_ExpectAnyArgsAndReturn(0);
-	__cmock_nrf_provisioning_at_attest_token_get_ReturnArrayThruPtr_buff(
-		tok_att_plain, strlen(tok_att_plain) + 1);
-	__cmock_nrf_provisioning_at_attest_token_get_ExpectAnyArgsAndReturn(0);
-	__cmock_nrf_provisioning_at_attest_token_get_ReturnArrayThruPtr_buff(
-		tok_att_plain, strlen(tok_att_plain) + 1);
+	__cmock_nrf_provisioning_jwt_generate_ExpectAnyArgsAndReturn(0);
+	__cmock_nrf_provisioning_jwt_generate_CMockReturnMemThruPtr_jwt_buf(
+		CONFIG_NRF_PROVISIONING_JWT_MAX_VALID_TIME_S, tok_jwt_plain,
+		strlen(tok_jwt_plain) + 1);
+	__cmock_nrf_provisioning_jwt_generate_ExpectAnyArgsAndReturn(0);
+	__cmock_nrf_provisioning_jwt_generate_CMockReturnMemThruPtr_jwt_buf(
+		CONFIG_NRF_PROVISIONING_JWT_MAX_VALID_TIME_S, tok_jwt_plain,
+		strlen(tok_jwt_plain) + 1);
 
 	__cmock_rest_client_request_AddCallback(rest_client_request_server_first_busy);
 	__cmock_rest_client_request_ExpectAnyArgsAndReturn(-EBUSY);

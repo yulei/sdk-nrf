@@ -130,6 +130,7 @@ Use the following steps depending on the application placement:
          When the application is created, a VS Code prompt appears.
       #. Click :guilabel:`Open`.
          This opens the new application and adds it to the :guilabel:`Applications View` in the extension.
+         At this point, you have created a freestanding application.
       #. Add the :file:`west.yml` to create a west workspace around the application:
 
          a. In the :guilabel:`Welcome View`, click the :guilabel:`Manage SDKs` action.
@@ -137,8 +138,8 @@ Use the following steps depending on the application placement:
          #. Click :guilabel:`Create west workspace`.
          #. Enter a location for the :file:`west.yml` file that matches the location provided in step 4.
          #. Select the SDK version for the west workspace.
-            The west workspace is initialized and the :guilabel:`Manage SDKs` action changes to :guilabel:`Open west manifest`.
-         #. In the :guilabel:`Applications View`, click the :guilabel:`Run West Update` button to update the workspace modules.
+            The west workspace is initialized and the :guilabel:`Manage SDKs` action changes to :guilabel:`Manage west workspace`.
+         #. Click :guilabel:`Manage west workspace` and select :guilabel:`West Update` button to update the workspace modules.
 
       You can now start :ref:`configuring and building <configuration_and_build>` the application.
 
@@ -167,6 +168,9 @@ Use the following steps depending on the application placement:
 
       See the `extension documentation <Create a new application_>`_ for more information about creating freestanding applications in the extension.
 
+      .. note::
+          You can transform your freestanding application into a workspace application at any moment by completing the step 7 under the Workspace application tab.
+
 .. _creating_cmd:
 
 Creating application for use with command line
@@ -182,7 +186,7 @@ Use the following steps depending on the application type:
 
       This recommended process for command line takes advantage of Nordic Semiconductor's example application template repository, similar to the example application used for :ref:`creating an application in Zephyr <zephyr:application>`.
 
-      .. include:: /releases_and_maturity/developing/adding_code.rst
+      .. include:: /dev_model_and_contributions/adding_code.rst
          :start-after: example_app_start
          :end-before: example_app_end
 
@@ -200,7 +204,7 @@ Use the following steps depending on the application type:
          .. parsed-literal::
             :class: highlight
 
-            west init -m https:\ //github.com/*your-name/your-application* *your-app-worskpace*
+            west init -m https:\ //github.com/*your-name/your-application* *your-app-workspace*
 
       #. Go to the *your-app-workspace* directory using the following command pattern:
 

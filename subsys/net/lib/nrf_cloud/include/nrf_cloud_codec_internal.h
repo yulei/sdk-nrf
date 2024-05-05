@@ -13,6 +13,7 @@
 #include <zephyr/bluetooth/bluetooth.h>
 #include <net/nrf_cloud_defs.h>
 #include <net/nrf_cloud.h>
+#include <net/nrf_cloud_codec.h>
 #include <net/nrf_cloud_alert.h>
 #if defined(CONFIG_NRF_CLOUD_PGPS)
 #include <net/nrf_cloud_pgps.h>
@@ -37,7 +38,7 @@ extern "C" {
 
 enum nrf_cloud_rcv_topic {
 	NRF_CLOUD_RCV_TOPIC_GENERAL,
-	NRF_CLOUD_RCV_TOPIC_AGPS,
+	NRF_CLOUD_RCV_TOPIC_AGNSS,
 	NRF_CLOUD_RCV_TOPIC_PGPS,
 	NRF_CLOUD_RCV_TOPIC_LOCATION,
 	/* Unknown/unhandled topic */
@@ -102,38 +103,83 @@ int nrf_cloud_encode_message(const char *app_id, double value, const char *str_v
 int nrf_cloud_shadow_data_encode(const struct nrf_cloud_sensor_data *sensor,
 				 struct nrf_cloud_data *output);
 
-/** @brief Encode the user association data based on the indicated type. */
-int nrf_cloud_requested_state_decode(const struct nrf_cloud_data *payload,
-				     enum nfsm_state *requested_state);
-
 /** @brief Decode data endpoint information. */
-int nrf_cloud_data_endpoint_decode(const struct nrf_cloud_data *input,
-				   struct nrf_cloud_data *tx_endpoint,
-				   struct nrf_cloud_data *rx_endpoint,
-				   struct nrf_cloud_data *bulk_endpoint,
-				   struct nrf_cloud_data *bin_endpoint,
-				   struct nrf_cloud_data *m_endpoint);
+int nrf_cloud_obj_endpoint_decode(const struct nrf_cloud_obj *const desired_obj,
+				  struct nrf_cloud_data *tx_endpoint,
+				  struct nrf_cloud_data *rx_endpoint,
+				  struct nrf_cloud_data *bulk_endpoint,
+				  struct nrf_cloud_data *bin_endpoint,
+				  struct nrf_cloud_data *m_endpoint);
 
 /** @brief Encode state information. */
 int nrf_cloud_state_encode(uint32_t reported_state, const bool update_desired_topic,
-			   const bool add_dev_status, struct nrf_cloud_data *output);
+			   const bool add_info_sections, struct nrf_cloud_data *output);
 
-/** @brief Parse input for control section, and return contents and status of it. */
-int nrf_cloud_shadow_control_decode(struct nrf_cloud_data const *const input,
-				    enum nrf_cloud_ctrl_status *status,
+/** @brief Decode the shadow data and get the requested FSM state. */
+int nrf_cloud_shadow_data_state_decode(const struct nrf_cloud_obj_shadow_data *const input,
+				       enum nfsm_state *const requested_state);
+
+/** @brief Decode the accepted shadow data.
+ * Decoded data should be freed with @ref nrf_cloud_obj_shadow_accepted_free.
+ */
+int nrf_cloud_obj_shadow_accepted_decode(struct nrf_cloud_obj *const shadow_obj,
+					 struct nrf_cloud_obj_shadow_accepted *const accepted);
+
+/** @brief Free the accepted shadow data. */
+void nrf_cloud_obj_shadow_accepted_free(struct nrf_cloud_obj_shadow_accepted *const accepted);
+
+/** @brief Decode the delta shadow data.
+ * Decoded data should be freed with @ref nrf_cloud_obj_shadow_delta_free.
+ */
+int nrf_cloud_obj_shadow_delta_decode(struct nrf_cloud_obj *const shadow_obj,
+				      struct nrf_cloud_obj_shadow_delta *const delta);
+
+/** @brief Free the delta shadow data. */
+void nrf_cloud_obj_shadow_delta_free(struct nrf_cloud_obj_shadow_delta *const delta);
+
+/** @brief Check if the shadow data should be sent to the application. */
+bool nrf_cloud_shadow_app_send_check(struct nrf_cloud_obj_shadow_data *const input);
+
+/** @brief Get the control section from the shadow data.
+ * The control section will be detached from the input object and should be
+ * freed with @ref nrf_cloud_obj_free.
+ */
+int nrf_cloud_shadow_control_get(struct nrf_cloud_obj_shadow_data *const input,
+				 struct nrf_cloud_obj *const ctrl_obj);
+
+/** @brief Parse the control object into the provided control data struct. */
+int nrf_cloud_shadow_control_decode(struct nrf_cloud_obj *const ctrl_obj,
 				    struct nrf_cloud_ctrl_data *data);
+
+/** @brief Get the current device control state. */
+void nrf_cloud_device_control_get(struct nrf_cloud_ctrl_data *const ctrl);
 
 /** @brief Encode response that we have accepted a shadow delta. */
 int nrf_cloud_shadow_control_response_encode(struct nrf_cloud_ctrl_data const *const data,
 					     bool accept,
 					     struct nrf_cloud_data *const output);
 
-/** @brief Parse shadow delta for control section. Act on any changes to logging or alerts.
+/** @brief Parse shadow data for control section. Act on any changes to logging or alerts.
  * If needed, generate output JSON to send back to cloud to confirm change.
  */
-int nrf_cloud_device_control_update(const struct nrf_cloud_data *const in_data,
-				    struct nrf_cloud_data *out_data,
-				    enum nrf_cloud_ctrl_status *status);
+int nrf_cloud_shadow_control_process(struct nrf_cloud_obj_shadow_data *const input,
+				     struct nrf_cloud_data *const response_out);
+
+/** @brief Parse shadow data for default nRF Cloud shadow content. This data is not
+ * needed by CoAP devices, but it needs to be acknowledged to remove the shadow delta.
+ */
+int nrf_cloud_coap_shadow_default_process(struct nrf_cloud_obj_shadow_data *const input,
+					  struct nrf_cloud_data *const response_out);
+
+/** @brief Encode the info sections that are enabled to be sent to the device's shadow on
+ * initial connection. The sections are enabled based on the configuration options that
+ * set the Kconfig @kconfig{CONFIG_NRF_CLOUD_SEND_SHADOW_INFO} symbol.
+ *
+ * @retval 0		Success.
+ * @retval -ENODEV	No info sections are enabled, no data encoded.
+ * @return Any other negative value indicates an error.
+ */
+int nrf_cloud_enabled_info_sections_json_encode(cJSON * const obj, const char * const app_ver);
 
 /** @brief Encode the device status data into a JSON formatted buffer to be saved to
  * the device shadow.
@@ -239,7 +285,7 @@ int nrf_cloud_obj_location_request_payload_add(struct nrf_cloud_obj *const obj,
  *
  * @retval 0 Success.
  * @retval -ENODATA Access point (non-local) count less than NRF_CLOUD_LOCATION_WIFI_AP_CNT_MIN.
- * @return -ENOMEM Out of memory.
+ * @retval -ENOMEM Out of memory.
  */
 int nrf_cloud_wifi_req_json_encode(struct wifi_scan_info const *const wifi,
 				   cJSON *const req_obj_out);
@@ -277,6 +323,10 @@ int get_string_from_obj(const cJSON * const obj, const char * const key,
 /** @brief Get the number value of the specified key in the cJSON object. */
 int get_num_from_obj(const cJSON *const obj, const char *const key,
 		     double *num_out);
+
+/** @brief Get the boolean value of the specified key in the cJSON object. */
+int get_bool_from_obj(const cJSON * const obj, const char * const key,
+		     bool *bool_out);
 
 /** @brief Send the cJSON object to nRF Cloud on the d2c topic */
 int json_send_to_cloud(cJSON * const request);
@@ -348,6 +398,14 @@ int nrf_cloud_pgps_req_data_json_encode(const struct gps_pgps_request *const req
  */
 int nrf_cloud_json_to_url_params_convert(char *const buf, const size_t buf_size,
 					 const cJSON * const obj);
+
+/** @brief Generate URL for ground-fix request.
+ *  Return size of required buffer if buf = NULL, otherwise generate and store
+ *  URL into buf based on config, and return 0 on no error or negative error code.
+ *  The base parameter must not be NULL. The config parameter may be NULL.
+ */
+int nrf_cloud_ground_fix_url_encode(char *buf, size_t size, const char *base,
+				    const struct nrf_cloud_location_config *config);
 
 #ifdef CONFIG_NRF_CLOUD_GATEWAY
 typedef int (*gateway_state_handler_t)(void *root_obj);

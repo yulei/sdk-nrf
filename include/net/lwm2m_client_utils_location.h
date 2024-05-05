@@ -32,14 +32,16 @@
 #define LOCATION_ASSIST_RESULT_CODE_OK			0
 #define LOCATION_ASSIST_RESULT_CODE_PERMANENT_ERR	-1
 #define LOCATION_ASSIST_RESULT_CODE_TEMP_ERR		1
+#define LOCATION_ASSIST_RESULT_CODE_NO_RESP_ERR		2
 
 /**
  * @typedef location_assistance_result_code_cb_t
  * @brief Callback for location assistance result.
  *
- * This callback is called whenever there is a new result in the location assistance and the
- * location assistance resend handler has been initialized.
+ * This callback is called whenever there is a new result in the location assistance from Ground
+ * or GNSS location object.
  *
+ * @param object_id   Object identifier GROUND_FIX_OBJECT_ID or GNSS_ASSIST_OBJECT_ID
  * @param result_code Contains following possible result codes:
  *                    LOCATION_ASSIST_RESULT_CODE_OK when there are no problems
  *                    LOCATION_ASSIST_RESULT_CODE_PERMANENT_ERR when there is a permanent error
@@ -47,13 +49,15 @@
  *                    longer send any requests. Device needs reboot for assistance library to
  *                    resume operation.
  *                    LOCATION_ASSIST_RESULT_CODE_TEMP_ERR when there is a temporary error between
- *                    LwM2M-server and the nRF Cloud. The library automatically uses exponential
+ *                    LwM2M Server and the nRF Cloud. The library automatically uses exponential
  *                    backoff for the retries.
+ *                    LOCATION_ASSIST_RESULT_CODE_NO_RESP_ERR when no response has been received
+ *                    from the server in LOCATION_ASSISTANT_RESULT_TIMEOUT seconds.
  */
-typedef void (*location_assistance_result_code_cb_t)(int32_t result_code);
+typedef void (*location_assistance_result_code_cb_t)(uint16_t object_id, int32_t result_code);
 
 /**
- * @brief Set the location assistance result code calback
+ * @brief Set the location assistance result code callback
  *
  * @param cb callback function to call when there is a new result from location assistance.
  */
@@ -69,7 +73,7 @@ void location_assistance_set_result_code_cb(location_assistance_result_code_cb_t
 int location_assistance_agnss_set_mask(const struct nrf_modem_gnss_agnss_data_frame *agnss_req);
 
 /**
- * @brief Send the A-GNSS assistance request to LwM2M server
+ * @brief Send the A-GNSS assistance request to LwM2M Server
  *
  * @param ctx LwM2M client context for sending the data.
  * @return Returns a negative error code (errno.h) indicating
@@ -78,7 +82,7 @@ int location_assistance_agnss_set_mask(const struct nrf_modem_gnss_agnss_data_fr
 int location_assistance_agnss_request_send(struct lwm2m_ctx *ctx);
 
 /**
- * @brief Send the Ground Fix request to LwM2M server
+ * @brief Send the Ground Fix request to LwM2M Server
  *
  * @param ctx LwM2M client context for sending the data.
  * @return Returns a negative error code (errno.h) indicating
@@ -87,7 +91,7 @@ int location_assistance_agnss_request_send(struct lwm2m_ctx *ctx);
 int location_assistance_ground_fix_request_send(struct lwm2m_ctx *ctx);
 
 /**
- * @brief Send the P-GPS assistance request to LwM2M server
+ * @brief Send the P-GPS assistance request to LwM2M Server
  *
  * @param ctx LwM2M client context for sending the data.
  * @return Returns a negative error code (errno.h) indicating
@@ -100,10 +104,9 @@ int location_assistance_pgps_request_send(struct lwm2m_ctx *ctx);
  *        Handler will handle the result code from server and schedule resending in
  *        case of temporary error in server using an exponential backoff.
  *
- * @return Returns a negative error code (errno.h) indicating
- *         reason of failure or 0 for success.
+ * @param enable_resend Set to true to allow retrying.
  */
-int location_assistance_init_resend_handler(void);
+void location_assistance_retry_init(bool enable_resend);
 
 /**
  * @brief Initialize the location assistance event handler
@@ -183,7 +186,7 @@ int location_assist_pgps_set_start_time(int32_t start_time);
 /**
  * @brief Get the result code of the location request.
  *
- * @return int32_t Returns a result code from the LwM2M server.
+ * @return int32_t Returns a result code from the LwM2M Server.
  */
 int32_t location_assist_gnss_get_result_code(void);
 
@@ -199,7 +202,7 @@ void ground_fix_set_report_back(bool report_back);
 /**
  * @brief Get the result code of the location request.
  *
- * @return int32_t Returns a result code from the LwM2M server.
+ * @return int32_t Returns a result code from the LwM2M Server.
  */
 int32_t ground_fix_get_result_code(void);
 

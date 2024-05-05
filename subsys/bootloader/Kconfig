@@ -197,8 +197,8 @@ config PM_PARTITION_SIZE_B0_IMAGE
 
 menuconfig IS_SECURE_BOOTLOADER
 	bool "Current app is bootloader"
-	depends on SECURE_BOOT_VALIDATION
-	depends on SECURE_BOOT_STORAGE
+	select SECURE_BOOT_VALIDATION
+	select SECURE_BOOT_STORAGE
 	select SW_VECTOR_RELAY if SOC_SERIES_NRF51X
 	select NRFX_NVMC
 	help
@@ -237,6 +237,13 @@ config SB_BPROT_IN_DEBUG
 
 endif # SECURE_BOOT_DEBUG
 endif # IS_SECURE_BOOTLOADER
+
+config IS_BOOTLOADER_IMG
+	bool
+	default y if IS_SECURE_BOOTLOADER || MCUBOOT
+	help
+	  Helper symbol which is set when the current image is a bootloader. This includes mcuboot
+	  and the secure bootloader.
 
 config NRF53_UPGRADE_NETWORK_CORE
 	bool "Support updating nRF53 Network Core application"

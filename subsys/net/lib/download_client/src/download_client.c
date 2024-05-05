@@ -8,12 +8,13 @@
 #include <string.h>
 #include <zephyr/kernel.h>
 #include <zephyr/types.h>
-#include <zephyr/toolchain/common.h>
+#include <zephyr/toolchain.h>
 #if defined(CONFIG_POSIX_API)
 #include <zephyr/posix/unistd.h>
 #include <zephyr/posix/netdb.h>
 #include <zephyr/posix/sys/time.h>
 #include <zephyr/posix/sys/socket.h>
+#include <arpa/inet.h>
 #else
 #include <zephyr/net/socket.h>
 #endif
@@ -21,6 +22,7 @@
 #include <zephyr/net/tls_credentials.h>
 #include <net/download_client.h>
 #include <zephyr/logging/log.h>
+#include "download_client_internal.h"
 
 LOG_MODULE_REGISTER(download_client, CONFIG_DOWNLOAD_CLIENT_LOG_LEVEL);
 
@@ -28,19 +30,6 @@ LOG_MODULE_REGISTER(download_client, CONFIG_DOWNLOAD_CLIENT_LOG_LEVEL);
 #define SIN(A) ((struct sockaddr_in *)(A))
 
 #define HOSTNAME_SIZE CONFIG_DOWNLOAD_CLIENT_MAX_HOSTNAME_SIZE
-
-int url_parse_port(const char *url, uint16_t *port);
-int url_parse_proto(const char *url, int *proto, int *type);
-int url_parse_host(const char *url, char *host, size_t len);
-
-int http_parse(struct download_client *client, size_t len);
-int http_get_request_send(struct download_client *client);
-
-int coap_block_init(struct download_client *client, size_t from);
-int coap_get_recv_timeout(struct download_client *dl);
-int coap_initiate_retransmission(struct download_client *dl);
-int coap_parse(struct download_client *client, size_t len);
-int coap_request_send(struct download_client *client);
 
 static int handle_disconnect(struct download_client *client);
 static int error_evt_send(const struct download_client *dl, int error);
@@ -90,7 +79,7 @@ static bool is_finished(struct download_client *client)
 	bool ret;
 
 	k_mutex_lock(&client->mutex, K_FOREVER);
-	ret = client->state == DOWNLOAD_CLIENT_FINNISHED;
+	ret = client->state == DOWNLOAD_CLIENT_FINISHED;
 	k_mutex_unlock(&client->mutex);
 	return ret;
 }
@@ -263,7 +252,7 @@ static int host_lookup(const char *host, int family, uint8_t pdn_id,
 	}
 
 	if (err) {
-		LOG_WRN("Failed to resolve hostname %s on %s",
+		LOG_DBG("Failed to resolve hostname %s on %s",
 			hostname, str_family(family));
 		return -EHOSTUNREACH;
 	}
@@ -274,26 +263,118 @@ static int host_lookup(const char *host, int family, uint8_t pdn_id,
 	return 0;
 }
 
-static int client_connect(struct download_client *dl)
+static int client_socket_connect(struct download_client *dl, int type, uint16_t port)
 {
 	int err;
-	int type;
-	uint16_t port;
 	socklen_t addrlen;
 
-	/* Attempt IPv6 connection if configured, fallback to IPv4 */
-	if (IS_ENABLED(CONFIG_DOWNLOAD_CLIENT_IPV6)) {
-		err = host_lookup(dl->host, AF_INET6, dl->config.pdn_id, &dl->remote_addr);
-	}
-	if (err || !IS_ENABLED(CONFIG_DOWNLOAD_CLIENT_IPV6)) {
-		err = host_lookup(dl->host, AF_INET, dl->config.pdn_id, &dl->remote_addr);
-	}
-	if (err) {
+	switch (dl->remote_addr.sa_family) {
+	case AF_INET6:
+		SIN6(&dl->remote_addr)->sin6_port = htons(port);
+		addrlen = sizeof(struct sockaddr_in6);
+		break;
+	case AF_INET:
+		SIN(&dl->remote_addr)->sin_port = htons(port);
+		addrlen = sizeof(struct sockaddr_in);
+		break;
+	default:
+		err = -EAFNOSUPPORT;
 		goto cleanup;
 	}
 
-	err = url_parse_proto(dl->host, &dl->proto, &type);
+	LOG_DBG("family: %d, type: %d, proto: %d",
+		dl->remote_addr.sa_family, type, dl->proto);
+
+	dl->fd = socket(dl->remote_addr.sa_family, type, dl->proto);
+	if (dl->fd < 0) {
+		err = -errno;
+		LOG_ERR("Failed to create socket, errno %d", -err);
+		goto cleanup;
+	}
+
+	if (dl->config.pdn_id) {
+		err = socket_pdn_id_set(dl->fd, dl->config.pdn_id);
+		if (err) {
+			goto cleanup;
+		}
+	}
+
+	if ((dl->proto == IPPROTO_TLS_1_2 || dl->proto == IPPROTO_DTLS_1_2) &&
+	    (dl->config.sec_tag_list != NULL) && (dl->config.sec_tag_count > 0)) {
+		err = socket_sectag_set(dl->fd, dl->config.sec_tag_list, dl->config.sec_tag_count);
+		if (err) {
+			goto cleanup;
+		}
+
+		if (dl->config.set_tls_hostname) {
+			err = socket_tls_hostname_set(dl->fd, dl->host);
+			if (err) {
+				err = -errno;
+				goto cleanup;
+			}
+		}
+
+		if (dl->proto == IPPROTO_DTLS_1_2 && IS_ENABLED(CONFIG_DOWNLOAD_CLIENT_CID)) {
+			/* Enable connection ID */
+			uint32_t dtls_cid = TLS_DTLS_CID_ENABLED;
+
+			err = setsockopt(dl->fd, SOL_TLS, TLS_DTLS_CID, &dtls_cid,
+					 sizeof(dtls_cid));
+			if (err) {
+				err = -errno;
+				LOG_ERR("Failed to enable TLS_DTLS_CID: %d", err);
+				/* Not fatal, so continue */
+			}
+		}
+	}
+
+	if (IS_ENABLED(CONFIG_LOG)) {
+		char ip_addr_str[NET_IPV6_ADDR_LEN];
+		void *sin_addr;
+
+		if (dl->remote_addr.sa_family == AF_INET6) {
+			sin_addr = &((struct sockaddr_in6 *)&dl->remote_addr)->sin6_addr;
+		} else {
+			sin_addr = &((struct sockaddr_in *)&dl->remote_addr)->sin_addr;
+		}
+		inet_ntop(dl->remote_addr.sa_family, sin_addr, ip_addr_str, sizeof(ip_addr_str));
+		LOG_INF("Connecting to %s", ip_addr_str);
+	}
+	LOG_DBG("fd %d, addrlen %d, fam %s, port %d",
+		dl->fd, addrlen, str_family(dl->remote_addr.sa_family), port);
+
+	err = connect(dl->fd, &dl->remote_addr, addrlen);
 	if (err) {
+		err = -errno;
+		LOG_ERR("Unable to connect, errno %d", -err);
+		/* Make sure that ECONNRESET is not returned as it has a special meaning
+		 * in the download client API
+		 */
+		if (err == -ECONNRESET) {
+			err = -ECONNREFUSED;
+		}
+	}
+
+cleanup:
+	if (err) {
+		if (dl->fd != -1) {
+			close(dl->fd);
+			dl->fd = -1;
+		}
+	}
+
+	return err;
+}
+
+static int client_connect(struct download_client *dl)
+{
+	int err;
+	int ns_err;
+	int type;
+	uint16_t port;
+
+	err = url_parse_proto(dl->host, &dl->proto, &type);
+	if (err == -EINVAL) {
 		LOG_DBG("Protocol not specified, defaulting to HTTP(S)");
 		type = SOCK_STREAM;
 		if (dl->config.sec_tag_list && (dl->config.sec_tag_count > 0)) {
@@ -301,6 +382,8 @@ static int client_connect(struct download_client *dl)
 		} else {
 			dl->proto = IPPROTO_TCP;
 		}
+	} else if (err) {
+		goto cleanup;
 	}
 
 	if (dl->proto == IPPROTO_UDP || dl->proto == IPPROTO_DTLS_1_2) {
@@ -344,79 +427,31 @@ static int client_connect(struct download_client *dl)
 		LOG_DBG("Port not specified, using default: %d", port);
 	}
 
-	switch (dl->remote_addr.sa_family) {
-	case AF_INET6:
-		SIN6(&dl->remote_addr)->sin6_port = htons(port);
-		addrlen = sizeof(struct sockaddr_in6);
-		break;
-	case AF_INET:
-		SIN(&dl->remote_addr)->sin_port = htons(port);
-		addrlen = sizeof(struct sockaddr_in);
-		break;
-	default:
-		err = -EAFNOSUPPORT;
-		goto cleanup;
-	}
-
 	if (dl->set_native_tls) {
 		LOG_DBG("Enabled native TLS");
 		type |= SOCK_NATIVE_TLS;
 	}
 
-	LOG_DBG("family: %d, type: %d, proto: %d",
-		dl->remote_addr.sa_family, type, dl->proto);
+	err = -1;
+	ns_err = -1;
 
-	dl->fd = socket(dl->remote_addr.sa_family, type, dl->proto);
-	if (dl->fd < 0) {
-		LOG_ERR("Failed to create socket, err %d", errno);
-		err = -errno;
-		goto cleanup;
-	}
-
-	if (dl->config.pdn_id) {
-		err = socket_pdn_id_set(dl->fd, dl->config.pdn_id);
-		if (err) {
-			goto cleanup;
+	/* Attempt IPv6 connection if configured, fallback to IPv4 on error */
+	if ((dl->config.family == AF_UNSPEC) || (dl->config.family == AF_INET6)) {
+		ns_err = host_lookup(dl->host, AF_INET6, dl->config.pdn_id, &dl->remote_addr);
+		if (!ns_err) {
+			err = client_socket_connect(dl, type, port);
 		}
 	}
 
-	if ((dl->proto == IPPROTO_TLS_1_2 || dl->proto == IPPROTO_DTLS_1_2)
-	     && (dl->config.sec_tag_list != NULL) && (dl->config.sec_tag_count > 0)) {
-		err = socket_sectag_set(dl->fd, dl->config.sec_tag_list, dl->config.sec_tag_count);
-		if (err) {
-			goto cleanup;
-		}
-
-		if (dl->config.set_tls_hostname) {
-			err = socket_tls_hostname_set(dl->fd, dl->host);
-			if (err) {
-				err = -errno;
-				goto cleanup;
-			}
-		}
-
-		if (dl->proto == IPPROTO_DTLS_1_2 && IS_ENABLED(CONFIG_DOWNLOAD_CLIENT_CID)) {
-			/* Enable connection ID */
-			uint32_t dtls_cid = TLS_DTLS_CID_ENABLED;
-
-			err = setsockopt(dl->fd, SOL_TLS, TLS_DTLS_CID, &dtls_cid,
-					 sizeof(dtls_cid));
-			if (err) {
-				err = -errno;
-				LOG_ERR("Failed to enable TLS_DTLS_CID: %d", err);
-				/* Not fatal, so continue */
-			}
+	if (((dl->config.family == AF_UNSPEC) && err) || (dl->config.family == AF_INET)) {
+		ns_err = host_lookup(dl->host, AF_INET, dl->config.pdn_id, &dl->remote_addr);
+		if (!ns_err) {
+			err = client_socket_connect(dl, type, port);
 		}
 	}
-
-	LOG_INF("Connecting to %s", dl->host);
-	LOG_DBG("fd %d, addrlen %d, fam %s, port %d",
-		dl->fd, addrlen, str_family(dl->remote_addr.sa_family), port);
-
-	err = connect(dl->fd, &dl->remote_addr, addrlen);
-	if (err) {
-		LOG_ERR("Unable to connect, errno %d", errno);
-		err = -errno;
+	if (ns_err) {
+		LOG_ERR("DNS lookup failed %s", dl->host);
+		err = ns_err;
 	}
 
 cleanup:
@@ -658,11 +693,9 @@ static int handle_received(struct download_client *dl, ssize_t len)
 	if (dl->proto == IPPROTO_TCP || dl->proto == IPPROTO_TLS_1_2) {
 		rc = http_parse(dl, len);
 		if (rc > 0 &&
-		    (IS_ENABLED(CONFIG_DOWNLOAD_CLIENT_RANGE_REQUESTS) || !dl->http.has_header)) {
-			/* Wait for more data (fragment/header).
-			 * Unranged request (normal GET) should start forwarding the data
-			 * once HTTP headers are received. Ranged-GET should receive full
-			 * buffer(fragment) before sending an event.
+		    (!dl->http.has_header || dl->offset < sizeof(dl->buf))) {
+			/* Wait for more data (full buffer).
+			 * Forward only full buffers to callback.
 			 */
 			return 1;
 		}
@@ -738,8 +771,8 @@ static int handle_disconnect(struct download_client *client)
 	if (client->fd != -1) {
 		err = close(client->fd);
 		if (err) {
-			LOG_ERR("Failed to close socket, errno %d", errno);
 			err = -errno;
+			LOG_ERR("Failed to close socket, errno %d", -err);
 		}
 	}
 
@@ -853,7 +886,7 @@ void download_thread(void *client, void *a, void *b)
 			if (dl->close_when_done) {
 				set_state(dl, DOWNLOAD_CLIENT_CLOSING);
 			} else {
-				set_state(dl, DOWNLOAD_CLIENT_FINNISHED);
+				set_state(dl, DOWNLOAD_CLIENT_FINISHED);
 			}
 		}
 
@@ -1016,6 +1049,19 @@ int download_client_file_size_get(struct download_client *client, size_t *size)
 
 	k_mutex_lock(&client->mutex, K_FOREVER);
 	*size = client->file_size;
+	k_mutex_unlock(&client->mutex);
+
+	return 0;
+}
+
+int download_client_downloaded_size_get(struct download_client *client, size_t *size)
+{
+	if (!client || !size) {
+		return -EINVAL;
+	}
+
+	k_mutex_lock(&client->mutex, K_FOREVER);
+	*size = client->progress;
 	k_mutex_unlock(&client->mutex);
 
 	return 0;

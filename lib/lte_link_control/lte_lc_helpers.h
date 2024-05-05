@@ -182,8 +182,8 @@ int parse_rrc_mode(const char *at_response,
 
 /* @brief Parses an AT command response and returns the current eDRX configuration.
  *
- * @note It's assumed that the network only reports valid eDRX values when
- *	 in each mode (LTE-M and NB1). There's no sanity-check of these values.
+ * @note It is assumed that the network only reports valid eDRX values when
+ *	 in each mode (LTE-M and NB1). There is no sanity check of these values.
  *
  * @param at_response Pointer to buffer with AT response.
  * @param cfg Pointer to where the eDRX configuration is stored.
@@ -196,7 +196,7 @@ int parse_edrx(const char *at_response, struct lte_lc_edrx_cfg *cfg);
  *
  * @param active_time_str Pointer to active time string.
  * @param tau_ext_str Pointer to TAU (T3412 extended) string.
- * @param tau_legacy_str Pointer to TAU (T3412) string. Can be NULL.
+ * @param tau_legacy_str Pointer to TAU (T3412) string.
  * @param psm_cfg Pointer to PSM configuraion struct where the parsed values
  *		  are stored.
  *
@@ -206,6 +206,17 @@ int parse_edrx(const char *at_response, struct lte_lc_edrx_cfg *cfg);
 int parse_psm(const char *active_time_str, const char *tau_ext_str,
 	      const char *tau_legacy_str, struct lte_lc_psm_cfg *psm_cfg);
 
+/* @brief Encode Periodic TAU timer and active time strings.
+ *
+ * @param[out] tau_ext_str TAU (T3412 extended) string. Must be at least 9 bytes.
+ * @param[out] active_time_str Active time string buffer. Must be at least 9 bytes.
+ * @param rptau[in] Requested Periodic TAU value to be encoded.
+ * @param rat[in] Requested active time value to be encoded.
+ *
+ * @retval 0 if PSM configuration was successfully parsed.
+ * @retval -EINVAL if parsing failed.
+ */
+int encode_psm(char *tau_ext_str, char *active_time_str, int rptau, int rat);
 
 /* @brief Parses an CEREG response and returns network registration status,
  *	  cell information, LTE mode and pSM configuration.
@@ -216,6 +227,7 @@ int parse_psm(const char *active_time_str, const char *tau_ext_str,
  *		     Can be NULL.
  * @param cell Pointer to cell information struct. Can be NULL.
  * @param lte_mode Pointer to LTE mode struct. Can be NULL.
+ * @param psm_cfg Pointer to PSM configuration struct. Can be NULL.
  *
  * @return Zero on success or (negative) error code otherwise.
  */
@@ -223,7 +235,8 @@ int parse_cereg(const char *at_response,
 		bool is_notif,
 		enum lte_lc_nw_reg_status *reg_status,
 		struct lte_lc_cell *cell,
-		enum lte_lc_lte_mode *lte_mode);
+		enum lte_lc_lte_mode *lte_mode,
+		struct lte_lc_psm_cfg *psm_cfg);
 
 /* @brief Parses an XT3412 response and extracts the time until next TAU.
  *
@@ -245,6 +258,13 @@ uint32_t neighborcell_count_get(const char *at_response);
 /* @brief Parses an NCELLMEAS notification and stores neighboring cell
  *	  information in a struct.
  *
+ * 18446744073709551614 is the maximum value for timing_advance_meas_time and
+ * measurement_time in @ref lte_lc_cells_info.
+ * This value could be represented with uint64_t but cannot be stored by at_parser,
+ * which internally uses int64_t value for all integers.
+ * Hence, the maximum value for these fields is represented by 63 bits and is
+ * 9223372036854775807, which still represents millions of years.
+ *
  * @param at_response Pointer to buffer with AT response.
  * @param ncell Pointer to ncell structure.
  *
@@ -257,6 +277,13 @@ int parse_ncellmeas(const char *at_response, struct lte_lc_cells_info *cells);
 
 /* @brief Parses a NCELLMEAS notification for GCI search types, and stores neighboring cell
  *	  and measured GCI cell information in a struct.
+ *
+ * 18446744073709551614 is the maximum value for timing_advance_meas_time and
+ * measurement_time in @ref lte_lc_cells_info.
+ * This value could be represented with uint64_t but cannot be stored by at_parser,
+ * which internally uses int64_t value for all integers.
+ * Hence, the maximum value for these fields is represented by 63 bits and is
+ * 9223372036854775807, which still represents millions of years.
  *
  * @param params Neighbor cell measurement parameters.
  * @param at_response Pointer to buffer with AT response.

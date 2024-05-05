@@ -10,13 +10,14 @@ config PSA_CRYPTO_DRIVER_OBERON
 	# The Oberon driver is required to provide HKDF needed for protected storage and bultin keys
 	prompt "Oberon PSA driver" if !(TFM_PARTITION_PROTECTED_STORAGE || TFM_CRYPTO_BUILTIN_KEYS)
 	bool
-	default y
+	default y if ! CRACEN_HW_PRESENT
 	help
 	  This configuration enables the usage of the Oberon PSA driver.
 
 config PSA_CRYPTO_DRIVER_CC3XX
 	prompt "CryptoCell PSA driver"
 	bool
+	depends on HAS_HW_NRF_CC3XX
 	help
 	  This configuration enables the usage of CryptoCell for the supported operations.
 	  Disabling this option will result in all crypto operations being handled by
@@ -24,6 +25,16 @@ config PSA_CRYPTO_DRIVER_CC3XX
 	  affect the DRBG algorithms; even when disabled, DRBG will still be provided by CryptoCell.
 	  The CryptoCell PSA driver does not support key size configurations. When enabled,
 	  all supported key sizes are included in the build.
+
+config PSA_CRYPTO_DRIVER_CRACEN
+	bool "Enable the Cracen PSA driver"
+	depends on MBEDTLS_PSA_CRYPTO_C
+	depends on CRACEN_HW_PRESENT
+	# CRACEN uses the k_event_ API
+	select EVENTS
+	default y
+	help
+	  PSA crypto driver for the CRACEN HW peripheral.
 
 menu "Choose DRBG algorithm"
 config PSA_WANT_ALG_CTR_DRBG
@@ -85,7 +96,7 @@ config PSA_USE_CC3XX_MAC_DRIVER
 	  Enable CryptoCell for the PSA mac APIs. Enabling this
 	  will provide support for HMAC and CMAC.
 
-config PSA_USE_CC3XX_ECDH_DRIVER
+config PSA_USE_CC3XX_KEY_AGREEMENT_DRIVER
 	prompt "Enable CryptoCell driver support for the PSA key agreement APIs"
 	bool
 	default y
@@ -93,7 +104,7 @@ config PSA_USE_CC3XX_ECDH_DRIVER
 	  Enable CryptoCell for the PSA key agreement APIs. Enabling this
 	  will provide support for key agreement with ECDH.
 
-config PSA_USE_CC3XX_SIGNATURE_DRIVER
+config PSA_USE_CC3XX_ASYMMETRIC_SIGNATURE_DRIVER
 	prompt "Enable CryptoCell driver support for the PSA asymmetric signature APIs"
 	bool
 	default y
@@ -102,7 +113,7 @@ config PSA_USE_CC3XX_SIGNATURE_DRIVER
 	  will provide support signing/verification with ECDSA in deterministic
 	  and randomized modes and RSA in PKCS1V15 and PSS modes.
 
-config PSA_USE_CC3XX_ASYMMETRIC_DRIVER
+config PSA_USE_CC3XX_ASYMMETRIC_ENCRYPTION_DRIVER
 	prompt "Enable CryptoCell driver support for the PSA asymmetric encryption APIs"
 	bool
 	default y
@@ -111,13 +122,13 @@ config PSA_USE_CC3XX_ASYMMETRIC_DRIVER
 	  will provide support for assymetric encryption with RSA
 	  in PKCS1V15 and OAEP modes.
 
-config PSA_USE_CC3XX_KEY_PAIR_DRIVER
+config PSA_USE_CC3XX_KEY_MANAGEMENT_DRIVER
 	prompt "Enable CryptoCell driver support for the PSA key management APIs"
 	bool
 	default y
-	depends on PSA_USE_CC3XX_ASYMMETRIC_DRIVER || \
-		   PSA_USE_CC3XX_SIGNATURE_DRIVER  || \
-		   PSA_USE_CC3XX_ECDH_DRIVER
+	depends on PSA_USE_CC3XX_ASYMMETRIC_ENCRYPTION_DRIVER || \
+		   PSA_USE_CC3XX_ASYMMETRIC_SIGNATURE_DRIVER  || \
+		   PSA_USE_CC3XX_KEY_AGREEMENT_DRIVER
 	help
 	  Enabling this will provide support for key generation, key importing and
 	  public exporting for asymmetric keys. ECC and RSA keys are supported.
@@ -128,14 +139,73 @@ config PSA_USE_CC3XX_CTR_DRBG_DRIVER
 	bool
 	default y
 	depends on PSA_USE_CTR_DRBG_DRIVER
-	depends on CRYPTOCELL_USABLE
+	depends on HAS_HW_NRF_CC3XX
+	depends on BUILD_WITH_TFM || NRF_CC3XX_PLATFORM
 
 config PSA_USE_CC3XX_HMAC_DRBG_DRIVER
 	bool
 	default y
 	depends on PSA_USE_HMAC_DRBG_DRIVER
-	depends on CRYPTOCELL_USABLE
+	depends on HAS_HW_NRF_CC3XX
+	depends on BUILD_WITH_TFM || NRF_CC3XX_PLATFORM
 
+endmenu
+
+menu "CRACEN PSA Driver Configuration"
+if PSA_CRYPTO_DRIVER_CRACEN
+
+config PSA_USE_CRACEN_CIPHER_DRIVER
+	bool "Cracen cipher driver"
+	default y
+
+config PSA_USE_CRACEN_AEAD_DRIVER
+	bool "Cracen AEAD driver"
+	default y
+
+config PSA_USE_CRACEN_HASH_DRIVER
+	bool "Cracen hash driver"
+	default y
+
+config PSA_USE_CRACEN_MAC_DRIVER
+	bool "Cracen MAC driver"
+	default y
+
+config PSA_USE_CRACEN_KEY_AGREEMENT_DRIVER
+	bool "Cracen key agreement driver"
+	default y
+
+config PSA_USE_CRACEN_ASYMMETRIC_DRIVER
+	bool "Cracen asymmetric encryption and signature driver"
+	default y
+
+config PSA_USE_CRACEN_KEY_MANAGEMENT_DRIVER
+	bool "Cracen key management driver"
+	default y
+	depends on PSA_USE_CRACEN_ASYMMETRIC_DRIVER || \
+		   PSA_USE_CRACEN_KEY_AGREEMENT_DRIVER
+
+
+if PSA_USE_CRACEN_KEY_MANAGEMENT_DRIVER
+
+config PSA_USE_CRACEN_KEY_DERIVATION_DRIVER
+	bool "Cracen key derivation driver"
+	default y
+
+config PSA_USE_CRACEN_PAKE_DRIVER
+	bool "Cracen PAKE driver"
+	default y
+
+config PSA_USE_CRACEN_ASYMMETRIC_SIGNATURE_DRIVER
+	bool "Cracen asymmetric signature driver"
+	default y
+
+endif # PSA_USE_CRACEN_KEY_MANAGEMENT_DRIVER
+
+config PSA_USE_CRACEN_CTR_DRBG_DRIVER
+	bool
+	default y
+
+endif
 endmenu
 
 menu "AES key size configuration"
@@ -159,7 +229,6 @@ menu "RSA key size configuration"
 config PSA_WANT_RSA_KEY_SIZE_1024
 	prompt "RSA 1024 bits key (weak)"
 	bool
-	default y
 	help
 	  RSA with 1024 bit keys are not recommended for new designs.
 	  Please see https://www.keylength.com/
@@ -204,10 +273,11 @@ config PSA_MAX_RSA_KEY_BITS
 
 endmenu
 
-
 rsource "Kconfig.psa_accel"
 
 rsource "nrf_cc3xx/Kconfig"
+
+rsource "cracen/Kconfig"
 
 rsource "nrf_oberon/Kconfig"
 

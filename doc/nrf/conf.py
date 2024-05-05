@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2023 Nordic Semiconductor
+# Copyright (c) 2024 Nordic Semiconductor
 #
 # SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
 #
@@ -26,9 +26,9 @@ MCUBOOT_BASE = utils.get_projdir("mcuboot")
 # General configuration --------------------------------------------------------
 
 project = "nRF Connect SDK"
-copyright = "2019-2023, Nordic Semiconductor"
+copyright = "2019-2024, Nordic Semiconductor"
 author = "Nordic Semiconductor"
-version = release = "2.4.99"
+version = release = "2.6.99"
 
 sys.path.insert(0, str(ZEPHYR_BASE / "doc" / "_extensions"))
 sys.path.insert(0, str(NRF_BASE / "doc" / "_extensions"))
@@ -48,6 +48,7 @@ extensions = [
     "zephyr.external_content",
     "zephyr.doxyrunner",
     "zephyr.link-roles",
+    "zephyr.domain",
     "sphinx_tabs.tabs",
     "software_maturity_table",
     "sphinx_togglebutton",

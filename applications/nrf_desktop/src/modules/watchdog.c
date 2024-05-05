@@ -23,13 +23,13 @@ struct wdt_data_storage {
 };
 
 static struct wdt_data_storage wdt_data = {
-	.wdt = DEVICE_DT_GET(DT_NODELABEL(wdt)),
+	.wdt = DEVICE_DT_GET(DT_ALIAS(watchdog0)),
 };
 
 static void watchdog_feed_worker(struct k_work *work_desc)
 {
 	struct wdt_data_storage *data =
-			CONTAINER_OF(work_desc, struct wdt_data_storage, work);
+			CONTAINER_OF(work_desc, struct wdt_data_storage, work.work);
 
 	int err = wdt_feed(data->wdt, data->wdt_channel_id);
 

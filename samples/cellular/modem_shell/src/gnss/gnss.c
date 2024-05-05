@@ -47,6 +47,7 @@
 #endif /* CONFIG_SUPL_CLIENT_LIB */
 
 #include "mosh_print.h"
+#include "str_utils.h"
 #include "gnss.h"
 
 #if (defined(CONFIG_NRF_CLOUD_AGNSS) || defined(CONFIG_NRF_CLOUD_PGPS)) && \
@@ -307,6 +308,9 @@ static void print_pvt_flags(struct nrf_modem_gnss_pvt_data_frame *pvt)
 	mosh_print(
 		"Velocity valid:     %s",
 		pvt->flags & NRF_MODEM_GNSS_PVT_FLAG_VELOCITY_VALID ? "true" : "false");
+	mosh_print(
+		"Scheduled download: %s",
+		pvt->flags & NRF_MODEM_GNSS_PVT_FLAG_SCHED_DOWNLOAD ? "true" : "false");
 }
 
 static void print_pvt(struct nrf_modem_gnss_pvt_data_frame *pvt)
@@ -332,19 +336,19 @@ static void print_pvt(struct nrf_modem_gnss_pvt_data_frame *pvt)
 
 		mosh_print("Latitude:          %f", pvt->latitude);
 		mosh_print("Longitude:         %f", pvt->longitude);
-		mosh_print("Accuracy:          %.1f m", pvt->accuracy);
-		mosh_print("Altitude:          %.1f m", pvt->altitude);
-		mosh_print("Altitude accuracy: %.1f m", pvt->altitude_accuracy);
-		mosh_print("Speed:             %.1f m/s", pvt->speed);
-		mosh_print("Speed accuracy:    %.1f m/s", pvt->speed_accuracy);
-		mosh_print("V. speed:          %.1f m/s", pvt->vertical_speed);
-		mosh_print("V. speed accuracy: %.1f m/s", pvt->vertical_speed_accuracy);
-		mosh_print("Heading:           %.1f deg", pvt->heading);
-		mosh_print("Heading accuracy:  %.1f deg", pvt->heading_accuracy);
-		mosh_print("PDOP:              %.1f", pvt->pdop);
-		mosh_print("HDOP:              %.1f", pvt->hdop);
-		mosh_print("VDOP:              %.1f", pvt->vdop);
-		mosh_print("TDOP:              %.1f", pvt->tdop);
+		mosh_print("Accuracy:          %.1f m", (double)pvt->accuracy);
+		mosh_print("Altitude:          %.1f m", (double)pvt->altitude);
+		mosh_print("Altitude accuracy: %.1f m", (double)pvt->altitude_accuracy);
+		mosh_print("Speed:             %.1f m/s", (double)pvt->speed);
+		mosh_print("Speed accuracy:    %.1f m/s", (double)pvt->speed_accuracy);
+		mosh_print("V. speed:          %.1f m/s", (double)pvt->vertical_speed);
+		mosh_print("V. speed accuracy: %.1f m/s", (double)pvt->vertical_speed_accuracy);
+		mosh_print("Heading:           %.1f deg", (double)pvt->heading);
+		mosh_print("Heading accuracy:  %.1f deg", (double)pvt->heading_accuracy);
+		mosh_print("PDOP:              %.1f", (double)pvt->pdop);
+		mosh_print("HDOP:              %.1f", (double)pvt->hdop);
+		mosh_print("VDOP:              %.1f", (double)pvt->vdop);
+		mosh_print("TDOP:              %.1f", (double)pvt->tdop);
 
 		mosh_print(
 			"Google maps URL:   https://maps.google.com/?q=%f,%f",
@@ -389,56 +393,6 @@ static void print_nmea(struct nrf_modem_gnss_nmea_data_frame *nmea)
 	mosh_print("%s", nmea->nmea_str);
 }
 
-static void get_agnss_data_flags_string(char *flags_string, uint32_t data_flags)
-{
-	size_t len;
-
-	*flags_string = '\0';
-
-	if (data_flags & NRF_MODEM_GNSS_AGNSS_GPS_UTC_REQUEST) {
-		(void)strcat(flags_string, "utc | ");
-	}
-	if (data_flags & NRF_MODEM_GNSS_AGNSS_KLOBUCHAR_REQUEST) {
-		(void)strcat(flags_string, "klob | ");
-	}
-	if (data_flags & NRF_MODEM_GNSS_AGNSS_NEQUICK_REQUEST) {
-		(void)strcat(flags_string, "neq | ");
-	}
-	if (data_flags & NRF_MODEM_GNSS_AGNSS_GPS_SYS_TIME_AND_SV_TOW_REQUEST) {
-		(void)strcat(flags_string, "time | ");
-	}
-	if (data_flags & NRF_MODEM_GNSS_AGNSS_POSITION_REQUEST) {
-		(void)strcat(flags_string, "pos | ");
-	}
-	if (data_flags & NRF_MODEM_GNSS_AGNSS_INTEGRITY_REQUEST) {
-		(void)strcat(flags_string, "int | ");
-	}
-
-	len = strlen(flags_string);
-	if (len == 0) {
-		(void)strcpy(flags_string, "none");
-	} else {
-		flags_string[len - 3] = '\0';
-	}
-}
-
-static const char *get_system_string(uint8_t system_id)
-{
-	switch (system_id) {
-	case NRF_MODEM_GNSS_SYSTEM_INVALID:
-		return "invalid";
-
-	case NRF_MODEM_GNSS_SYSTEM_GPS:
-		return "GPS";
-
-	case NRF_MODEM_GNSS_SYSTEM_QZSS:
-		return "QZSS";
-
-	default:
-		return "unknown";
-	}
-}
-
 static void data_handler_thread_fn(void)
 {
 	struct event_item event;
@@ -477,7 +431,7 @@ static void data_handler_thread_fn(void)
 			if (event_output_level > 0) {
 				char flags_string[48];
 
-				get_agnss_data_flags_string(
+				agnss_data_flags_str_get(
 					flags_string,
 					agnss_data_frame->data_flags);
 
@@ -486,7 +440,7 @@ static void data_handler_thread_fn(void)
 					mosh_print(
 						"GNSS: A-GNSS data needed: "
 						"%s ephe: 0x%llx, alm: 0x%llx",
-						get_system_string(
+						gnss_system_str_get(
 							agnss_data_frame->system[i].system_id),
 						agnss_data_frame->system[i].sv_mask_ephe,
 						agnss_data_frame->system[i].sv_mask_alm);
@@ -569,6 +523,29 @@ static int gnss_enable_all_nmeas(void)
 		NRF_MODEM_GNSS_NMEA_GSV_MASK |
 		NRF_MODEM_GNSS_NMEA_RMC_MASK);
 }
+
+#if defined(CONFIG_LWM2M_CLIENT_UTILS_LOCATION_ASSIST_AGNSS) || \
+	defined(CONFIG_LWM2M_CLIENT_UTILS_LOCATION_ASSIST_PGPS)
+static void assistance_result_cb(uint16_t object_id, int32_t result_code)
+{
+	if (object_id != GNSS_ASSIST_OBJECT_ID) {
+		return;
+	}
+
+	switch (result_code) {
+	case LOCATION_ASSIST_RESULT_CODE_OK:
+		break;
+
+	case LOCATION_ASSIST_RESULT_CODE_PERMANENT_ERR:
+	case LOCATION_ASSIST_RESULT_CODE_TEMP_ERR:
+	case LOCATION_ASSIST_RESULT_CODE_NO_RESP_ERR:
+	default:
+		mosh_error("GNSS: Getting assistance data using LwM2M failed, result: %d",
+			   result_code);
+		break;
+	}
+}
+#endif
 
 #if defined(CONFIG_NRF_CLOUD_AGNSS) && !defined(CONFIG_NRF_CLOUD_MQTT) && \
 	!defined(CONFIG_LWM2M_CLIENT_UTILS_LOCATION_ASSIST_AGNSS)
@@ -683,7 +660,7 @@ static void get_agnss_data(struct k_work *item)
 
 	get_filtered_agnss_request(&agnss_request);
 
-	get_agnss_data_flags_string(flags_string, agnss_request.data_flags);
+	agnss_data_flags_str_get(flags_string, agnss_request.data_flags);
 
 	mosh_print(
 		"GNSS: Getting A-GNSS data from %s...",
@@ -698,7 +675,7 @@ static void get_agnss_data(struct k_work *item)
 	mosh_print("GNSS: A-GNSS request: flags: %s", flags_string);
 	for (int i = 0; i < agnss_request.system_count; i++) {
 		mosh_print("GNSS: A-GNSS request: %s sv_mask_ephe: 0x%llx, sv_mask_alm: 0x%llx",
-			get_system_string(agnss_request.system[i].system_id),
+			gnss_system_str_get(agnss_request.system[i].system_id),
 			agnss_request.system[i].sv_mask_ephe,
 			agnss_request.system[i].sv_mask_alm);
 	}
@@ -708,6 +685,7 @@ static void get_agnss_data(struct k_work *item)
 		mosh_error("GNSS: LwM2M not connected, can't request A-GNSS data");
 		return;
 	}
+	location_assistance_set_result_code_cb(assistance_result_cb);
 	location_assistance_agnss_set_mask(&agnss_request);
 	err = location_assistance_agnss_request_send(cloud_lwm2m_client_ctx_get());
 	if (err) {
@@ -921,6 +899,7 @@ static void get_pgps_data_work_fn(struct k_work *work)
 #if defined(CONFIG_LWM2M_CLIENT_UTILS_LOCATION_ASSIST_PGPS)
 	mosh_print("GNSS: Getting P-GPS predictions from LwM2M...");
 
+	location_assistance_set_result_code_cb(assistance_result_cb);
 	err = location_assist_pgps_set_prediction_count(pgps_request.prediction_count);
 	err |= location_assist_pgps_set_prediction_interval(pgps_request.prediction_period_min);
 	location_assist_pgps_set_start_gps_day(pgps_request.gps_day);
@@ -1171,15 +1150,25 @@ int gnss_delete_data(enum gnss_data_delete data)
 		delete_mask = NRF_MODEM_GNSS_DELETE_EPHEMERIDES;
 		break;
 
+	case GNSS_DATA_DELETE_EKF:
+		delete_mask = NRF_MODEM_GNSS_DELETE_EKF;
+		break;
+
 	case GNSS_DATA_DELETE_ALL:
-		/* Delete everything else but TCXO frequency offset data */
+		/* Delete everything else but TCXO frequency offset data. Deleting EKF state is not
+		 * supported by older MFWs and returns an error. Because of this EKF state is
+		 * deleted separately and the return value is ignored.
+		 */
+		(void)nrf_modem_gnss_nv_data_delete(NRF_MODEM_GNSS_DELETE_EKF);
+
 		delete_mask = NRF_MODEM_GNSS_DELETE_EPHEMERIDES |
 			      NRF_MODEM_GNSS_DELETE_ALMANACS |
 			      NRF_MODEM_GNSS_DELETE_IONO_CORRECTION_DATA |
 			      NRF_MODEM_GNSS_DELETE_LAST_GOOD_FIX |
 			      NRF_MODEM_GNSS_DELETE_GPS_TOW |
 			      NRF_MODEM_GNSS_DELETE_GPS_WEEK |
-			      NRF_MODEM_GNSS_DELETE_UTC_DATA;
+			      NRF_MODEM_GNSS_DELETE_UTC_DATA |
+			      NRF_MODEM_GNSS_DELETE_GPS_TOW_PRECISION;
 		break;
 
 	case GNSS_DATA_DELETE_TCXO:
@@ -1192,6 +1181,19 @@ int gnss_delete_data(enum gnss_data_delete data)
 	}
 
 	err = nrf_modem_gnss_nv_data_delete(delete_mask);
+	if (err) {
+		mosh_error("GNSS: Failed to delete NV data, error: %d (%s)",
+			   err, gnss_err_to_str(err));
+	}
+
+	return err;
+}
+
+int gnss_delete_data_custom(uint32_t mask)
+{
+	int err;
+
+	err = nrf_modem_gnss_nv_data_delete(mask);
 	if (err) {
 		mosh_error("GNSS: Failed to delete NV data, error: %d (%s)",
 			   err, gnss_err_to_str(err));
@@ -1748,7 +1750,7 @@ int gnss_get_agnss_expiry(void)
 	mosh_print("Position:   %s", expiry_string);
 
 	for (int i = 0; i < agnss_expiry.sv_count; i++) {
-		system_string = get_system_string(agnss_expiry.sv[i].system_id);
+		system_string = gnss_system_str_get(agnss_expiry.sv[i].system_id);
 		get_expiry_string(expiry_string, sizeof(expiry_string),
 				  agnss_expiry.sv[i].ephe_expiry);
 		get_expiry_string(expiry_string2, sizeof(expiry_string2),

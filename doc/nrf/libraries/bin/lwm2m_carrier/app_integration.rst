@@ -104,7 +104,7 @@ Following are some of the general Kconfig options that you can configure:
   * The default value is ``IPV4V6``.
   * If :kconfig:option:`CONFIG_LWM2M_CARRIER_CUSTOM_APN` is not set, this configuration is ignored.
 
-* :kconfig:option:`CONFIG_LWM2M_CARRIER_GENERIC`, :kconfig:option:`CONFIG_LWM2M_CARRIER_VERIZON`, :kconfig:option:`CONFIG_LWM2M_CARRIER_ATT`, :kconfig:option:`CONFIG_LWM2M_CARRIER_LG_UPLUS`, :kconfig:option:`CONFIG_LWM2M_CARRIER_T_MOBILE`, :kconfig:option:`CONFIG_LWM2M_CARRIER_SOFTBANK`:
+* :kconfig:option:`CONFIG_LWM2M_CARRIER_GENERIC`, :kconfig:option:`CONFIG_LWM2M_CARRIER_VERIZON`, :kconfig:option:`CONFIG_LWM2M_CARRIER_BELL_CA`, :kconfig:option:`CONFIG_LWM2M_CARRIER_LG_UPLUS`, :kconfig:option:`CONFIG_LWM2M_CARRIER_T_MOBILE`, :kconfig:option:`CONFIG_LWM2M_CARRIER_SOFTBANK`:
 
   * These configurations allow you to choose the networks in which the carrier library will apply.
   * For example, if you are deploying a product in several networks but only need to enable the carrier library within Verizon, you must set :kconfig:option:`CONFIG_LWM2M_CARRIER_VERIZON` to ``y`` and all the others to ``n``.
@@ -118,10 +118,24 @@ Following are some of the general Kconfig options that you can configure:
 * :kconfig:option:`CONFIG_LWM2M_CARRIER_LG_UPLUS`, :kconfig:option:`CONFIG_LWM2M_CARRIER_LG_UPLUS_SERVICE_CODE`, :kconfig:option:`CONFIG_LWM2M_CARRIER_LG_UPLUS_DEVICE_SERIAL_NUMBER`:
 
   * The :kconfig:option:`CONFIG_LWM2M_CARRIER_LG_UPLUS_SERVICE_CODE` Kconfig option sets the LG U+ service code, which is needed to identify your device in the LG U+ device management.
-  * The :kconfig:option:`CONFIG_LWM2M_CARRIER_LG_UPLUS_DEVICE_SERIAL_NUMBER` configuration lets you choose between using the nRF9160 SoC 2DID Serial Number, or the device IMEI as a serial number when connecting to the LG U+ device management server.
+  * The :kconfig:option:`CONFIG_LWM2M_CARRIER_LG_UPLUS_DEVICE_SERIAL_NUMBER` configuration lets you choose between using the nRF91 Series SiP 2DID Serial Number, or the device IMEI as a serial number when connecting to the LG U+ device management server.
 
   .. note::
      Application DFU is needed to enable LG U+ functionality.
+
+* :kconfig:option:`CONFIG_LWM2M_CARRIER_FIRMWARE_DOWNLOAD_TIMEOUT`:
+
+  * This configuration specifies the time (in minutes) allowed for a single firmware image download.
+  * If the download is not completed by the time the specified number of minutes elapses, the download shall be aborted.
+  * This configuration is only supported for Push delivery method of firmware images.
+  * Leaving this configuration empty (``0``) disables the timer for unknown subscriber IDs, and set it to 30 minutes for the SoftBank subscriber ID.
+
+* :kconfig:option:`CONFIG_LWM2M_CARRIER_QUEUE_MODE`:
+
+  * This configuration specifies whether the LwM2M device is to inform the LwM2M Server that it may be disconnected for an extended period of time.
+
+
+.. _server_options_lwm2m:
 
 Server options
 ==============
@@ -151,13 +165,16 @@ The server settings can put the LwM2M carrier library either in the normal mode 
 
 * :kconfig:option:`CONFIG_LWM2M_CARRIER_SERVER_LIFETIME`:
 
-  * This configuration specifies the lifetime of the custom LwM2M server.
+  * This configuration specifies the lifetime of the custom LwM2M Server.
   * This configuration is ignored if :kconfig:option:`CONFIG_LWM2M_CARRIER_IS_BOOTSTRAP_SERVER` is set.
 
 * :kconfig:option:`CONFIG_LWM2M_SERVER_BINDING_CHOICE`:
 
-  * The binding can be either ``U`` (UDP) or ``N`` (Non-IP).
+  * The binding can be either ``U`` (UDP) or ``N`` (non-IP).
   * Leaving this configuration empty selects the default binding (UDP).
+  * If non-IP binding is configured, :kconfig:option:`CONFIG_LWM2M_CARRIER_CUSTOM_URI` is not used and must be left empty.
+
+.. _device_options_lwm2m:
 
 Device options
 ==============
@@ -398,7 +415,7 @@ Objects
 *******
 
 The objects enabled depend on the carrier network.
-When connecting to a generic LwM2M server, the following objects are enabled:
+When connecting to a generic LwM2M Server, the following objects are enabled:
 
 * Security
 * Server
@@ -425,11 +442,11 @@ The following values that reflect the state of the device must be kept up to dat
 * Battery Status - Defaults to ``5`` if not set (Not Installed).
 * Memory Total - Defaults to ``0`` if not set.
 * Error Code - Defaults to ``0`` if not set (No Error).
-* Device Type - Defaults to ``Smart Device`` if not set.
+* Device Type - Defaults to ``Module`` if not set.
 * Software Version - Defaults to ``LwM2M <libversion>``.
-  For example, ``LwM2M carrier 3.2.0`` for release 3.2.0.
+  For example, ``LwM2M carrier 3.4.0`` for release 3.4.0.
 * Hardware Version - Default value is read from the modem.
-  An example value is ``nRF9160 SICA B0A``.
+  An example value is ``nRF9161 LACA ADA``.
 * Location - Defaults to ``0`` if not set.
 
 The following values are read from the modem by default but can be overwritten:
@@ -442,3 +459,17 @@ The following values are read from the modem by default but can be overwritten:
 
 For example, the carrier device management platform can observe the battery level of your device.
 The application uses the :c:func:`lwm2m_carrier_battery_level_set` function to indicate the current battery level of the device to the carrier.
+
+DFU interface
+*************
+
+The LwM2M carrier library makes use of the :ref:`lib_dfu_target` library to manage the DFU process, providing a single interface to support different types of firmware upgrades.
+Currently, the following types of firmware upgrades are supported:
+
+* MCUboot-style upgrades (:c:macro:`LWM2M_OS_DFU_IMG_TYPE_APPLICATION`)
+* Modem delta upgrades (:c:macro:`LWM2M_OS_DFU_IMG_TYPE_MODEM_DELTA`)
+
+The type of upgrade is determined when the library calls the :c:func:`lwm2m_os_dfu_img_type` function in the abstraction layer upon receiving a new firmware image.
+
+If MCUboot-style upgrades are enabled, the LwM2M carrier library uses the function :c:func:`lwm2m_os_dfu_application_update_validate` to validate the application image update.
+A ``__weak`` implementation of the function is included, which checks if the currently running image is not yet confirmed as valid (which is the case after an upgrade) and marks it appropriately.

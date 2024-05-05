@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020 Nordic Semiconductor ASA
+ * Copyright (c) 2020-2023 Nordic Semiconductor ASA
  *
  * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
@@ -8,6 +8,7 @@
 #define BT_MESH_TIME_UTIL
 
 #include <zephyr/types.h>
+#include <zephyr/sys_clock.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -19,7 +20,6 @@ extern "C" {
 
 #define DAYS_YEAR 365ULL
 #define DAYS_LEAP_YEAR 366ULL
-#define SEC_PER_MIN (60ULL)
 #define SEC_PER_HOUR (60ULL * SEC_PER_MIN)
 #define SEC_PER_DAY (24ULL * SEC_PER_HOUR)
 
@@ -43,5 +43,3 @@ int ts_to_tai(struct bt_mesh_time_tai *tai, const struct tm *timeptr);
 #endif
 
 #endif /* BT_MESH_TIME_UTIL */
-
-/** @} */

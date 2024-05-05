@@ -20,11 +20,14 @@
 #include <zephyr/net/socket.h>
 #endif
 #include <modem/lte_lc.h>
-#include <zephyr/random/rand32.h>
+#include <zephyr/random/random.h>
+#if defined(CONFIG_NRF_MODEM_LIB)
 #include <nrf_socket.h>
 #include <nrf_modem_at.h>
+#endif
 #include <date_time.h>
 #include <net/nrf_cloud.h>
+#include <net/nrf_cloud_codec.h>
 #include <net/nrf_cloud_coap.h>
 #include <cJSON.h>
 #include <version.h>
@@ -32,6 +35,8 @@
 #include "nrfc_dtls.h"
 #include "coap_codec.h"
 #include "nrf_cloud_coap_transport.h"
+#include "nrf_cloud_mem.h"
+#include "nrf_cloud_credentials.h"
 
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(nrf_cloud_coap_transport, CONFIG_NRF_CLOUD_COAP_LOG_LEVEL);
@@ -99,9 +104,6 @@ static const char *fmt_name(enum coap_content_format fmt)
 
 bool nrf_cloud_coap_is_connected(void)
 {
-	if (!authenticated) {
-		LOG_DBG("Not connected and authenticated");
-	}
 	return authenticated;
 }
 
@@ -146,6 +148,16 @@ static int server_resolve(struct sockaddr_in *server4)
 	return 0;
 }
 
+static int add_creds(void)
+{
+	int err = 0;
+
+#if defined(CONFIG_NRF_CLOUD_PROVISION_CERTIFICATES)
+	err = nrf_cloud_credentials_provision();
+#endif
+	return err;
+}
+
 /**@brief Initialize the CoAP client */
 int nrf_cloud_coap_init(void)
 {
@@ -155,8 +167,14 @@ int nrf_cloud_coap_init(void)
 	authenticated = false;
 
 	if (!initialized) {
+		err = add_creds();
+		if (err) {
+			return err;
+		}
+
 		/* Only initialize one time; not idempotent. */
 		LOG_DBG("Initializing async CoAP client");
+		coap_client.fd = sock;
 		err = coap_client_init(&coap_client, NULL);
 		if (err) {
 			LOG_ERR("Failed to initialize CoAP client: %d", err);
@@ -175,36 +193,92 @@ int nrf_cloud_coap_init(void)
 	return 0;
 }
 
-static int update_device_status(const char * const app_ver)
+static int update_configured_info_sections(const char * const app_ver)
 {
+	static bool updated;
+
+	if (updated) {
+		return -EALREADY;
+	}
+
+	/* Create a JSON object to contain shadow info sections */
+	NRF_CLOUD_OBJ_JSON_DEFINE(info_obj);
+	int err = nrf_cloud_obj_init(&info_obj);
+
+	if (err) {
+		LOG_ERR("Failed to initialize object: %d", err);
+		return err;
+	}
+
+	/* Encode the enabled info sections */
+	err = nrf_cloud_enabled_info_sections_json_encode(info_obj.json, app_ver);
+	if (err) {
+		(void)nrf_cloud_obj_free(&info_obj);
+		if (err == -ENODEV) {
+			/* No info sections are enabled */
+			err = 0;
+		} else {
+			LOG_ERR("Error encoding info sections: %d", err);
+		}
+		return err;
+	}
+
+	/* Encode the object for the cloud */
+	err = nrf_cloud_obj_cloud_encode(&info_obj);
+	/* Free the JSON object; the encoded data remains */
+	(void)nrf_cloud_obj_free(&info_obj);
+
+	if (err) {
+		LOG_ERR("Error encoding data for the cloud: %d", err);
+		return err;
+	}
+
+	/* Send the shadow update */
+	err = nrf_cloud_coap_shadow_state_update((const char *)info_obj.encoded_data.ptr);
+	/* Free the encoded data */
+	nrf_cloud_obj_cloud_encoded_free(&info_obj);
+
+	if (err) {
+		LOG_ERR("Failed to update info sections in shadow, error: %d", err);
+		return -EIO;
+	}
+
+	updated = true;
+	return 0;
+}
+
+static void update_control_section(void)
+{
+	static bool updated;
+
+	if (updated) {
+		return;
+	}
+
+	struct nrf_cloud_ctrl_data device_ctrl = {0};
+	struct nrf_cloud_data data_out = {0};
 	int err;
 
-#if defined(CONFIG_NRF_CLOUD_SEND_DEVICE_STATUS)
-	struct nrf_cloud_modem_info mdm_inf = {
-		.device = NRF_CLOUD_INFO_SET,
-		.application_version = app_ver,
-		.mpi = NULL
-	};
-	struct nrf_cloud_device_status dev_status = {
-		.modem = &mdm_inf,
-		.svc = NULL
-	};
+	/* Get the device control settings, encode it, and send to shadow */
+	nrf_cloud_device_control_get(&device_ctrl);
 
-	mdm_inf.network = IS_ENABLED(CONFIG_NRF_CLOUD_SEND_DEVICE_STATUS_NETWORK) ?
-					NRF_CLOUD_INFO_SET : NRF_CLOUD_INFO_CLEAR;
+	err = nrf_cloud_shadow_control_response_encode(&device_ctrl, true, &data_out);
+	if (err) {
+		LOG_ERR("Failed to encode control section, error: %d", err);
+		return;
+	}
 
-	mdm_inf.sim = IS_ENABLED(CONFIG_NRF_CLOUD_SEND_DEVICE_STATUS_SIM) ?
-					NRF_CLOUD_INFO_SET : NRF_CLOUD_INFO_CLEAR;
+	/* If there is a difference with the desired settings in the shadow a delta
+	 * event will be sent to the device
+	 */
+	err = nrf_cloud_coap_shadow_state_update(data_out.ptr);
+	if (err) {
+		LOG_ERR("Failed to update control section in device shadow, error: %d", err);
+	} else {
+		updated = true;
+	}
 
-	dev_status.conn_inf = IS_ENABLED(CONFIG_NRF_CLOUD_SEND_DEVICE_STATUS_CONN_INF) ?
-					NRF_CLOUD_INFO_SET : NRF_CLOUD_INFO_CLEAR;
-
-	err = nrf_cloud_coap_shadow_device_status_update(&dev_status);
-#else
-	ARG_UNUSED(app_ver);
-	err = 0;
-#endif
-	return err;
+	nrf_cloud_free((void *)data_out.ptr);
 }
 
 int nrf_cloud_coap_connect(const char * const app_ver)
@@ -243,11 +317,18 @@ int nrf_cloud_coap_connect(const char * const app_ver)
 	}
 
 	err = nrf_cloud_coap_authenticate();
-	if (err < 0) {
+	if (err) {
 		goto fail;
 	}
 
-	return update_device_status(app_ver);
+	/* On initial connect, set the control section in the shadow */
+	update_control_section();
+
+	/* On initial connect, update the configured info sections in the shadow */
+	err = update_configured_info_sections(app_ver);
+	if (err != -EIO) {
+		return 0;
+	}
 
 fail:
 	(void)nrf_cloud_coap_disconnect();
@@ -296,14 +377,14 @@ static int nrf_cloud_coap_authenticate(void)
 #endif
 
 	LOG_DBG("Generate JWT");
-	jwt = k_malloc(JWT_BUF_SZ);
+	jwt = nrf_cloud_malloc(JWT_BUF_SZ);
 	if (!jwt) {
 		return -ENOMEM;
 	}
 	err = nrf_cloud_jwt_generate(NRF_CLOUD_JWT_VALID_TIME_S_MAX, jwt, JWT_BUF_SZ);
 	if (err) {
 		LOG_ERR("Error generating JWT with modem: %d", err);
-		k_free(jwt);
+		nrf_cloud_free(jwt);
 		return err;
 	}
 
@@ -311,7 +392,7 @@ static int nrf_cloud_coap_authenticate(void)
 	err = nrf_cloud_coap_post("auth/jwt", err ? NULL : ver_string,
 				 (uint8_t *)jwt, strlen(jwt),
 				 COAP_CONTENT_FORMAT_TEXT_PLAIN, true, auth_cb, NULL);
-	k_free(jwt);
+	nrf_cloud_free(jwt);
 
 	if (err) {
 		return err;
@@ -477,8 +558,7 @@ static int client_transfer(enum coap_method method,
 
 	retry = 0;
 	k_sem_reset(&cb_sem);
-	while ((err = coap_client_req(&coap_client, sock, NULL, &request,
-				      reliable ? -1 : CONFIG_NON_RESP_RETRIES)) == -EAGAIN) {
+	while ((err = coap_client_req(&coap_client, sock, NULL, &request, NULL)) == -EAGAIN) {
 		/* -EAGAIN means the CoAP client is currently waiting for a response
 		 * to a previous request (likely started in a separate thread).
 		 */
@@ -568,15 +648,14 @@ int nrf_cloud_coap_patch(const char *resource, const char *query,
 
 int nrf_cloud_coap_disconnect(void)
 {
-	int err;
+	int tmp;
 
 	if (sock < 0) {
 		return -ENOTCONN;
 	}
 
 	authenticated = false;
-	err = close(sock);
-	sock = -1;
-
-	return err;
+	tmp = sock;
+	coap_client.fd = sock = -1;
+	return close(tmp);
 }

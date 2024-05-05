@@ -91,6 +91,8 @@ static int event_interval_get(char *buf)
 	 */
 	desired_obj = cJSON_GetObjectItem(root_obj, "desired");
 	if (desired_obj == NULL) {
+		LOG_DBG("Incoming device twin document contains only the 'desired' object");
+
 		desired_obj = root_obj;
 	}
 
@@ -98,7 +100,8 @@ static int event_interval_get(char *buf)
 	event_interval_obj = cJSON_GetObjectItem(desired_obj,
 						 "telemetryInterval");
 	if (event_interval_obj == NULL) {
-		LOG_INF("No 'telemetryInterval' object in the device twin");
+		LOG_DBG("No 'telemetryInterval' object found in the device twin document");
+
 		goto clean_exit;
 	}
 
@@ -541,19 +544,21 @@ static int dps_run(struct azure_iot_hub_buf *hostname, struct azure_iot_hub_buf 
 int main(void)
 {
 	int err;
-	char hostname[128] = CONFIG_AZURE_IOT_HUB_HOSTNAME;
-	char device_id[128] = CONFIG_AZURE_IOT_HUB_DEVICE_ID;
-	struct azure_iot_hub_config cfg = {
+	static char hostname[128] = CONFIG_AZURE_IOT_HUB_HOSTNAME;
+	static char device_id[128] = CONFIG_AZURE_IOT_HUB_DEVICE_ID;
+	static struct azure_iot_hub_config cfg = {
 		.device_id = {
 			.ptr = device_id,
-			.size = strlen(device_id),
 		},
 		.hostname = {
 			.ptr = hostname,
-			.size = strlen(hostname),
 		},
 		.use_dps = true,
 	};
+
+	cfg.device_id.size = strlen(device_id);
+	cfg.hostname.size = strlen(hostname);
+
 
 	LOG_INF("Azure IoT Hub sample started");
 
@@ -573,6 +578,12 @@ int main(void)
 	err = conn_mgr_all_if_up(true);
 	if (err) {
 		LOG_ERR("conn_mgr_if_connect, error: %d", err);
+		return err;
+	}
+
+	err = conn_mgr_all_if_connect(true);
+	if (err) {
+		LOG_ERR("conn_mgr_all_if_connect, error: %d", err);
 		return err;
 	}
 
@@ -604,7 +615,7 @@ int main(void)
 	 * This means that NET_EVENT_L4_CONNECTED fires before the
 	 * appropriate handler l4_event_handler() is registered.
 	 */
-	if (IS_ENABLED(CONFIG_BOARD_QEMU_X86)) {
+	if (IS_ENABLED(CONFIG_BOARD_QEMU_X86) || IS_ENABLED(CONFIG_BOARD_NATIVE_SIM)) {
 		conn_mgr_mon_resend_status();
 	}
 

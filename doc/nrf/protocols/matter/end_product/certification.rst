@@ -71,7 +71,7 @@ Joining CSA allows you to meet the following certification requirements:
   You can apply to `CSA's Certification Team`_ to obtain VID.
   The VID codes are valid immediately upon assignment.
 
-If you created your Matter product application using :ref:`matter_samples` as a reference, make sure you have read the `ug_matter_device_certification_matter_samples`_ section before proceeding with the following certification steps.
+If you created your Matter product application using :ref:`matter_samples` as a reference, make sure you have read the :ref:`ug_matter_device_certification_matter_samples` section before proceeding with the following certification steps.
 
 .. _ug_matter_device_certification_testing:
 
@@ -99,7 +99,7 @@ Application
 ===========
 
 Once you have obtained the test report for your Matter component, you can apply for the certification to CSA.
-You can do this online from the `CSA Member Resources page`_ using the different Certification and Testing tools to submit the required documentation.
+You can do this online from the `CSA Matter Resource Kit`_ using the different Certification and Testing tools to submit the required documentation.
 
 Application requirements
 ------------------------
@@ -129,7 +129,7 @@ Certification document templates from Nordic Semiconductor
 PICS
 ++++
 
-You can generate the PICS in the XML format using CSA's PICS Tool, available from `CSA Member Resources page`_.
+You can generate the PICS in the XML format using the `PICS Tool`_, which is provided by CSA.
 
 Dependent Transport Attestation
 +++++++++++++++++++++++++++++++
@@ -278,7 +278,7 @@ Nordic Semiconductor provides the following certification identifiers:
 * Bluetooth Qualified Design IDs (Bluetooth QDIDs) - Obtained in accordance with `Bluetooth SIG's Qualification Process`_.
 * Thread Certification IDs (Thread CIDs) - Obtained in accordance with `Thread Group's certification information`_.
 
-You can visit the following pages on Nordic Semiconductor Infocenter to check the Bluetooth QDIDs and Thread CIDs valid for SoCs that support Matter applications:
+You can visit the following pages to check the Bluetooth QDIDs and Thread CIDs valid for SoCs that support Matter applications:
 
 * `nRF5340 DK Compatibility Matrix`_
 * `nRF52840 DK Compatibility Matrix`_
@@ -342,7 +342,7 @@ The |NCS| includes several :ref:`matter_samples` that are example implementation
 The samples are maintained to fulfill Matter certification requirements as closely as possible, but they do not have official Matter compliance certificates.
 You can use them as a reference for creating your own application, but this does not guarantee that your application will pass the Matter certification.
 
-The Matter certification program currently does not provide any form of platform certification, so the product maker is solely reponsible for ensuring that the application used fulfills all Matter certification requirements.
+Currently, the Matter certification program does not provide any form of platform certification, so the product maker is solely responsible for ensuring that the application used fulfills all Matter certification requirements.
 Before you start the application process for the Matter certification, make sure that the application configuration generated using :file:`.zap` file is compatible with the PICS generated for the certification purpose.
 You can find the information about the specification and the valid PICS for specific Matter stack version that should be used for your product on the `CSA Matter Resource Kit`_ page, in the `Specification` section.
 Especially, make sure that:
@@ -350,10 +350,13 @@ Especially, make sure that:
 * ``FeatureMap`` attributes for all clusters match the desired configuration selected in PICS, and all other cluster requirements related to the specific ``FeatureMap`` value are met.
 * ``ClusterRevision`` attributes for all clusters match the value of the Matter stack version that you want to use for your application certification.
 * ``Attribute List``, ``Accepted Command List`` and ``Generated Command List`` attributes for all clusters contain all the values that need to be there and nothing more.
+* Only the clusters, attributes and commands required by your application are enabled.
+  For example, the default configurations for the samples use both Thread Network Diagnostics and Wi-Fi Network Diagnostics clusters.
+  This is done due to the Thread and Wi-Fi platforms common maintenance reasons, but should not be used in the final product.
 
 See the :ref:`ug_matter_creating_accessory` page for how to configure your application using the ZAP Tool.
 
-Before you request the official product `ug_matter_device_certification_testing`_ from ATL, it is recommended to perform in-house certification testing of the product.
+Before you request the official product :ref:`ug_matter_device_certification_testing` from ATL, it is recommended to perform in-house certification testing of the product.
 This testing can help you detect problems that could lead to certification failure, meaning it saves time and money that would be spent on official certification in ATL laboratory.
 You can find the instruction how to execute in-house certification tests using a Matter Test Harness on the `CSA Matter Resource Kit`_ page.
 Open the **Test Tool User Guide** link in the **Testing** section under the **Testing and Certification** section of the page.

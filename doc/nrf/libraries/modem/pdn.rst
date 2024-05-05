@@ -17,13 +17,12 @@ It provides an API for the following purposes:
 The library uses several AT commands, and it relies on the following two types of AT notifications to work:
 
 * Packet domain events notifications (``+CGEV``) - Subscribed by using the ``AT+CGEREP=1`` command.
-  See the `AT+CGEREP set command`_ section in the nRF9160 AT Commands Reference Guide or the same section in the `nRF91x1 AT Commands Reference Guide`_ depending on the SiP you are using.
+  See the `AT+CGEREP set command`_ section in the nRF9160 AT Commands Reference Guide or the `same section <nRF91x1 AT+CGEREP set command_>`_ in the nRF91x1 AT Commands Reference Guide, depending on the SiP you are using.
 * Notifications for unsolicited reporting of error codes sent by the network (``+CNEC``) - Subscribed by using the ``AT+CNEC=16`` command.
-  See the `AT+CNEC set command`_ section in the nRF9160 AT Commands Reference Guide or the same section in the `nRF91x1 AT Commands Reference Guide`_ depending on the SiP you are using.
+  See the `AT+CNEC set command`_ section in the nRF9160 AT Commands Reference Guide or the `same section <nRF91x1 AT+CGEREP set command_>`_ in the nRF91x1 AT Commands Reference Guide, depending on the SiP you are using.
 
-If the application uses the :ref:`lte_lc_readme` library to change the modem's functional mode, the PDN library automatically subscribes to the necessary AT notifications.
+The PDN library automatically subscribes to the necessary AT notifications using :ref:`mlil_callbacks`.
 This includes automatically resubscribing to the notifications upon functional mode changes.
-If the application does not use the :ref:`lte_lc_readme` library to change the modem's functional mode, the application must subscribe to the necessary AT notifications manually.
 
 .. note::
    The subscription to AT notifications is lost upon changing the modem functional mode to ``+CFUN=0``.
@@ -37,12 +36,12 @@ Following are the AT commands that are used by the library:
 * ``AT%XGETPDNID``- To retrieve the PDN ID for a given PDP context
 * ``AT+CGAUTH`` - To set the PDN connection authentication parameters
 
-For more information about these commands, see `Packet Domain AT commands`_ in the nRF9160 AT Commands Reference Guide or the same section in the `nRF91x1 AT Commands Reference Guide`_ depending on the SiP you are using.
+For more information about these commands, see `Packet Domain AT commands`_ in the nRF9160 AT Commands Reference Guide or the `same section <nRF91x1 packet Domain AT commands_>`_ in the nRF91x1 AT Commands Reference Guide, depending on the SiP you are using.
 
 The application can create PDP contexts by using the :c:func:`pdn_ctx_create` function, and a callback can be assigned to receive the events pertaining to the state and connectivity of the PDP contexts.
 The application can use the :c:func:`pdn_default_ctx_cb_reg` function to register an event handler for events pertaining the default PDP context, and the :c:func:`pdn_default_ctx_cb_dereg` to deregister it.
 The library stores 12 bytes of memory on the system heap for each PDP context created using :c:func:`pdn_ctx_create` and for each event handler for the default PDP context.
-The maximum number of PDP contexts that can be created is limited by the maximum number of PDP context supported by the nRF9160 modem firmware and the amount of system heap memory available.
+The maximum number of PDP contexts that can be created is limited by the maximum number of PDP context supported by the nRF91 Series modem firmware and the amount of system heap memory available.
 The :c:func:`pdn_ctx_configure` function is used to configure a PDP context, which can be configured with a family, access point name, and optional authentication parameters.
 The :c:func:`pdn_activate` function activates a PDN connection for a PDP context.
 A PDN connection is identified by an ID as reported by ``AT%XGETPDNID``, and it is distinct from the PDP context ID (CID).

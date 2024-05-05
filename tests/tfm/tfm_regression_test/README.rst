@@ -12,6 +12,9 @@ Use this test sample to run secure and non-secure Trusted Firmware-M (TF-M) regr
 Requirements
 ************
 
+This test sample requires that the device is provisioned with the PSA root-of-trust security parameters using the :ref:`provisioning image <provisioning_image>` sample.
+Build and flash the provisioning image sample before using the test sample.
+
 The tests support the following development kits:
 
 .. table-from-rows:: /includes/sample_board_rows.txt
@@ -40,6 +43,10 @@ Building and running
 .. |test path| replace:: :file:`tests/tfm/tfm_regression_test/`
 
 .. include:: /includes/build_and_run_test.txt
+
+.. note::
+    For programming, use the :ref:`programming command without --erase <programming_params_no_erase>`.
+    Programming with ``--erase`` or ``--recover`` (or similar parameters) will erase the PSA platform security parameters.
 
 Output
 ======

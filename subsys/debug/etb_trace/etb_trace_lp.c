@@ -5,7 +5,7 @@
  */
 
 #include <zephyr/kernel.h>
-#include <zephyr/timeout_q.h>
+#include <timeout_q.h>
 #include <debug/etb_trace.h>
 
 #include <etb_trace_private.h>
@@ -17,7 +17,7 @@ static bool trace_stopped;
  * @brief Resume tracing on wakeup if it was stopped previously.
  *
  */
-void sys_clock_idle_exit(void)
+void etb_trace_on_idle_exit(void)
 {
 	if (trace_stopped) {
 		etb_trace_start();

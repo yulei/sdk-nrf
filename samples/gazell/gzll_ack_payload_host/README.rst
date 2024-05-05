@@ -93,7 +93,7 @@ Building and running
 The Device sample is under :file:`samples/gazell/gzll_ack_payload_device` in the |NCS| folder structure.
 The Host sample is under :file:`samples/gazell/gzll_ack_payload_host` in the |NCS| folder structure.
 
-See :ref:`programming` for information about how to build and program the application.
+See :ref:`building` and :ref:`programming` for information about how to build and program the application, respectively.
 
 Testing
 =======
@@ -106,8 +106,8 @@ After programming the Device sample on one of the development kits and the Host 
    Observe that the Host sample turns off **LED 1** on the other kit.
 #. Press **Button 2** for the Host sample.
    Observe that the Device sample turns off **LED 2** on the other kit.
-#. Optionally, connect to the kits with a terminal emulator (for example, PuTTY).
-   See :ref:`putty` for the required settings.
+#. Optionally, connect to the kits with a terminal emulator (for example, nRF Connect Serial Terminal).
+   See :ref:`test_and_optimize` for the required settings and steps.
 #. Observe the logging output for both kits.
 
 .. gzll_ack_sample_building_end

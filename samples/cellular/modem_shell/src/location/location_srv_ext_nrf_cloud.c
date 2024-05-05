@@ -105,16 +105,24 @@ static int location_srv_ext_nrf_cloud_location_get(
 {
 	int err;
 	nrf_cloud_location_response_t callback = NULL;
+	struct nrf_cloud_location_config conf = {
+		.do_reply = false,
+		.fallback = true,
+		.hi_conf = false
+	};
 
 	k_sem_reset(&location_ready);
 
 	if (location) {
 		callback = location_srv_ext_nrf_cloud_location_ready_cb;
+		conf.do_reply = true;
 	}
 
 	mosh_print("Sending positioning request to cloud via MQTT");
 	err = nrf_cloud_location_request(
-		cell_data, scanning_results, (callback != NULL), callback);
+		cell_data, scanning_results,
+		&conf,
+		callback);
 	if (err == -EACCES) {
 		mosh_error("Cloud connection is not established");
 		return err;

@@ -3,6 +3,7 @@
  *
  * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
+
 /**
  * @file
  * @defgroup bt_mesh_prop_cli Generic Property Client model
@@ -61,7 +62,7 @@ struct bt_mesh_prop_list {
  */
 struct bt_mesh_prop_cli {
 	/** Model entry. */
-	struct bt_mesh_model *model;
+	const struct bt_mesh_model *model;
 	/** Publish parameters. */
 	struct bt_mesh_model_pub pub;
 	/* Publication buffer */

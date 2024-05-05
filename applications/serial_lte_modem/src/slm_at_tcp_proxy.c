@@ -8,18 +8,18 @@
 #include <stdio.h>
 #include <string.h>
 #include <zephyr/net/socket.h>
+#include <zephyr/net/tls_credentials.h>
 #include "slm_util.h"
-#include "slm_native_tls.h"
 #include "slm_at_host.h"
 #include "slm_at_tcp_proxy.h"
+#if defined(CONFIG_SLM_NATIVE_TLS)
+#include "slm_native_tls.h"
+#endif
 
 LOG_MODULE_REGISTER(slm_tcp, CONFIG_SLM_LOG_LEVEL);
 
 #define THREAD_STACK_SIZE	KB(4)
 #define THREAD_PRIORITY		K_LOWEST_APPLICATION_THREAD_PRIO
-
-/* Some features need future modem firmware support */
-#define SLM_TCP_PROXY_FUTURE_FEATURE	0
 
 /**@brief Proxy operations. */
 enum slm_tcp_proxy_operation {
@@ -47,6 +47,8 @@ static struct tcp_proxy {
 	sec_tag_t sec_tag;	/* Security tag of the credential */
 	int sock_peer;		/* Socket descriptor for peer. */
 	enum slm_tcp_role role;	/* Client or Server proxy */
+	int peer_verify;	/* Peer verification level for TLS connection. */
+	bool hostname_verify;	/* Verify hostname against the certificate. */
 } proxy;
 
 /** forward declaration of thread function **/
@@ -58,32 +60,11 @@ static int do_tcp_server_start(uint16_t port)
 	int ret;
 	int reuseaddr = 1;
 
-#if defined(CONFIG_SLM_NATIVE_TLS)
-	if (proxy.sec_tag != INVALID_SEC_TAG) {
-		ret = slm_tls_loadcrdl(proxy.sec_tag);
-		if (ret < 0) {
-			LOG_ERR("Fail to load credential: %d", ret);
-			return -EAGAIN;
-		}
-	}
-#else
-#if !SLM_TCP_PROXY_FUTURE_FEATURE
-/* TLS server not officially supported by modem yet */
-	if (proxy.sec_tag != INVALID_SEC_TAG) {
-		LOG_ERR("Not supported");
-		return -ENOTSUP;
-	}
-#endif
-#endif
 	/* Open socket */
 	if (proxy.sec_tag == INVALID_SEC_TAG) {
 		ret = socket(proxy.family, SOCK_STREAM, IPPROTO_TCP);
 	} else {
-#if defined(CONFIG_SLM_NATIVE_TLS)
-		ret = socket(proxy.family, SOCK_STREAM | SOCK_NATIVE_TLS, IPPROTO_TLS_1_2);
-#else
 		ret = socket(proxy.family, SOCK_STREAM, IPPROTO_TLS_1_2);
-#endif
 	}
 	if (ret < 0) {
 		LOG_ERR("socket() failed: %d", -errno);
@@ -92,8 +73,26 @@ static int do_tcp_server_start(uint16_t port)
 	}
 	proxy.sock = ret;
 
-	/* Config socket options */
 	if (proxy.sec_tag != INVALID_SEC_TAG) {
+#ifndef CONFIG_SLM_NATIVE_TLS
+		LOG_ERR("Not supported");
+		return -ENOTSUP;
+#else
+		ret = slm_native_tls_load_credentials(proxy.sec_tag);
+		if (ret < 0) {
+			LOG_ERR("Failed to load sec tag: %d (%d)", proxy.sec_tag, ret);
+			return ret;
+		}
+		int tls_native = 1;
+
+		/* Must be the first socket option to set. */
+		ret = setsockopt(proxy.sock, SOL_TLS, TLS_NATIVE, &tls_native,
+					sizeof(tls_native));
+		if (ret) {
+			ret = errno;
+			goto exit_svr;
+		}
+#endif
 		sec_tag_t sec_tag_list[1] = { proxy.sec_tag };
 
 		ret = setsockopt(proxy.sock, SOL_TLS, TLS_SEC_TAG_LIST, sec_tag_list,
@@ -103,25 +102,6 @@ static int do_tcp_server_start(uint16_t port)
 			ret = -errno;
 			goto exit_svr;
 		}
-#if SLM_TCP_PROXY_FUTURE_FEATURE
-/* TLS server not officially supported by modem yet */
-		int tls_role = TLS_DTLS_ROLE_SERVER;
-		int peer_verify = TLS_PEER_VERIFY_NONE;
-
-		ret = setsockopt(proxy.sock, SOL_TLS, TLS_DTLS_ROLE, &tls_role, sizeof(int));
-		if (ret) {
-			LOG_ERR("setsockopt(TLS_DTLS_ROLE) error: %d", -errno);
-			ret = -errno;
-			goto exit_svr;
-		}
-		ret = setsockopt(proxy.sock, SOL_TLS, TLS_PEER_VERIFY, &peer_verify,
-				 sizeof(peer_verify));
-		if (ret) {
-			LOG_ERR("setsockopt(TLS_PEER_VERIFY) error: %d", errno);
-			ret = -errno;
-			goto exit_svr;
-		}
-#endif
 	}
 
 	ret = setsockopt(proxy.sock, SOL_SOCKET, SO_REUSEADDR, &reuseaddr, sizeof(int));
@@ -133,10 +113,10 @@ static int do_tcp_server_start(uint16_t port)
 
 	/* Bind to local port */
 	if (proxy.family == AF_INET) {
-		char ipv4_addr[NET_IPV4_ADDR_LEN] = {0};
+		char ipv4_addr[INET_ADDRSTRLEN];
 
 		util_get_ip_addr(0, ipv4_addr, NULL);
-		if (strlen(ipv4_addr) == 0) {
+		if (!*ipv4_addr) {
 			LOG_ERR("Unable to obtain local IPv4 address");
 			ret = -ENETUNREACH;
 			goto exit_svr;
@@ -154,10 +134,10 @@ static int do_tcp_server_start(uint16_t port)
 		}
 		ret = bind(proxy.sock, (struct sockaddr *)&local, sizeof(struct sockaddr_in));
 	} else {
-		char ipv6_addr[NET_IPV6_ADDR_LEN] = {0};
+		char ipv6_addr[INET6_ADDRSTRLEN];
 
 		util_get_ip_addr(0, NULL, ipv6_addr);
-		if (strlen(ipv6_addr) == 0) {
+		if (!*ipv6_addr) {
 			LOG_ERR("Unable to obtain local IPv6 address");
 			ret = -ENETUNREACH;
 			goto exit_svr;
@@ -199,12 +179,6 @@ static int do_tcp_server_start(uint16_t port)
 	return 0;
 
 exit_svr:
-#if defined(CONFIG_SLM_NATIVE_TLS)
-	if (proxy.sec_tag != INVALID_SEC_TAG) {
-		(void)slm_tls_unloadcrdl(proxy.sec_tag);
-		proxy.sec_tag = INVALID_SEC_TAG;
-	}
-#endif
 	if (proxy.sock != INVALID_SOCKET) {
 		close(proxy.sock);
 		proxy.sock = INVALID_SOCKET;
@@ -221,12 +195,6 @@ static int do_tcp_server_stop(void)
 	if (proxy.sock == INVALID_SOCKET) {
 		return 0;
 	}
-#if defined(CONFIG_SLM_NATIVE_TLS)
-	if (proxy.sec_tag != INVALID_SEC_TAG) {
-		(void)slm_tls_unloadcrdl(proxy.sec_tag);
-		proxy.sec_tag = INVALID_SEC_TAG;
-	}
-#endif
 	server_stop_pending = true;
 	if (proxy.sock_peer != INVALID_SOCKET) {
 		(void)close(proxy.sock_peer);
@@ -266,8 +234,22 @@ static int do_tcp_client_connect(const char *url, uint16_t port)
 	proxy.sock = ret;
 
 	if (proxy.sec_tag != INVALID_SEC_TAG) {
+#if defined(CONFIG_SLM_NATIVE_TLS)
+		ret = slm_native_tls_load_credentials(proxy.sec_tag);
+		if (ret < 0) {
+			LOG_ERR("Failed to load sec tag: %d (%d)", proxy.sec_tag, ret);
+			goto exit_cli;
+		}
+		int tls_native = 1;
+
+		/* Must be the first socket option to set. */
+		ret = setsockopt(proxy.sock, SOL_TLS, TLS_NATIVE, &tls_native, sizeof(tls_native));
+		if (ret) {
+			ret = errno;
+			goto exit_cli;
+		}
+#endif
 		sec_tag_t sec_tag_list[1] = { proxy.sec_tag };
-		int peer_verify = TLS_PEER_VERIFY_REQUIRED;
 
 		ret = setsockopt(proxy.sock, SOL_TLS, TLS_SEC_TAG_LIST, sec_tag_list,
 				 sizeof(sec_tag_t));
@@ -276,17 +258,27 @@ static int do_tcp_client_connect(const char *url, uint16_t port)
 			ret = -errno;
 			goto exit_cli;
 		}
-		ret = setsockopt(proxy.sock, SOL_TLS, TLS_PEER_VERIFY, &peer_verify,
-				 sizeof(peer_verify));
+		ret = setsockopt(proxy.sock, SOL_TLS, TLS_PEER_VERIFY, &proxy.peer_verify,
+				 sizeof(proxy.peer_verify));
 		if (ret) {
 			LOG_ERR("setsockopt(TLS_PEER_VERIFY) error: %d", errno);
+			ret = -errno;
+			goto exit_cli;
+		}
+		if (proxy.hostname_verify) {
+			ret = setsockopt(proxy.sock, SOL_TLS, TLS_HOSTNAME, url, strlen(url));
+		} else {
+			ret = setsockopt(proxy.sock, SOL_TLS, TLS_HOSTNAME, NULL, 0);
+		}
+		if (ret) {
+			LOG_ERR("setsockopt(TLS_HOSTNAME) error: %d", errno);
 			ret = -errno;
 			goto exit_cli;
 		}
 	}
 
 	/* Connect to remote host */
-	ret = util_resolve_host(0, url, port, proxy.family, Z_LOG_OBJECT_PTR(slm_tcp), &sa);
+	ret = util_resolve_host(0, url, port, proxy.family, &sa);
 	if (ret) {
 		goto exit_cli;
 	}
@@ -524,8 +516,8 @@ client_events:
 			/* Process POLLIN first to get the data, even if there are errors. */
 			if ((fds[1].revents & POLLIN) == POLLIN) {
 				ret = recv(fds[1].fd, (void *)slm_data_buf,
-					   sizeof(slm_data_buf), 0);
-				if (ret < 0) {
+					   sizeof(slm_data_buf), MSG_DONTWAIT);
+				if (ret < 0 && errno != EAGAIN) {
 					LOG_ERR("recv() error: %d", -errno);
 					tcpsvr_terminate_connection(-errno);
 					fds[1].fd = INVALID_SOCKET;
@@ -558,12 +550,6 @@ client_events:
 		}
 	}
 
-#if defined(CONFIG_SLM_NATIVE_TLS)
-	if (proxy.sec_tag != INVALID_SEC_TAG) {
-		(void)slm_tls_unloadcrdl(proxy.sec_tag);
-		proxy.sec_tag = INVALID_SEC_TAG;
-	}
-#endif
 	tcpsvr_terminate_connection(ret);
 	if (proxy.sock != INVALID_SOCKET) {
 		(void)close(proxy.sock);
@@ -617,8 +603,8 @@ static void tcpcli_thread_func(void *p1, void *p2, void *p3)
 		if ((fds.revents & POLLIN) != POLLIN) {
 			continue;
 		}
-		ret = recv(fds.fd, (void *)slm_data_buf, sizeof(slm_data_buf), 0);
-		if (ret < 0) {
+		ret = recv(fds.fd, (void *)slm_data_buf, sizeof(slm_data_buf), MSG_DONTWAIT);
+		if (ret < 0 && errno != EAGAIN) {
 			LOG_WRN("recv() error: %d", -errno);
 			continue;
 		}
@@ -645,17 +631,17 @@ static void tcpcli_thread_func(void *p1, void *p2, void *p3)
 	LOG_INF("TCP client thread terminated");
 }
 
-/* Handles AT#XTCPSVR commands. */
-int handle_at_tcp_server(enum at_cmd_type cmd_type)
+SLM_AT_CMD_CUSTOM(xtcpsvr, "AT#XTCPSVR", handle_at_tcp_server);
+static int handle_at_tcp_server(enum at_cmd_type cmd_type, const struct at_param_list *param_list,
+				uint32_t param_count)
 {
 	int err = -EINVAL;
 	uint16_t op;
 	uint16_t port;
-	int param_count = at_params_valid_count_get(&slm_at_param_list);
 
 	switch (cmd_type) {
 	case AT_CMD_TYPE_SET_COMMAND:
-		err = at_params_unsigned_short_get(&slm_at_param_list, 1, &op);
+		err = at_params_unsigned_short_get(param_list, 1, &op);
 		if (err) {
 			return err;
 		}
@@ -664,13 +650,13 @@ int handle_at_tcp_server(enum at_cmd_type cmd_type)
 				LOG_ERR("Server is running.");
 				return -EINVAL;
 			}
-			err = at_params_unsigned_short_get(&slm_at_param_list, 2, &port);
+			err = at_params_unsigned_short_get(param_list, 2, &port);
 			if (err) {
 				return err;
 			}
 			proxy.sec_tag = INVALID_SEC_TAG;
 			if (param_count > 3) {
-				err = at_params_int_get(&slm_at_param_list, 3, &proxy.sec_tag);
+				err = at_params_int_get(param_list, 3, &proxy.sec_tag);
 				if (err) {
 					return err;
 				}
@@ -700,16 +686,16 @@ int handle_at_tcp_server(enum at_cmd_type cmd_type)
 	return err;
 }
 
-/* Handles AT#XTCPCLI commands. */
-int handle_at_tcp_client(enum at_cmd_type cmd_type)
+SLM_AT_CMD_CUSTOM(xtcpcli, "AT#XTCPCLI", handle_at_tcp_client);
+static int handle_at_tcp_client(enum at_cmd_type cmd_type, const struct at_param_list *param_list,
+				uint32_t param_count)
 {
 	int err = -EINVAL;
 	uint16_t op;
-	int param_count = at_params_valid_count_get(&slm_at_param_list);
 
 	switch (cmd_type) {
 	case AT_CMD_TYPE_SET_COMMAND:
-		err = at_params_unsigned_short_get(&slm_at_param_list, 1, &op);
+		err = at_params_unsigned_short_get(param_list, 1, &op);
 		if (err) {
 			return err;
 		}
@@ -722,21 +708,39 @@ int handle_at_tcp_client(enum at_cmd_type cmd_type)
 				LOG_ERR("Client is connected.");
 				return -EINVAL;
 			}
-			err = util_string_get(&slm_at_param_list, 2, url, &size);
+			err = util_string_get(param_list, 2, url, &size);
 			if (err) {
 				return err;
 			}
-			err = at_params_unsigned_short_get(&slm_at_param_list, 3, &port);
-			if (err) {
-				return err;
+			if (at_params_unsigned_short_get(param_list, 3, &port)) {
+				return -EINVAL;
 			}
 			proxy.sec_tag = INVALID_SEC_TAG;
 			if (param_count > 4) {
-				err = at_params_int_get(&slm_at_param_list, 4, &proxy.sec_tag);
-				if (err) {
-					return err;
+				if (at_params_int_get(param_list, 4, &proxy.sec_tag)) {
+					return -EINVAL;
 				}
 			}
+			proxy.peer_verify = TLS_PEER_VERIFY_REQUIRED;
+			if (param_count > 5) {
+				if (at_params_int_get(param_list, 5, &proxy.peer_verify) ||
+				    (proxy.peer_verify != TLS_PEER_VERIFY_NONE &&
+				     proxy.peer_verify != TLS_PEER_VERIFY_OPTIONAL &&
+				     proxy.peer_verify != TLS_PEER_VERIFY_REQUIRED)) {
+					return -EINVAL;
+				}
+			}
+			proxy.hostname_verify = true;
+			if (param_count > 6) {
+				uint16_t hostname_verify;
+
+				if (at_params_unsigned_short_get(param_list, 6, &hostname_verify) ||
+				    (hostname_verify != 0 && hostname_verify != 1)) {
+					return -EINVAL;
+				}
+				proxy.hostname_verify = (bool)hostname_verify;
+			}
+
 			proxy.family = (op == CLIENT_CONNECT) ? AF_INET : AF_INET6;
 			err = do_tcp_client_connect(url, port);
 		} else if (op == CLIENT_DISCONNECT) {
@@ -749,8 +753,9 @@ int handle_at_tcp_client(enum at_cmd_type cmd_type)
 		break;
 
 	case AT_CMD_TYPE_TEST_COMMAND:
-		rsp_send("\r\n#XTCPCLI: (%d,%d,%d),<url>,<port>,<sec_tag>\r\n",
-			CLIENT_DISCONNECT, CLIENT_CONNECT, CLIENT_CONNECT6);
+		rsp_send("\r\n#XTCPCLI: (%d,%d,%d),<url>,<port>,"
+			 "<sec_tag>,<peer_verify>,<hostname_verify>\r\n",
+			 CLIENT_DISCONNECT, CLIENT_CONNECT, CLIENT_CONNECT6);
 		err = 0;
 		break;
 
@@ -761,8 +766,9 @@ int handle_at_tcp_client(enum at_cmd_type cmd_type)
 	return err;
 }
 
-/* Handles AT#XTCPSEND command. */
-int handle_at_tcp_send(enum at_cmd_type cmd_type)
+SLM_AT_CMD_CUSTOM(xtcpsend, "AT#XTCPSEND", handle_at_tcp_send);
+static int handle_at_tcp_send(enum at_cmd_type cmd_type, const struct at_param_list *param_list,
+			      uint32_t)
 {
 	int err = -EINVAL;
 	char data[SLM_MAX_PAYLOAD_SIZE + 1] = {0};
@@ -770,9 +776,9 @@ int handle_at_tcp_send(enum at_cmd_type cmd_type)
 
 	switch (cmd_type) {
 	case AT_CMD_TYPE_SET_COMMAND:
-		if (at_params_valid_count_get(&slm_at_param_list) > 1) {
+		if (at_params_valid_count_get(param_list) > 1) {
 			size = sizeof(data);
-			err = util_string_get(&slm_at_param_list, 1, data, &size);
+			err = util_string_get(param_list, 1, data, &size);
 			if (err) {
 				return err;
 			}
@@ -789,8 +795,9 @@ int handle_at_tcp_send(enum at_cmd_type cmd_type)
 	return err;
 }
 
-/* Handles AT#XTCPHANGUP commands. */
-int handle_at_tcp_hangup(enum at_cmd_type cmd_type)
+SLM_AT_CMD_CUSTOM(xtcphangup, "AT#XTCPHANGUP", handle_at_tcp_hangup);
+static int handle_at_tcp_hangup(enum at_cmd_type cmd_type, const struct at_param_list *param_list,
+				uint32_t)
 {
 	int err = -EINVAL;
 	int handle;
@@ -800,7 +807,7 @@ int handle_at_tcp_hangup(enum at_cmd_type cmd_type)
 		if (proxy.role != TCP_ROLE_SERVER || proxy.sock_peer == INVALID_SOCKET) {
 			return -EINVAL;
 		}
-		err = at_params_int_get(&slm_at_param_list, 1, &handle);
+		err = at_params_int_get(param_list, 1, &handle);
 		if (err) {
 			return err;
 		}

@@ -39,13 +39,15 @@ manifest:
       url-base: https://github.com/BabbleSim
     - name: bosch
       url-base: https://github.com/boschsensortec
+    - name: eembc
+      url-base: https://github.com/eembc
 
   # If not otherwise specified, the projects below should be obtained
   # from the ncs remote.
   defaults:
     remote: ncs
 
-  group-filter: [-homekit, -nrf-802154, -dragoon, -find-my, -ant, -babblesim, -sidewalk, -bsec]
+  group-filter: [-nrf-802154, -dragoon, -find-my, -ant, -babblesim, -sidewalk, -bsec, +optional]
 
   # "projects" is a list of git repositories which make up the NCS
   # source code.
@@ -61,7 +63,7 @@ manifest:
     # https://developer.nordicsemi.com/nRF_Connect_SDK/doc/latest/zephyr/guides/modules.html
     - name: zephyr
       repo-path: sdk-zephyr
-      revision: a01c3a4caccb6964a29078172ba7f590bcdbe790
+      revision: b5cf3040298410845311ff7397374540d3451528
       import:
         # In addition to the zephyr repository itself, NCS also
         # imports the contents of zephyr/west.yml at the above
@@ -79,6 +81,8 @@ manifest:
           - canopennode
           - chre
           - cmsis
+          - cmsis-dsp
+          - cmsis-nn
           - edtt
           - fatfs
           - hal_nordic
@@ -96,7 +100,6 @@ manifest:
           - nrf_hw_models
           - open-amp
           - picolibc
-          - psa-arch-tests
           - segger
           - tinycrypt
           - tf-m-tests
@@ -111,7 +114,7 @@ manifest:
     - name: hostap
       repo-path: sdk-hostap
       path: modules/lib/hostap
-      revision: d82c309c2e7eea5f08bbc1ac9e2f4c4622fbe998
+      revision: 62d2acea5430ad78240df341bad5b3c489a8dc0d
       userdata:
         ncs:
           upstream-url: https://w1.fi/cgit/hostap/
@@ -120,7 +123,7 @@ manifest:
     - name: wfa-qt-control-app
       repo-path: sdk-wi-fiquicktrack-controlappc
       path: modules/lib/wfa-qt-control-app
-      revision: 0e213ab6a421298484a81a9d18f5c31c4b8084a8
+      revision: d649bd1342215e089d4211757186705cda179013
       userdata:
         ncs:
           upstream-url: https://github.com/Wi-FiQuickTrack/Wi-FiQuickTrack-ControlAppC
@@ -128,28 +131,37 @@ manifest:
           compare-by-default: true
     - name: mcuboot
       repo-path: sdk-mcuboot
-      revision: dc0b692181837d912e49fc49841918e47a60d22c
+      revision: 0b5810de95eb93bbd4fba8e20a2152b33880fc43
       path: bootloader/mcuboot
     - name: qcbor
-      url: https://github.com/laurencelundblade/QCBOR.git
+      url: https://github.com/laurencelundblade/QCBOR
       revision: 751d36583a9ce1a640900c57e13c9b6b8f3a2ba2
       path: modules/tee/tf-m/qcbor
     - name: mbedtls
       path: modules/crypto/mbedtls
       repo-path: sdk-mbedtls
-      revision: acea48fc8a5eb227033b55e6ec012731218e257f
+      revision: c99e53f8bacdce37db400e5c46b26ee26937234c
+    - name: oberon-psa-crypto
+      path: modules/crypto/oberon-psa-crypto
+      repo-path: sdk-oberon-psa-crypto
+      revision: 51af9c47069d24b0794b31a0b4392a90e219ca50
     - name: nrfxlib
       repo-path: sdk-nrfxlib
       path: nrfxlib
-      revision: bbb718adf44a915c1f42bbc6393b2708cb93cf88
+      revision: 646a678c8d7b79a758236557161241caf678c9ab
     - name: trusted-firmware-m
       repo-path: sdk-trusted-firmware-m
       path: modules/tee/tf-m/trusted-firmware-m
-      revision: v1.8.0-ncs1-rc1
+      revision: 7b734feaad68ae53d98dbdd916d80d45ffda9a9f
+    - name: psa-arch-tests
+      repo-path: sdk-psa-arch-tests
+      path: modules/tee/tf-m/psa-arch-tests
+      revision: 94a349db22cd0e44136c281724ffc71b6e7391c3
     - name: matter
       repo-path: sdk-connectedhomeip
       path: modules/lib/matter
-      revision: 1d4ecfee38850ff9c40c1a7144519c32a72aaa3a
+      revision: e734b7924bf2b6bdc78e20d8416267f42ba95675
+      west-commands: scripts/west/west-commands.yml
       submodules:
         - name: nlio
           path: third_party/nlio/repo
@@ -159,22 +171,24 @@ manifest:
           path: third_party/nlunit-test/repo
         - name: pigweed
           path: third_party/pigweed/repo
+        - name: jsoncpp
+          path: third_party/jsoncpp/repo
       userdata:
         ncs:
           upstream-url: https://github.com/project-chip/connectedhomeip
-          upstream-sha: 8f66f4215bc0708efc8cc73bda80620e67d8955f
+          upstream-sha: 181b0cb14ff007ec912f2ba6627e05dfb066c008
           compare-by-default: false
     - name: nrf-802154
       repo-path: sdk-nrf-802154
       path: nrf-802154
-      revision: b488c89f238db985cac14738890d8d89fd648985
+      revision: b23a4e2711ec9b00b53cdaba5869cb4587a5d420
       groups:
         - nrf-802154
     - name: dragoon
       # Only for internal Nordic development
       repo-path: dragoon.git
       remote: dragoon
-      revision: c593baa9144d8d05304e9b92d7711ee8aa02503c
+      revision: 8d3138ea45420a234a86de12a50677bbe3d5041a
       submodules: true
       groups:
         - dragoon
@@ -189,18 +203,12 @@ manifest:
           compare-by-default: false
     - name: sidewalk
       repo-path: sdk-sidewalk
-      revision: 9a2e912e703625f11b73889678bfdf1792f3c266
-      submodules: true
+      revision: 2f8856f408f4c9ae466d33fa7f6230e3bd6f30a8
       groups:
         - sidewalk
-    - name: homekit
-      repo-path: sdk-homekit
-      revision: e941e59a43e78e6b40232fe70b7e95ef5e37fa87
-      groups:
-        - homekit
     - name: find-my
       repo-path: sdk-find-my
-      revision: 1b6cb33c5584ca19f328f7844fe57accc1c21045
+      revision: 68a3f93bffcd844a90630d4e70f323f327bdf33f
       groups:
         - find-my
     - name: azure-sdk-for-c
@@ -215,7 +223,7 @@ manifest:
     - name: cirrus
       repo-path: sdk-mcu-drivers
       path: modules/hal/cirrus-logic
-      revision: 9f6b3812237fbb0d4157ba3584c13f1644fcbe3a
+      revision: 3873a08377d93a479105a75ac390d3bbcd31d690
       userdata:
         ncs:
           upstream-url: https://github.com/CirrusLogic/mcu-drivers
@@ -224,12 +232,18 @@ manifest:
     - name: openthread
       repo-path: sdk-openthread
       path: modules/lib/openthread
-      revision: 57ef721eeed2550835c528ab7b8e77671f7039d6
+      revision: ade9c2b2573a8898844d4c4c1f14d377d35a21e2
       userdata:
         ncs:
           upstream-url: https://github.com/openthread/openthread
           upstream-sha: c6eaeda5a1c1c5dbb24dce7e027340cb8893a77b
           compare-by-default: false
+    - name: suit-generator
+      revision: 60afbb26d3a00e5b2243f1304ba2bc4a6722960d
+      path: modules/lib/suit-generator
+    - name: suit-processor
+      revision: 5603911b75f037dc3822fd95542c3435c0bf812d
+      path: modules/lib/suit-processor
 
     # Other third-party repositories.
     - name: cmock
@@ -239,18 +253,18 @@ manifest:
       remote: throwtheswitch
     - name: memfault-firmware-sdk
       path: modules/lib/memfault-firmware-sdk
-      revision: 1.3.3
+      revision: 1.6.0
       remote: memfault
     - name: ant
       repo-path: sdk-ant
-      revision: c0cb28b9ea43009f6611386656881352d5382c36
+      revision: 39a2222ad786ee2f069dde41b16c8bbe775d9484
       remote: ant-nrfconnect
       groups:
         - ant
     - name: bsim
       repo-path: bsim_west
       remote: babblesim
-      revision: 384a091445c57b44ac8cbd18ebd245b47c71db94
+      revision: 68f6282c6a7f54641b75f5f9fc953c85e272a983
       import:
         path-prefix: tools
     - name: bme68x
@@ -267,6 +281,12 @@ manifest:
       revision: v1.5.2400
       groups:
         - bsec
+    - name: coremark
+      remote: eembc
+      path: modules/benchmark/coremark
+      revision: d5fad6bd094899101a4e5fd53af7298160ced6ab
+      groups:
+        - benchmark
 
 
   # West-related configuration for the nrf repository.

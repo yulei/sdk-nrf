@@ -12,6 +12,8 @@
 
 LOG_MODULE_DECLARE(app, CONFIG_CHIP_APP_LOG_LEVEL);
 
+using namespace Nrf;
+
 namespace
 {
 /* Maps single Matter device type to corresponding BLE service. */
@@ -20,6 +22,8 @@ CHIP_ERROR MatterDeviceTypeToBleService(MatterBridgedDevice::DeviceType deviceTy
 {
 	switch (deviceType) {
 	case MatterBridgedDevice::DeviceType::OnOffLight:
+	case MatterBridgedDevice::DeviceType::GenericSwitch:
+	case MatterBridgedDevice::DeviceType::OnOffLightSwitch:
 		serviceUUid = BleBridgedDeviceFactory::ServiceUuid::LedButtonService;
 		break;
 	case MatterBridgedDevice::DeviceType::TemperatureSensor:
@@ -42,7 +46,15 @@ CHIP_ERROR BleServiceToMatterDeviceType(BleBridgedDeviceFactory::ServiceUuid ser
 			return CHIP_ERROR_BUFFER_TOO_SMALL;
 		}
 		deviceType[0] = MatterBridgedDevice::DeviceType::OnOffLight;
+#ifdef CONFIG_BRIDGE_ONOFF_LIGHT_SWITCH_BRIDGED_DEVICE
+		deviceType[1] = MatterBridgedDevice::DeviceType::OnOffLightSwitch;
+		count = 2;
+#elif defined(CONFIG_BRIDGE_GENERIC_SWITCH_BRIDGED_DEVICE)
+		deviceType[1] = MatterBridgedDevice::DeviceType::GenericSwitch;
+		count = 2;
+#else
 		count = 1;
+#endif
 	} break;
 	case BleBridgedDeviceFactory::ServiceUuid::EnvironmentalSensorService: {
 		if (maxCount < 2) {
@@ -60,27 +72,30 @@ CHIP_ERROR BleServiceToMatterDeviceType(BleBridgedDeviceFactory::ServiceUuid ser
 
 CHIP_ERROR StoreDevice(MatterBridgedDevice *device, BridgedDeviceDataProvider *provider, uint8_t index)
 {
-	uint16_t endpointId;
 	uint8_t count = 0;
 	uint8_t indexes[BridgeManager::kMaxBridgedDevices] = { 0 };
 	bool deviceRefresh = false;
+	BridgeStorageManager::BridgedDevice bridgedDevice;
 
 	/* Check if a device is already present in the storage. */
-	if (BridgeStorageManager::Instance().LoadBridgedDeviceEndpointId(endpointId, index)) {
+	if (BridgeStorageManager::Instance().LoadBridgedDevice(bridgedDevice, index)) {
 		deviceRefresh = true;
 	}
 
-	if (!BridgeStorageManager::Instance().StoreBridgedDevice(device, index)) {
-		LOG_ERR("Failed to store bridged device");
-		return CHIP_ERROR_INTERNAL;
-	}
-
 	BLEBridgedDeviceProvider *bleProvider = static_cast<BLEBridgedDeviceProvider *>(provider);
-
 	bt_addr_le_t addr = bleProvider->GetBtAddress();
 
-	if (!BridgeStorageManager::Instance().StoreBtAddress(addr, index)) {
-		LOG_ERR("Failed to store bridged device's Bluetooth address");
+	bridgedDevice.mEndpointId = device->GetEndpointId();
+	bridgedDevice.mDeviceType = device->GetDeviceType();
+	bridgedDevice.mNodeLabelLength = strlen(device->GetNodeLabel());
+	memcpy(bridgedDevice.mNodeLabel, device->GetNodeLabel(), strlen(device->GetNodeLabel()));
+
+	/* Fill BT address information as a part of implementation specific user data. */
+	bridgedDevice.mUserDataSize = sizeof(addr);
+	bridgedDevice.mUserData = reinterpret_cast<uint8_t*>(&addr);
+
+	if (!BridgeStorageManager::Instance().StoreBridgedDevice(bridgedDevice, index)) {
+		LOG_ERR("Failed to store bridged device");
 		return CHIP_ERROR_INTERNAL;
 	}
 
@@ -112,10 +127,11 @@ CHIP_ERROR AddMatterDevices(MatterBridgedDevice::DeviceType deviceTypes[], uint8
 			    uint16_t endpointIds[] = nullptr)
 {
 	VerifyOrReturnError(provider != nullptr, CHIP_ERROR_INVALID_ARGUMENT, LOG_ERR("No valid data provider!"));
+	chip::Platform::UniquePtr<BridgedDeviceDataProvider> providerPtr(provider);
 	VerifyOrReturnError(count <= BridgeManager::kMaxBridgedDevicesPerProvider, CHIP_ERROR_BUFFER_TOO_SMALL,
 			    LOG_ERR("Trying to add too many endpoints for single provider device."));
 
-	CHIP_ERROR err;
+	CHIP_ERROR err = CHIP_NO_ERROR;
 
 	MatterBridgedDevice *newBridgedDevices[BridgeManager::kMaxBridgedDevicesPerProvider];
 	uint8_t deviceIndexes[BridgeManager::kMaxBridgedDevicesPerProvider];
@@ -125,35 +141,49 @@ CHIP_ERROR AddMatterDevices(MatterBridgedDevice::DeviceType deviceTypes[], uint8
 		forceIndexesAndEndpoints = true;
 	}
 
-	for (uint8_t i = 0; i < count; i++) {
-		newBridgedDevices[i] =
-			BleBridgedDeviceFactory::GetBridgedDeviceFactory().Create(deviceTypes[i], nodeLabel);
+	uint8_t addedDevicesCount = 0;
+	for (; addedDevicesCount < count; addedDevicesCount++) {
+		newBridgedDevices[addedDevicesCount] = BleBridgedDeviceFactory::GetBridgedDeviceFactory().Create(
+			deviceTypes[addedDevicesCount], nodeLabel);
 
-		if (!newBridgedDevices[i]) {
+		if (!newBridgedDevices[addedDevicesCount]) {
 			LOG_ERR("Cannot allocate Matter device of given type");
-			return CHIP_ERROR_NO_MEMORY;
+			err = CHIP_ERROR_NO_MEMORY;
+			break;
 		}
 
 		if (forceIndexesAndEndpoints) {
-			deviceIndexes[i] = indexes[i];
+			deviceIndexes[addedDevicesCount] = indexes[addedDevicesCount];
 		}
 	}
 
+	/* Not all requested devices were created successfully, delete all previously created objects and return. */
+	if (err != CHIP_NO_ERROR) {
+		for (uint8_t i = 0; i < addedDevicesCount; i++) {
+			chip::Platform::Delete(newBridgedDevices[i]);
+		}
+		return err;
+	}
+
 	if (forceIndexesAndEndpoints) {
-		err = BridgeManager::Instance().AddBridgedDevices(newBridgedDevices, provider, count, deviceIndexes,
-								  endpointIds);
+		err = BridgeManager::Instance().AddBridgedDevices(newBridgedDevices, providerPtr.get(), count,
+								  deviceIndexes, endpointIds);
 	} else {
-		err = BridgeManager::Instance().AddBridgedDevices(newBridgedDevices, provider, count, deviceIndexes);
+		err = BridgeManager::Instance().AddBridgedDevices(newBridgedDevices, providerPtr.get(), count,
+								  deviceIndexes);
 	}
 
 	if (err == CHIP_NO_ERROR) {
 		for (uint8_t i = 0; i < count; i++) {
-			err = StoreDevice(newBridgedDevices[i], provider, deviceIndexes[i]);
+			err = StoreDevice(newBridgedDevices[i], providerPtr.get(), deviceIndexes[i]);
 			if (err != CHIP_NO_ERROR) {
 				break;
 			}
 		}
 	}
+
+	/* The ownership was transferred unconditionally to the BridgeManager, release the pointer. */
+	providerPtr.release();
 
 	if (err != CHIP_NO_ERROR) {
 		LOG_ERR("Adding Matter bridged device failed: %s", ErrorStr(err));
@@ -174,36 +204,29 @@ struct BluetoothConnectionContext {
 	bt_addr_le_t address;
 };
 
-void BluetoothDeviceConnected(bool discoverySucceeded, void *context)
+CHIP_ERROR BluetoothDeviceConnected(bool success, void *context)
 {
 	if (!context) {
-		return;
+		return CHIP_ERROR_INVALID_ARGUMENT;
 	}
 
 	BluetoothConnectionContext *ctx = reinterpret_cast<BluetoothConnectionContext *>(context);
 
-	VerifyOrExit(discoverySucceeded, );
+	if (!success) {
+		chip::Platform::Delete(ctx->provider);
+		chip::Platform::Delete(ctx);
+		return CHIP_ERROR_INTERNAL;
+	}
 
-	/* Schedule adding device to main thread to avoid overflowing the BT stack. */
-	VerifyOrExit(chip::DeviceLayer::PlatformMgr().ScheduleWork(
-			     [](intptr_t context) {
-				     BluetoothConnectionContext *ctx =
-					     reinterpret_cast<BluetoothConnectionContext *>(context);
-				     chip::Optional<uint8_t> indexes[BridgeManager::kMaxBridgedDevicesPerProvider];
-				     chip::Optional<uint16_t> endpointIds[BridgeManager::kMaxBridgedDevicesPerProvider];
-				     if (CHIP_NO_ERROR != AddMatterDevices(ctx->deviceTypes, ctx->count, ctx->nodeLabel,
-									   ctx->provider)) {
-					     BLEConnectivityManager::Instance().RemoveBLEProvider(ctx->address);
-					     chip::Platform::Delete(ctx->provider);
-				     }
-				     chip::Platform::Delete(ctx);
-			     },
-			     reinterpret_cast<intptr_t>(ctx)) == CHIP_NO_ERROR, );
-	return;
-
-exit:
-	BLEConnectivityManager::Instance().RemoveBLEProvider(ctx->address);
+	/* Discovery was successful, try to bridge connected BLE device with the Matter counterpart. */
+	chip::Optional<uint8_t> indexes[BridgeManager::kMaxBridgedDevicesPerProvider];
+	chip::Optional<uint16_t> endpointIds[BridgeManager::kMaxBridgedDevicesPerProvider];
+	/* AddMatterDevices takes the ownership of the passed provider object and will
+	   delete it in case the BridgeManager fails to accept this object. */
+	CHIP_ERROR err = AddMatterDevices(ctx->deviceTypes, ctx->count, ctx->nodeLabel, ctx->provider);
 	chip::Platform::Delete(ctx);
+
+	return err;
 }
 } // namespace
 
@@ -219,7 +242,7 @@ BleBridgedDeviceFactory::BridgedDeviceFactory &BleBridgedDeviceFactory::GetBridg
 
 	static BridgedDeviceFactory sBridgedDeviceFactory{
 #ifdef CONFIG_BRIDGE_HUMIDITY_SENSOR_BRIDGED_DEVICE
-		{ DeviceType::HumiditySensor,
+		{ MatterBridgedDevice::DeviceType::HumiditySensor,
 		  [checkLabel](const char *nodeLabel) -> MatterBridgedDevice * {
 			  if (!checkLabel(nodeLabel)) {
 				  return nullptr;
@@ -228,7 +251,7 @@ BleBridgedDeviceFactory::BridgedDeviceFactory &BleBridgedDeviceFactory::GetBridg
 		  } },
 #endif
 #ifdef CONFIG_BRIDGE_ONOFF_LIGHT_BRIDGED_DEVICE
-		{ DeviceType::OnOffLight,
+		{ MatterBridgedDevice::DeviceType::OnOffLight,
 		  [checkLabel](const char *nodeLabel) -> MatterBridgedDevice * {
 			  if (!checkLabel(nodeLabel)) {
 				  return nullptr;
@@ -245,6 +268,24 @@ BleBridgedDeviceFactory::BridgedDeviceFactory &BleBridgedDeviceFactory::GetBridg
 			  return chip::Platform::New<TemperatureSensorDevice>(nodeLabel);
 		  } },
 #endif
+#ifdef CONFIG_BRIDGE_GENERIC_SWITCH_BRIDGED_DEVICE
+		{ MatterBridgedDevice::DeviceType::GenericSwitch,
+		  [checkLabel](const char *nodeLabel) -> MatterBridgedDevice * {
+			  if (!checkLabel(nodeLabel)) {
+				  return nullptr;
+			  }
+			  return chip::Platform::New<GenericSwitchDevice>(nodeLabel);
+		  } },
+#endif
+#ifdef CONFIG_BRIDGE_ONOFF_LIGHT_SWITCH_BRIDGED_DEVICE
+		{ MatterBridgedDevice::DeviceType::OnOffLightSwitch,
+		  [checkLabel](const char *nodeLabel) -> MatterBridgedDevice * {
+			  if (!checkLabel(nodeLabel)) {
+				  return nullptr;
+			  }
+			  return chip::Platform::New<OnOffLightSwitchDevice>(nodeLabel);
+		  } },
+#endif
 	};
 	return sBridgedDeviceFactory;
 }
@@ -253,14 +294,18 @@ BleBridgedDeviceFactory::BleDataProviderFactory &BleBridgedDeviceFactory::GetDat
 {
 	static BleDataProviderFactory sDeviceDataProvider
 	{
-#ifdef CONFIG_BRIDGE_ONOFF_LIGHT_BRIDGED_DEVICE
+#if defined(CONFIG_BRIDGE_ONOFF_LIGHT_BRIDGED_DEVICE) && (defined(CONFIG_BRIDGE_GENERIC_SWITCH_BRIDGED_DEVICE) ||      \
+							  defined(CONFIG_BRIDGE_ONOFF_LIGHT_SWITCH_BRIDGED_DEVICE))
 		{ ServiceUuid::LedButtonService,
-		  [](UpdateAttributeCallback clb) { return chip::Platform::New<BleOnOffLightDataProvider>(clb); } },
+		  [](UpdateAttributeCallback updateClb, InvokeCommandCallback commandClb) {
+			  return chip::Platform::New<BleLBSDataProvider>(updateClb, commandClb);
+		  } },
 #endif
 #if defined(CONFIG_BRIDGE_TEMPERATURE_SENSOR_BRIDGED_DEVICE) && defined(CONFIG_BRIDGE_HUMIDITY_SENSOR_BRIDGED_DEVICE)
-			{ ServiceUuid::EnvironmentalSensorService, [](UpdateAttributeCallback clb) {
-				 return chip::Platform::New<BleEnvironmentalDataProvider>(clb);
-			 } },
+			{ ServiceUuid::EnvironmentalSensorService,
+			  [](UpdateAttributeCallback updateClb, InvokeCommandCallback commandClb) {
+				  return chip::Platform::New<BleEnvironmentalDataProvider>(updateClb, commandClb);
+			  } },
 #endif
 	};
 	return sDeviceDataProvider;
@@ -285,8 +330,8 @@ CHIP_ERROR BleBridgedDeviceFactory::CreateDevice(int deviceType, bt_addr_le_t bt
 	err = MatterDeviceTypeToBleService(static_cast<MatterBridgedDevice::DeviceType>(deviceType), providerType);
 	VerifyOrExit(err == CHIP_NO_ERROR, );
 
-	provider = static_cast<BLEBridgedDeviceProvider *>(
-		BleBridgedDeviceFactory::GetDataProviderFactory().Create(providerType, BridgeManager::HandleUpdate));
+	provider = static_cast<BLEBridgedDeviceProvider *>(BleBridgedDeviceFactory::GetDataProviderFactory().Create(
+		providerType, BridgeManager::HandleUpdate, BridgeManager::HandleCommand));
 	if (!provider) {
 		return CHIP_ERROR_NO_MEMORY;
 	}
@@ -297,24 +342,36 @@ CHIP_ERROR BleBridgedDeviceFactory::CreateDevice(int deviceType, bt_addr_le_t bt
 	/* Confirm that the first connection was done and this will be only the device recovery. */
 	provider->ConfirmInitialConnection();
 	provider->InitializeBridgedDevice(btAddress, nullptr, nullptr);
-	BLEConnectivityManager::Instance().Recover(provider);
 	err = AddMatterDevices(reinterpret_cast<MatterBridgedDevice::DeviceType *>(&deviceType), 1, nodeLabel, provider,
 			       &index, &endpointId);
-exit:
 
 	if (err != CHIP_NO_ERROR) {
-		BLEConnectivityManager::Instance().RemoveBLEProvider(btAddress);
+		return err;
+	}
+
+	BLEConnectivityManager::Instance().Recover(provider);
+
+exit:
+	if (err != CHIP_NO_ERROR) {
 		chip::Platform::Delete(provider);
 	}
 
 	return err;
 }
 
-CHIP_ERROR BleBridgedDeviceFactory::CreateDevice(uint16_t uuid, bt_addr_le_t btAddress, const char *nodeLabel)
+CHIP_ERROR BleBridgedDeviceFactory::CreateDevice(uint16_t uuid, bt_addr_le_t btAddress, const char *nodeLabel,
+						 BLEConnectivityManager::ConnectionSecurityRequest *request)
 {
-	BLEBridgedDeviceProvider *provider =
-		static_cast<BLEBridgedDeviceProvider *>(BleBridgedDeviceFactory::GetDataProviderFactory().Create(
-			static_cast<ServiceUuid>(uuid), BridgeManager::HandleUpdate));
+	/* Check if there is already existing provider for given address.
+	 * In case it is, the provider was either connected or recovered before.
+	 */
+	BLEBridgedDeviceProvider *provider = BLEConnectivityManager::Instance().FindBLEProvider(btAddress);
+	if (provider) {
+		return CHIP_ERROR_INCORRECT_STATE;
+	}
+
+	provider = static_cast<BLEBridgedDeviceProvider *>(BleBridgedDeviceFactory::GetDataProviderFactory().Create(
+		static_cast<ServiceUuid>(uuid), BridgeManager::HandleUpdate, BridgeManager::HandleCommand));
 	if (!provider) {
 		return CHIP_ERROR_NO_MEMORY;
 	}
@@ -347,16 +404,14 @@ CHIP_ERROR BleBridgedDeviceFactory::CreateDevice(uint16_t uuid, bt_addr_le_t btA
 	contextPtr->address = btAddress;
 
 	provider->InitializeBridgedDevice(btAddress, BluetoothDeviceConnected, contextPtr.get());
-	err = BLEConnectivityManager::Instance().Connect(provider);
+	err = BLEConnectivityManager::Instance().Connect(provider, request);
 
 	if (err == CHIP_NO_ERROR) {
 		contextPtr.release();
 	}
 
 exit:
-
 	if (err != CHIP_NO_ERROR) {
-		BLEConnectivityManager::Instance().RemoveBLEProvider(btAddress);
 		chip::Platform::Delete(provider);
 	}
 
@@ -393,21 +448,8 @@ CHIP_ERROR BleBridgedDeviceFactory::RemoveDevice(int endpointId)
 		return CHIP_ERROR_INTERNAL;
 	}
 
-	if (!BridgeStorageManager::Instance().RemoveBridgedDeviceEndpointId(index)) {
-		LOG_ERR("Failed to remove bridged device endpoint id.");
-		return CHIP_ERROR_INTERNAL;
-	}
-
-	/* Ignore error, as node label may not be present in the storage. */
-	BridgeStorageManager::Instance().RemoveBridgedDeviceNodeLabel(index);
-
-	if (!BridgeStorageManager::Instance().RemoveBridgedDeviceType(index)) {
-		LOG_ERR("Failed to remove bridged device type.");
-		return CHIP_ERROR_INTERNAL;
-	}
-
-	if (!BridgeStorageManager::Instance().RemoveBtAddress(index)) {
-		LOG_ERR("Failed to remove bridged device Bluetooth address.");
+	if (!BridgeStorageManager::Instance().RemoveBridgedDevice(index)) {
+		LOG_ERR("Failed to remove bridged device from the storage.");
 		return CHIP_ERROR_INTERNAL;
 	}
 

@@ -1,22 +1,27 @@
 .. _ug_bt_mesh_configuring:
 
-Configuring Bluetooth mesh in |NCS|
+Configuring Bluetooth Mesh in |NCS|
 ###################################
 
 .. contents::
    :local:
    :depth: 2
 
-The Bluetooth® mesh support is controlled by :kconfig:option:`CONFIG_BT_MESH`, which depends on the following configuration options:
+The Bluetooth® Mesh support is controlled by :kconfig:option:`CONFIG_BT_MESH`, which depends on the following configuration options:
 
 * :kconfig:option:`CONFIG_BT` - Enables the Bluetooth subsystem.
 * :kconfig:option:`CONFIG_BT_OBSERVER` - Enables the Bluetooth Observer role.
 * :kconfig:option:`CONFIG_BT_PERIPHERAL` - Enables the Bluetooth Peripheral role.
 
+When the Bluetooth LE Controller is located on a separate image (like on the :ref:`zephyr:nrf5340dk_nrf5340` and :ref:`zephyr:thingy53_nrf5340` boards), the following configuration must be applied to the Bluetooth LE Controller configuration:
+
+* :kconfig:option:`CONFIG_BT_EXT_ADV` =y.
+* :kconfig:option:`CONFIG_BT_EXT_ADV_MAX_ADV_SET` =5.
+
 Optional features configuration
 *******************************
 
-Optional features in the Bluetooth mesh stack must be explicitly enabled:
+Optional features in the Bluetooth Mesh stack must be explicitly enabled:
 
 * :kconfig:option:`CONFIG_BT_MESH_RELAY` - Enables message relaying.
 * :kconfig:option:`CONFIG_BT_MESH_FRIEND` - Enables the Friend role.
@@ -26,23 +31,23 @@ Optional features in the Bluetooth mesh stack must be explicitly enabled:
 * :kconfig:option:`CONFIG_BT_MESH_PB_GATT` - Enables the GATT provisioning bearer.
 * :kconfig:option:`CONFIG_BT_MESH_CDB` - Enables the Configuration Database subsystem.
 
-The persistent storage of the Bluetooth mesh provisioning and configuration data is enabled by :kconfig:option:`CONFIG_BT_SETTINGS`.
+The persistent storage of the Bluetooth Mesh provisioning and configuration data is enabled by :kconfig:option:`CONFIG_BT_SETTINGS`.
 See the :ref:`zephyr:bluetooth-persistent-storage` section of :ref:`zephyr:bluetooth-arch` for details.
 
 Mesh models
 ===========
 
-The |NCS| Bluetooth mesh model implementations are optional features, and each model has individual Kconfig options that must be explicitly enabled.
+The |NCS| Bluetooth Mesh model implementations are optional features, and each model has individual Kconfig options that must be explicitly enabled.
 See :ref:`bt_mesh_models` for details.
 
 Mesh settings/performance
 =========================
 
-The following configuration options are used to configure the behavior and performance of a Bluetooth mesh network.
-For more information about configuration options affecting the memory footprint of Bluetooth mesh, see :ref:`memory footprint optimization guide for Bluetooth mesh <app_memory_bt_mesh>`.
+The following configuration options are used to configure the behavior and performance of a Bluetooth Mesh network.
+For more information about configuration options affecting the memory footprint of Bluetooth Mesh, see :ref:`memory footprint optimization guide for Bluetooth Mesh <app_memory_bt_mesh>`.
 
 * :kconfig:option:`CONFIG_BT_MESH_PROXY_USE_DEVICE_NAME` - Includes the GAP device name in a scan response when the GATT Proxy feature is enabled.
-* :kconfig:option:`CONFIG_BT_MESH_DK_PROV` - Enables the Bluetooth mesh provisioning handler for the nRF5x development kits.
+* :kconfig:option:`CONFIG_BT_MESH_DK_PROV` - Enables the Bluetooth Mesh provisioning handler for the nRF5x development kits.
 * :kconfig:option:`CONFIG_BT_MESH_ADV_BUF_COUNT` - Defines the number of advertising buffers for local messages.
   Increase to improve the performance, at the cost of increased RAM usage.
 * :kconfig:option:`CONFIG_BT_MESH_ADV_EXT_GATT_SEPARATE` - Enables the use of a separate extended advertising set for GATT Server Advertising.
@@ -53,7 +58,7 @@ For more information about configuration options affecting the memory footprint 
 Additional configuration options
 ================================
 
-This section lists additional configuration options that can be used to configure behavior and performance of Bluetooth mesh.
+This section lists additional configuration options that can be used to configure behavior and performance of Bluetooth Mesh.
 The provided values are meant as suggestions only, and should be individually adjusted for each application.
 
 * :kconfig:option:`CONFIG_SYSTEM_WORKQUEUE_STACK_SIZE` - Sets the system workqueue stack size.
@@ -145,7 +150,7 @@ For more information, see :ref:`emds_readme`.
 Low Power node (LPN)
 --------------------
 
-The Low Power node (LPN) is a :ref:`power optimization <app_power_opt>` feature specific to Bluetooth mesh.
+The Low Power node (LPN) is a :ref:`power optimization <app_power_opt>` feature specific to Bluetooth Mesh.
 
 The following configuration options are relevant when using the LPN feature:
 
@@ -172,3 +177,73 @@ The following configuration options are relevant when using the LPN feature:
 * Reducing the Node ID advertisement timeout decreases the period where the device consumes power for advertising.
 
   * :kconfig:option:`CONFIG_BT_MESH_NODE_ID_TIMEOUT` =30.
+
+Persistent storage
+------------------
+
+Zephyr's Mesh implementation has been designed to use the :ref:`settings <zephyr:settings_api>` subsystem to store internal states and options in the :ref:`persistent storage <zephyr:bluetooth_mesh_persistent_storage>`.
+The settings subsystem can be used with different backends.
+Bluetooth Mesh is configured with the :ref:`non-volatile storage (NVS) <zephyr:nvs_api>` as the settings backend.
+
+Using the settings subsystem based on NVS can in some cases result in a significant store time increase.
+In a worst case scenario, the store time can be up to several minutes.
+This can for example happen when storing a large size replay protection list.
+It is recommended to configure the settings subsystem's internal caches to improve the performance.
+
+NVS lookup cache reduces the number of search loops within NVS' application table.
+
+* :kconfig:option:`CONFIG_NVS_LOOKUP_CACHE`.
+
+The Settings NVS name cache reduces the number of search loops of internal parameter identifiers, keeping them in memory.
+
+* :kconfig:option:`CONFIG_SETTINGS_NVS_NAME_CACHE`.
+
+The size of the Settings NVS name cache, :kconfig:option:`CONFIG_SETTINGS_NVS_NAME_CACHE_SIZE`, is recommended to be at least equal to the number of settings entries the device is expected to store.
+
+The Bluetooth Mesh stack stores the following data persistently:
+
+* Network information (primary address and device key)
+* Configuration parameters (supported features, default TTL, network transmit and relay retransmit parameters)
+* IV index
+* Sequence number
+* Heartbeat publication information
+* Application key(s) (the amount of entries is controlled by :kconfig:option:`CONFIG_BT_MESH_APP_KEY_COUNT`)
+* Network key(s) (the amount of entries is controlled by :kconfig:option:`CONFIG_BT_MESH_SUBNET_COUNT`)
+* Label UUIDs for virtual addressing (the amount of entries is controlled by :kconfig:option:`CONFIG_BT_MESH_LABEL_COUNT`)
+* RPL entries (the RPL size is controlled by :kconfig:option:`CONFIG_BT_MESH_CRPL`)
+
+The following data is stored for each model by the Bluetooth Mesh stack:
+
+* Model subscription state
+* Model publication state
+* Bound application key(s)
+* Subscription list for group addresses
+* Subscription list for virtual addresses
+* Label UUIDs the model is subscribed to
+* Model-specific data
+
+Model data stored persistently can be found under the ``Persistent storage`` section of the corresponding model documentation.
+
+Using the :ref:`bluetooth_mesh_sensor_server` sample as an example, configured according to the sample's :ref:`configuration guide <bluetooth_mesh_sensor_server_conf_models>`, results in the following list of possible entries (entries mentioned above are not included unless specifying the amount of entries):
+
+* 32 RPL entries - since the default Networked Lighting Control (NLC) configuration is used (:kconfig:option:`CONFIG_BT_MESH_NLC_PERF_DEFAULT` is set), the RPL size is 32.
+* Application keys - three keys are used.
+* Bound application keys - each of the three Sensor Server and Sensor Setup Server models has one bound application key.
+* Network keys - only one key is used.
+* Model subscriptions - each of the three Sensor Server and Sensor Setup Server models subscribes to a group address.
+* Model publication information - each of the three Sensor Server models publishes to a group address.
+* Virtual addressing is not used.
+* :ref:`Sensor Server model data <bt_mesh_sensor_srv_persistent_readme>` - each of the three Sensor Server models stores the following data:
+
+  * Minimum interval
+  * Delta thresholds
+  * Fast period divisor
+  * Fast cadence range
+
+* The following values are stored in the sample:
+
+  * Temperature range
+  * Presence motion threshold
+  * Ambient light level gain
+
+Adding up all entries, it is worth setting the cache size to minimum 71.

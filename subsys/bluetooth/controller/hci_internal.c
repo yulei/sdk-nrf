@@ -34,6 +34,10 @@ static struct
 	uint8_t raw_event[BT_BUF_EVT_RX_SIZE];
 } cmd_complete_or_status;
 
+#if defined(CONFIG_BT_CTLR_SDC_PAWR_SYNC)
+static bool padv_response_data_cmd_pending;
+#endif
+
 static hci_internal_user_cmd_handler_t user_cmd_handler;
 
 static bool command_generates_command_complete_event(uint16_t hci_opcode)
@@ -535,6 +539,8 @@ void hci_internal_supported_commands(sdc_hci_ip_supported_commands_t *cmds)
 	cmds->hci_le_enhanced_read_transmit_power_level = 1;
 	cmds->hci_le_read_remote_transmit_power_level = 1;
 	cmds->hci_le_set_transmit_power_reporting_enable = 1;
+	cmds->hci_le_set_path_loss_reporting_parameters = 1;
+	cmds->hci_le_set_path_loss_reporting_enable = 1;
 	/* NOTE: The DTM commands are *not* supported by the SoftDevice
 	 * controller. See doc/nrf/known_issues.rst.
 	 */
@@ -616,7 +622,9 @@ static void vs_zephyr_supported_commands(sdc_hci_vs_zephyr_supported_commands_t 
 	cmds->write_bd_addr = 1;
 	cmds->read_static_addresses = 1;
 	cmds->read_key_hierarchy_roots = 1;
+#ifdef CONFIG_DT_HAS_NORDIC_NRF_TEMP_ENABLED
 	cmds->read_chip_temperature = 1;
+#endif
 
 #if defined(CONFIG_BT_CTLR_TX_PWR_DYNAMIC_CONTROL)
 	cmds->write_tx_power_level = 1;
@@ -637,8 +645,42 @@ static void vs_supported_commands(sdc_hci_vs_supported_vs_commands_t *cmds)
 	cmds->event_length_set = 1;
 #if defined(CONFIG_BT_CTLR_LE_POWER_CONTROL)
 	cmds->write_remote_tx_power = 1;
-	cmds->set_auto_power_control_request_param = 1;
-	cmds->set_power_control_apr_handling = 1;
+	cmds->set_power_control_request_params = 1;
+	cmds->read_average_rssi = 1;
+#endif
+#if defined(CONFIG_BT_CENTRAL)
+	cmds->central_acl_event_spacing_set = 1;
+#endif
+
+#if defined(CONFIG_BT_CTLR_SDC_EVENT_TRIGGER)
+	cmds->set_conn_event_trigger = 1;
+#endif
+
+#if defined(CONFIG_BT_CONN)
+	cmds->get_next_conn_event_counter = 1;
+#endif
+
+#if defined(CONFIG_BT_CTLR_SDC_PAWR_ADV)
+	cmds->allow_parallel_connection_establishments = 1;
+#endif
+
+#if defined(CONFIG_BT_CONN)
+	cmds->min_val_of_max_acl_tx_payload_set = 1;
+#endif
+#if defined(CONFIG_BT_CTLR_ISO_TX_BUFFERS)
+	cmds->iso_read_tx_timestamp = 1;
+#endif
+#if defined(CONFIG_BT_CTLR_ADV_ISO)
+	cmds->big_reserved_time_set = 1;
+#endif
+#if defined(CONFIG_BT_CTLR_CONN_ISO)
+	cmds->cig_reserved_time_set = 1;
+	cmds->cis_subevent_length_set = 1;
+#endif
+
+#if defined(CONFIG_BT_OBSERVER)
+	cmds->scan_channel_map_set = 1;
+	cmds->scan_accept_ext_adv_packets_set = 1;
 #endif
 }
 #endif	/* CONFIG_BT_HCI_VS */
@@ -704,6 +746,7 @@ void hci_internal_le_supported_features(
 #if defined(CONFIG_BT_CTLR_LE_POWER_CONTROL)
 	features->params.le_power_control_request = 1;
 	features->params.le_power_change_indication = 1;
+	features->params.le_path_loss_monitoring = 1;
 #endif
 
 #if defined(CONFIG_BT_CTLR_ADV_PERIODIC_ADI_SUPPORT)
@@ -752,8 +795,10 @@ static void le_read_supported_states(uint8_t *buf)
 
 #define ST_SCA (BIT(4)  | BIT(5)  | BIT(8)  | BIT(9)  | BIT(10) | \
 		BIT(11) | BIT(12) | BIT(13) | BIT(14) | BIT(15) | \
-		BIT(22) | BIT(23) | BIT(24) | BIT(25) | BIT(26) | \
+		BIT(24) | BIT(25) | BIT(26) | \
 		BIT(27) | BIT(30) | BIT(31))
+
+#define ST_SCA_INI (BIT(22) | BIT(23))
 
 #define ST_SLA (BIT(2)  | BIT(3)  | BIT(7)  | BIT(10) | BIT(11) | \
 		BIT(14) | BIT(15) | BIT(20) | BIT(21) | BIT(26) | \
@@ -794,11 +839,13 @@ static void le_read_supported_states(uint8_t *buf)
 	states1 &= ~ST_MAS;
 	states2 &= ~ST_MAS2;
 #endif
-	/* All states and combinations supported except:
-	 * Initiating State + Passive Scanning
-	 * Initiating State + Active Scanning
-	 */
-	states1 &= ~(BIT(22) | BIT(23));
+
+#if defined(CONFIG_BT_CTLR_SDC_ALLOW_PARALLEL_SCANNING_AND_INITIATING)
+	states1 |= ST_SCA_INI;
+#else
+	states1 &= ~ST_SCA_INI;
+#endif
+
 	*buf = states1;
 	*(buf + 4) = states2;
 }
@@ -1259,6 +1306,16 @@ static uint8_t le_controller_cmd_put(uint8_t const * const cmd,
 			sizeof(sdc_hci_cmd_le_set_transmit_power_reporting_enable_return_t);
 		return sdc_hci_cmd_le_set_transmit_power_reporting_enable((void *)cmd_params,
 									  (void *)event_out_params);
+
+	case SDC_HCI_OPCODE_CMD_LE_SET_PATH_LOSS_REPORTING_PARAMS:
+		*param_length_out += sizeof(sdc_hci_cmd_le_set_path_loss_reporting_params_return_t);
+		return sdc_hci_cmd_le_set_path_loss_reporting_params((void *)cmd_params,
+								     (void *)event_out_params);
+
+	case SDC_HCI_OPCODE_CMD_LE_SET_PATH_LOSS_REPORTING_ENABLE:
+		*param_length_out += sizeof(sdc_hci_cmd_le_set_path_loss_reporting_enable_return_t);
+		return sdc_hci_cmd_le_set_path_loss_reporting_enable((void *)cmd_params,
+								     (void *)event_out_params);
 #endif
 
 #if defined(CONFIG_BT_CTLR_LE_POWER_CONTROL) || defined(CONFIG_BT_CTLR_ADV_EXT)
@@ -1477,15 +1534,14 @@ static uint8_t le_controller_cmd_put(uint8_t const * const cmd,
 }
 
 #if defined(CONFIG_BT_HCI_VS)
-static uint8_t vs_cmd_put(uint8_t const * const cmd,
-			  uint8_t * const raw_event_out,
+static uint8_t vs_cmd_put(uint8_t const *const cmd, uint8_t *const raw_event_out,
 			  uint8_t *param_length_out)
 {
 	uint8_t const *cmd_params = &cmd[BT_HCI_CMD_HDR_SIZE];
-	uint8_t * const event_out_params = &raw_event_out[CMD_COMPLETE_MIN_SIZE];
+	uint8_t *const event_out_params = &raw_event_out[CMD_COMPLETE_MIN_SIZE];
 	uint16_t opcode = sys_get_le16(cmd);
 
-	switch (opcode)	{
+	switch (opcode) {
 	case SDC_HCI_OPCODE_CMD_VS_ZEPHYR_READ_VERSION_INFO:
 		*param_length_out += sizeof(sdc_hci_cmd_vs_zephyr_read_version_info_return_t);
 		return sdc_hci_cmd_vs_zephyr_read_version_info((void *)event_out_params);
@@ -1502,14 +1558,16 @@ static uint8_t vs_cmd_put(uint8_t const * const cmd,
 		return sdc_hci_cmd_vs_zephyr_read_static_addresses((void *)event_out_params);
 	case SDC_HCI_OPCODE_CMD_VS_ZEPHYR_READ_KEY_HIERARCHY_ROOTS:
 		*param_length_out +=
-				sizeof(sdc_hci_cmd_vs_zephyr_read_key_hierarchy_roots_return_t);
+			sizeof(sdc_hci_cmd_vs_zephyr_read_key_hierarchy_roots_return_t);
 		return sdc_hci_cmd_vs_zephyr_read_key_hierarchy_roots((void *)event_out_params);
 	case SDC_HCI_OPCODE_CMD_VS_ZEPHYR_WRITE_BD_ADDR:
 		return sdc_hci_cmd_vs_zephyr_write_bd_addr((void *)cmd_params);
 
+#if defined(CONFIG_DT_HAS_NORDIC_NRF_TEMP_ENABLED)
 	case SDC_HCI_OPCODE_CMD_VS_ZEPHYR_READ_CHIP_TEMP:
 		*param_length_out += sizeof(sdc_hci_cmd_vs_zephyr_read_chip_temp_return_t);
 		return sdc_hci_cmd_vs_zephyr_read_chip_temp((void *)event_out_params);
+#endif
 
 #if defined(CONFIG_BT_CTLR_TX_PWR_DYNAMIC_CONTROL)
 	case SDC_HCI_OPCODE_CMD_VS_ZEPHYR_WRITE_TX_POWER:
@@ -1519,7 +1577,7 @@ static uint8_t vs_cmd_put(uint8_t const * const cmd,
 	case SDC_HCI_OPCODE_CMD_VS_ZEPHYR_READ_TX_POWER:
 		*param_length_out += sizeof(sdc_hci_cmd_vs_zephyr_read_tx_power_return_t);
 		return sdc_hci_cmd_vs_zephyr_read_tx_power((void *)cmd_params,
-							    (void *)event_out_params);
+							   (void *)event_out_params);
 #endif /* CONFIG_BT_CTLR_TX_PWR_DYNAMIC_CONTROL */
 #endif /* CONFIG_BT_HCI_VS_EXT */
 	case SDC_HCI_OPCODE_CMD_VS_READ_SUPPORTED_VS_COMMANDS:
@@ -1551,10 +1609,63 @@ static uint8_t vs_cmd_put(uint8_t const * const cmd,
 #if defined(CONFIG_BT_CTLR_LE_POWER_CONTROL)
 	case SDC_HCI_OPCODE_CMD_VS_WRITE_REMOTE_TX_POWER:
 		return sdc_hci_cmd_vs_write_remote_tx_power((void *)cmd_params);
-	case SDC_HCI_OPCODE_CMD_VS_SET_AUTO_POWER_CONTROL_REQUEST_PARAM:
-		return sdc_hci_cmd_vs_set_auto_power_control_request_param((void *)cmd_params);
-	case SDC_HCI_OPCODE_CMD_VS_SET_POWER_CONTROL_APR_HANDLING:
-		return sdc_hci_cmd_vs_set_power_control_apr_handling((void *)cmd_params);
+	case SDC_HCI_OPCODE_CMD_VS_SET_POWER_CONTROL_REQUEST_PARAMS:
+		return sdc_hci_cmd_vs_set_power_control_request_params((void *)cmd_params);
+	case SDC_HCI_OPCODE_CMD_VS_READ_AVERAGE_RSSI:
+		*param_length_out += sizeof(sdc_hci_cmd_vs_read_average_rssi_return_t);
+		return sdc_hci_cmd_vs_read_average_rssi((void *)cmd_params,
+							(void *)event_out_params);
+#endif
+#ifdef CONFIG_BT_CENTRAL
+	case SDC_HCI_OPCODE_CMD_VS_CENTRAL_ACL_EVENT_SPACING_SET:
+		return sdc_hci_cmd_vs_central_acl_event_spacing_set((void *)cmd_params);
+#endif
+#if defined(CONFIG_BT_CTLR_SDC_EVENT_TRIGGER)
+	case SDC_HCI_OPCODE_CMD_VS_SET_CONN_EVENT_TRIGGER:
+		return sdc_hci_cmd_vs_set_conn_event_trigger((void *)cmd_params);
+#endif
+#if defined(CONFIG_BT_CONN)
+	case SDC_HCI_OPCODE_CMD_VS_GET_NEXT_CONN_EVENT_COUNTER:
+		*param_length_out += sizeof(sdc_hci_cmd_vs_get_next_conn_event_counter_return_t);
+		return sdc_hci_cmd_vs_get_next_conn_event_counter((void *)cmd_params,
+							    (void *)event_out_params);
+#endif
+#if defined(CONFIG_BT_CTLR_SDC_PAWR_ADV)
+	case SDC_HCI_OPCODE_CMD_VS_ALLOW_PARALLEL_CONNECTION_ESTABLISHMENTS:
+		return sdc_hci_cmd_vs_allow_parallel_connection_establishments((void *)cmd_params);
+#endif
+#if defined(CONFIG_BT_CONN)
+	case SDC_HCI_OPCODE_CMD_VS_MIN_VAL_OF_MAX_ACL_TX_PAYLOAD_SET:
+		return sdc_hci_cmd_vs_min_val_of_max_acl_tx_payload_set((void *)cmd_params);
+#endif
+#if defined(CONFIG_BT_CTLR_ISO_TX_BUFFERS)
+	case SDC_HCI_OPCODE_CMD_VS_ISO_READ_TX_TIMESTAMP:
+		*param_length_out += sizeof(sdc_hci_cmd_vs_iso_read_tx_timestamp_return_t);
+		return sdc_hci_cmd_vs_iso_read_tx_timestamp(
+			(sdc_hci_cmd_vs_iso_read_tx_timestamp_t const *)cmd_params,
+			(sdc_hci_cmd_vs_iso_read_tx_timestamp_return_t *)event_out_params);
+#endif /* CONFIG_BT_CTLR_ISO_TX_BUFFERS */
+#if defined(CONFIG_BT_ISO_BROADCASTER)
+	case SDC_HCI_OPCODE_CMD_VS_BIG_RESERVED_TIME_SET:
+		return sdc_hci_cmd_vs_big_reserved_time_set(
+			(sdc_hci_cmd_vs_big_reserved_time_set_t const *)cmd_params);
+#endif
+#if defined(CONFIG_BT_CTLR_CONN_ISO)
+	case SDC_HCI_OPCODE_CMD_VS_CIG_RESERVED_TIME_SET:
+		return sdc_hci_cmd_vs_cig_reserved_time_set(
+			(sdc_hci_cmd_vs_cig_reserved_time_set_t const *)cmd_params);
+	case SDC_HCI_OPCODE_CMD_VS_CIS_SUBEVENT_LENGTH_SET:
+		return sdc_hci_cmd_vs_cis_subevent_length_set(
+			(sdc_hci_cmd_vs_cis_subevent_length_set_t const *)cmd_params);
+#endif
+
+#if defined(CONFIG_BT_OBSERVER)
+	case SDC_HCI_OPCODE_CMD_VS_SCAN_CHANNEL_MAP_SET:
+		return sdc_hci_cmd_vs_scan_channel_map_set(
+			(sdc_hci_cmd_vs_scan_channel_map_set_t const *)cmd_params);
+	case SDC_HCI_OPCODE_CMD_VS_SCAN_ACCEPT_EXT_ADV_PACKETS_SET:
+		return sdc_hci_cmd_vs_scan_accept_ext_adv_packets_set(
+			(sdc_hci_cmd_vs_scan_accept_ext_adv_packets_set_t const *)cmd_params);
 #endif
 	default:
 		return BT_HCI_ERR_UNKNOWN_CMD;
@@ -1634,7 +1745,11 @@ int hci_internal_cmd_put(uint8_t *cmd_in)
 {
 	uint16_t opcode = sys_get_le16(cmd_in);
 
-	if (cmd_complete_or_status.occurred) {
+	if (cmd_complete_or_status.occurred
+#if defined(CONFIG_BT_CTLR_SDC_PAWR_SYNC)
+		|| padv_response_data_cmd_pending
+#endif
+		) {
 		return -NRF_EPERM;
 	}
 
@@ -1663,6 +1778,7 @@ int hci_internal_cmd_put(uint8_t *cmd_in)
 	}
 #endif
 
+#if defined(CONFIG_BT_CTLR_SDC_PAWR_SYNC)
 	if (opcode == SDC_HCI_OPCODE_CMD_LE_SET_PERIODIC_ADV_RESPONSE_DATA
 		&&
 		cmd_complete_or_status.raw_event[0] == BT_HCI_EVT_CMD_COMPLETE) {
@@ -1671,7 +1787,9 @@ int hci_internal_cmd_put(uint8_t *cmd_in)
 		 */
 
 		cmd_complete_or_status.occurred = false;
+		padv_response_data_cmd_pending = true;
 	}
+#endif
 
 	return 0;
 }
@@ -1691,5 +1809,14 @@ int hci_internal_msg_get(uint8_t *msg_out, sdc_hci_msg_type_t *msg_type_out)
 		return 0;
 	}
 
-	return sdc_hci_get(msg_out, msg_type_out);
+	const int retval = sdc_hci_get(msg_out, msg_type_out);
+
+#if defined(CONFIG_BT_CTLR_SDC_PAWR_SYNC)
+	if (*msg_type_out == SDC_HCI_MSG_TYPE_EVT
+		&& msg_out[0] == BT_HCI_EVT_CMD_COMPLETE) {
+		padv_response_data_cmd_pending = false;
+	}
+#endif
+
+	return retval;
 }

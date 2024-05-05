@@ -10,10 +10,12 @@ namespace
 {
 DESCRIPTOR_CLUSTER_ATTRIBUTES(descriptorAttrs);
 BRIDGED_DEVICE_BASIC_INFORMATION_CLUSTER_ATTRIBUTES(bridgedDeviceBasicAttrs);
+IDENTIFY_CLUSTER_ATTRIBUTES(identifyAttrs);
 }; /* namespace */
 
 using namespace ::chip;
 using namespace ::chip::app;
+using namespace Nrf;
 
 DECLARE_DYNAMIC_ATTRIBUTE_LIST_BEGIN(tempSensorAttrs)
 DECLARE_DYNAMIC_ATTRIBUTE(Clusters::TemperatureMeasurement::Attributes::MeasuredValue::Id, INT16S, 2, 0),
@@ -23,16 +25,19 @@ DECLARE_DYNAMIC_ATTRIBUTE(Clusters::TemperatureMeasurement::Attributes::Measured
 	DECLARE_DYNAMIC_ATTRIBUTE_LIST_END();
 
 DECLARE_DYNAMIC_CLUSTER_LIST_BEGIN(bridgedTemperatureClusters)
-DECLARE_DYNAMIC_CLUSTER(Clusters::TemperatureMeasurement::Id, tempSensorAttrs, nullptr, nullptr),
-	DECLARE_DYNAMIC_CLUSTER(Clusters::Descriptor::Id, descriptorAttrs, nullptr, nullptr),
-	DECLARE_DYNAMIC_CLUSTER(Clusters::BridgedDeviceBasicInformation::Id, bridgedDeviceBasicAttrs, nullptr,
+DECLARE_DYNAMIC_CLUSTER(Clusters::TemperatureMeasurement::Id, tempSensorAttrs, ZAP_CLUSTER_MASK(SERVER), nullptr, nullptr),
+	DECLARE_DYNAMIC_CLUSTER(Clusters::Descriptor::Id, descriptorAttrs, ZAP_CLUSTER_MASK(SERVER), nullptr, nullptr),
+	DECLARE_DYNAMIC_CLUSTER(Clusters::BridgedDeviceBasicInformation::Id, bridgedDeviceBasicAttrs, ZAP_CLUSTER_MASK(SERVER), nullptr, nullptr),
+	DECLARE_DYNAMIC_CLUSTER(Clusters::Identify::Id, identifyAttrs, ZAP_CLUSTER_MASK(SERVER), sIdentifyIncomingCommands,
 				nullptr) DECLARE_DYNAMIC_CLUSTER_LIST_END;
 
 DECLARE_DYNAMIC_ENDPOINT(bridgedTemperatureEndpoint, bridgedTemperatureClusters);
 
+static constexpr uint8_t kBridgedTemperatureEndpointVersion = 2;
+
 static constexpr EmberAfDeviceType kBridgedTemperatureDeviceTypes[] = {
 	{ static_cast<chip::DeviceTypeId>(MatterBridgedDevice::DeviceType::TemperatureSensor),
-	  MatterBridgedDevice::kDefaultDynamicEndpointVersion },
+	  kBridgedTemperatureEndpointVersion },
 	{ static_cast<chip::DeviceTypeId>(MatterBridgedDevice::DeviceType::BridgedNode),
 	  MatterBridgedDevice::kDefaultDynamicEndpointVersion }
 };
@@ -54,7 +59,6 @@ CHIP_ERROR TemperatureSensorDevice::HandleRead(ClusterId clusterId, AttributeId 
 	switch (clusterId) {
 	case Clusters::TemperatureMeasurement::Id:
 		return HandleReadTemperatureMeasurement(attributeId, buffer, maxReadLength);
-		break;
 	default:
 		return CHIP_ERROR_INVALID_ARGUMENT;
 	}
@@ -100,6 +104,8 @@ CHIP_ERROR TemperatureSensorDevice::HandleAttributeChange(chip::ClusterId cluste
 	switch (clusterId) {
 	case Clusters::BridgedDeviceBasicInformation::Id:
 		return HandleWriteDeviceBasicInformation(clusterId, attributeId, data, dataSize);
+	case Clusters::Identify::Id:
+		return HandleWriteIdentify(attributeId, data, dataSize);
 	case Clusters::TemperatureMeasurement::Id: {
 		switch (attributeId) {
 		case Clusters::TemperatureMeasurement::Attributes::MeasuredValue::Id: {

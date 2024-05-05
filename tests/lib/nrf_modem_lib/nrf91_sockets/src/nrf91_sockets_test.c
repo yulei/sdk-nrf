@@ -57,7 +57,7 @@ static int nrf_getaddrinfo_stub(const char *p_node, const char *p_service,
 	return test_state_nrf_getaddrinfo.ret;
 }
 
-static int nrf_accept_stub(int socket, struct nrf_sockaddr *address,
+static int nrf_accept_stub(int zsock_socket, struct nrf_sockaddr *address,
 			   nrf_socklen_t *address_len, int cmock_num_calls)
 {
 	*address = test_state_nrf_accept.nrf_addr;
@@ -73,7 +73,7 @@ static void nrf_freeaddrinfo_stub(struct nrf_addrinfo *p_res, int cmock_num_call
 	}
 }
 
-static ssize_t nrf_recvfrom_stub(int socket, void *buffer, size_t length,
+static ssize_t nrf_recvfrom_stub(int zsock_socket, void *buffer, size_t length,
 				 int flags, struct nrf_sockaddr *address,
 				 nrf_socklen_t *address_len,
 				 int cmock_num_calls)
@@ -92,8 +92,8 @@ static ssize_t nrf_recvfrom_stub(int socket, void *buffer, size_t length,
 void test_nrf91_socket_offload_getaddrinfo_errors(void)
 {
 	int ret;
-	struct addrinfo *res;
-	struct addrinfo hints = {
+	struct zsock_addrinfo *res;
+	struct zsock_addrinfo hints = {
 		.ai_family = AF_INET,
 		.ai_socktype = SOCK_STREAM,
 	};
@@ -124,11 +124,11 @@ void test_nrf91_socket_offload_getaddrinfo_errors(void)
 
 	for (int i = 0; i < ERROR_SIZE; i++) {
 		__cmock_nrf_getaddrinfo_ExpectAndReturn(HTTPS_HOSTNAME, NULL,
-						       NULL, NULL, nrf_errors[i]);
+							NULL, NULL, nrf_errors[i]);
 		__cmock_nrf_getaddrinfo_IgnoreArg_hints();
 		__cmock_nrf_getaddrinfo_IgnoreArg_res();
 
-		ret = getaddrinfo(HTTPS_HOSTNAME, NULL, &hints, &res);
+		ret = zsock_getaddrinfo(HTTPS_HOSTNAME, NULL, &hints, &res);
 
 		TEST_ASSERT_EQUAL(ret, dns_errors[i]);
 	}
@@ -137,8 +137,8 @@ void test_nrf91_socket_offload_getaddrinfo_errors(void)
 void test_nrf91_socket_offload_getaddrinfo_eai_family(void)
 {
 	int ret;
-	struct addrinfo *res;
-	struct addrinfo hints = {
+	struct zsock_addrinfo *res;
+	struct zsock_addrinfo hints = {
 		.ai_family = AF_INET,
 		.ai_socktype = SOCK_STREAM,
 	};
@@ -153,7 +153,7 @@ void test_nrf91_socket_offload_getaddrinfo_eai_family(void)
 	__cmock_nrf_getaddrinfo_Stub(nrf_getaddrinfo_stub);
 	__cmock_nrf_freeaddrinfo_Stub(nrf_freeaddrinfo_stub);
 
-	ret = getaddrinfo(HTTPS_HOSTNAME, NULL, &hints, &res);
+	ret = zsock_getaddrinfo(HTTPS_HOSTNAME, NULL, &hints, &res);
 
 	TEST_ASSERT_EQUAL(ret, DNS_EAI_FAMILY);
 }
@@ -161,8 +161,8 @@ void test_nrf91_socket_offload_getaddrinfo_eai_family(void)
 void test_nrf91_socket_offload_getaddrinfo_ipv4_success(void)
 {
 	int ret;
-	struct addrinfo *res;
-	struct addrinfo hints = {
+	struct zsock_addrinfo *res;
+	struct zsock_addrinfo hints = {
 		.ai_family = AF_INET,
 		.ai_socktype = SOCK_STREAM,
 		.ai_canonname = "name",
@@ -178,7 +178,7 @@ void test_nrf91_socket_offload_getaddrinfo_ipv4_success(void)
 	__cmock_nrf_getaddrinfo_Stub(nrf_getaddrinfo_stub);
 	__cmock_nrf_freeaddrinfo_Stub(nrf_freeaddrinfo_stub);
 
-	ret = getaddrinfo(HTTPS_HOSTNAME, NULL, &hints, &res);
+	ret = zsock_getaddrinfo(HTTPS_HOSTNAME, NULL, &hints, &res);
 	TEST_ASSERT_EQUAL(ret, 0);
 
 	TEST_ASSERT_EQUAL(res->ai_family, AF_INET);
@@ -189,8 +189,8 @@ void test_nrf91_socket_offload_getaddrinfo_ipv4_success(void)
 void test_nrf91_socket_offload_getaddrinfo_ipv6_success(void)
 {
 	int ret;
-	struct addrinfo *res;
-	struct addrinfo hints = {
+	struct zsock_addrinfo *res;
+	struct zsock_addrinfo hints = {
 		.ai_family = AF_INET6,
 		.ai_socktype = SOCK_STREAM,
 	};
@@ -205,7 +205,7 @@ void test_nrf91_socket_offload_getaddrinfo_ipv6_success(void)
 	__cmock_nrf_getaddrinfo_Stub(nrf_getaddrinfo_stub);
 	__cmock_nrf_freeaddrinfo_Stub(nrf_freeaddrinfo_stub);
 
-	ret = getaddrinfo(HTTPS_HOSTNAME, NULL, &hints, &res);
+	ret = zsock_getaddrinfo(HTTPS_HOSTNAME, NULL, &hints, &res);
 
 	TEST_ASSERT_EQUAL(ret, 0);
 
@@ -218,7 +218,7 @@ void test_nrf91_socket_offload_close_ebadf(void)
 {
 	int ret;
 
-	ret = close(-1);
+	ret = zsock_close(-1);
 
 	TEST_ASSERT_EQUAL(ret, -1);
 	TEST_ASSERT_EQUAL(errno, EBADF);
@@ -233,16 +233,15 @@ void test_nrf91_socket_offload_create_close_success(void)
 	int type = SOCK_STREAM;
 	int proto = IPPROTO_TCP;
 
-	__cmock_nrf_socket_ExpectAndReturn(NRF_AF_INET, NRF_SOCK_STREAM,
-					  NRF_IPPROTO_TCP, nrf_fd);
+	__cmock_nrf_socket_ExpectAndReturn(NRF_AF_INET, NRF_SOCK_STREAM, NRF_IPPROTO_TCP, nrf_fd);
 
-	fd = socket(family, type, proto);
+	fd = zsock_socket(family, type, proto);
 
 	TEST_ASSERT_EQUAL(fd, 0);
 
 	__cmock_nrf_close_ExpectAndReturn(nrf_fd, 0);
 
-	ret = close(fd);
+	ret = zsock_close(fd);
 
 	TEST_ASSERT_EQUAL(ret, 0);
 }
@@ -254,10 +253,9 @@ void test_nrf91_socket_offload_socket_error(void)
 	int type = SOCK_STREAM;
 	int proto = IPPROTO_TCP;
 
-	__cmock_nrf_socket_ExpectAndReturn(NRF_AF_INET, NRF_SOCK_STREAM,
-					  NRF_IPPROTO_TCP, -1);
+	__cmock_nrf_socket_ExpectAndReturn(NRF_AF_INET, NRF_SOCK_STREAM, NRF_IPPROTO_TCP, -1);
 
-	fd = socket(family, type, proto);
+	fd = zsock_socket(family, type, proto);
 
 	TEST_ASSERT_EQUAL(fd, -1);
 }
@@ -269,7 +267,7 @@ void test_nrf91_socket_create_native_socket_eafnosupport(void)
 	int type = SOCK_STREAM | SOCK_NATIVE;
 	int proto = IPPROTO_TCP;
 
-	fd = socket(family, type, proto);
+	fd = zsock_socket(family, type, proto);
 
 	TEST_ASSERT_EQUAL(errno, EAFNOSUPPORT);
 	TEST_ASSERT_EQUAL(fd, -1);
@@ -282,7 +280,7 @@ void test_nrf91_socket_create_native_socket_tls_eafnosupport(void)
 	int type = SOCK_STREAM | SOCK_NATIVE_TLS;
 	int proto = IPPROTO_TLS_1_2;
 
-	fd = socket(family, type, proto);
+	fd = zsock_socket(family, type, proto);
 
 	TEST_ASSERT_EQUAL(errno, EAFNOSUPPORT);
 	TEST_ASSERT_EQUAL(fd, -1);
@@ -296,16 +294,15 @@ void test_nrf91_socket_offload_create_close_proto_zero_success(void)
 	int family = AF_INET;
 	int type = SOCK_STREAM;
 
-	__cmock_nrf_socket_ExpectAndReturn(NRF_AF_INET, NRF_SOCK_STREAM,
-					  0, nrf_fd);
+	__cmock_nrf_socket_ExpectAndReturn(NRF_AF_INET, NRF_SOCK_STREAM, 0, nrf_fd);
 
-	fd = socket(family, type, 0);
+	fd = zsock_socket(family, type, 0);
 
 	TEST_ASSERT_EQUAL(fd, 0);
 
 	__cmock_nrf_close_ExpectAndReturn(nrf_fd, 0);
 
-	ret = close(fd);
+	ret = zsock_close(fd);
 
 	TEST_ASSERT_EQUAL(ret, 0);
 }
@@ -315,7 +312,7 @@ void test_nrf91_socket_offload_connect_ebadf(void)
 	int ret;
 	struct sockaddr address = { 0 };
 
-	ret = connect(-1, &address, sizeof(address));
+	ret = zsock_connect(-1, &address, sizeof(address));
 
 	TEST_ASSERT_EQUAL(ret, -1);
 	TEST_ASSERT_EQUAL(errno, EBADF);
@@ -334,24 +331,22 @@ void test_nrf91_socket_offload_connect_ipv4_success(void)
 	/* IPv4 */
 	address.sa_family = AF_INET;
 
-	__cmock_nrf_socket_ExpectAndReturn(NRF_AF_INET, NRF_SOCK_STREAM,
-					  NRF_IPPROTO_TCP, nrf_fd);
+	__cmock_nrf_socket_ExpectAndReturn(NRF_AF_INET, NRF_SOCK_STREAM, NRF_IPPROTO_TCP, nrf_fd);
 
-	fd = socket(family, type, proto);
+	fd = zsock_socket(family, type, proto);
 
 	TEST_ASSERT_EQUAL(fd, 0);
 
-	__cmock_nrf_connect_ExpectAndReturn(nrf_fd, NULL,
-					   sizeof(struct nrf_sockaddr_in), 0);
+	__cmock_nrf_connect_ExpectAndReturn(nrf_fd, NULL, sizeof(struct nrf_sockaddr_in), 0);
 	__cmock_nrf_connect_IgnoreArg_address();
 
-	ret = connect(fd, &address, sizeof(address));
+	ret = zsock_connect(fd, &address, sizeof(address));
 
 	TEST_ASSERT_EQUAL(ret, 0);
 
 	__cmock_nrf_close_ExpectAndReturn(nrf_fd, 0);
 
-	ret = close(fd);
+	ret = zsock_close(fd);
 
 	TEST_ASSERT_EQUAL(ret, 0);
 }
@@ -369,24 +364,22 @@ void test_nrf91_socket_offload_connect_ipv6_success(void)
 	/* IPv6 */
 	address.sa_family = AF_INET6;
 
-	__cmock_nrf_socket_ExpectAndReturn(NRF_AF_INET6, NRF_SOCK_STREAM,
-					  NRF_IPPROTO_TCP, nrf_fd);
+	__cmock_nrf_socket_ExpectAndReturn(NRF_AF_INET6, NRF_SOCK_STREAM, NRF_IPPROTO_TCP, nrf_fd);
 
-	fd = socket(family, type, proto);
+	fd = zsock_socket(family, type, proto);
 
 	TEST_ASSERT_EQUAL(fd, 0);
 
-	__cmock_nrf_connect_ExpectAndReturn(nrf_fd, NULL,
-					   sizeof(struct nrf_sockaddr_in6), 0);
+	__cmock_nrf_connect_ExpectAndReturn(nrf_fd, NULL, sizeof(struct nrf_sockaddr_in6), 0);
 	__cmock_nrf_connect_IgnoreArg_address();
 
-	ret = connect(fd, &address, sizeof(address));
+	ret = zsock_connect(fd, &address, sizeof(address));
 
 	TEST_ASSERT_EQUAL(ret, 0);
 
 	__cmock_nrf_close_ExpectAndReturn(nrf_fd, 0);
 
-	ret = close(fd);
+	ret = zsock_close(fd);
 
 	TEST_ASSERT_EQUAL(ret, 0);
 }
@@ -401,28 +394,27 @@ void test_nrf91_socket_offload_connect_non_ip_success(void)
 	int proto = IPPROTO_TCP;
 	struct sockaddr address = { 0 };
 
-	__cmock_nrf_socket_ExpectAndReturn(NRF_AF_PACKET, NRF_SOCK_STREAM,
-					  NRF_IPPROTO_TCP, nrf_fd);
+	__cmock_nrf_socket_ExpectAndReturn(NRF_AF_PACKET, NRF_SOCK_STREAM, NRF_IPPROTO_TCP, nrf_fd);
 
-	fd = socket(family, type, proto);
+	fd = zsock_socket(family, type, proto);
 
 	TEST_ASSERT_EQUAL(fd, 0);
 
 	__cmock_nrf_connect_ExpectAndReturn(nrf_fd, NULL, sizeof(address), 0);
 	__cmock_nrf_connect_IgnoreArg_address();
 
-	ret = connect(fd, &address, sizeof(address));
+	ret = zsock_connect(fd, &address, sizeof(address));
 
 	TEST_ASSERT_EQUAL(ret, 0);
 
 	__cmock_nrf_close_ExpectAndReturn(nrf_fd, 0);
 
-	ret = close(fd);
+	ret = zsock_close(fd);
 
 	TEST_ASSERT_EQUAL(ret, 0);
 }
 
-/* The check for wrong socket is done in Zephyr before calling the offloading layer.
+/* The check for wrong zsock_socket is done in Zephyr before calling the offloading layer.
  * Still keeping this test since it proves that this case is being handled no matter the
  * Zephyr implementation.
  */
@@ -435,7 +427,7 @@ void test_nrf91_socket_offload_bind_ebadf(void)
 	address.sin_addr.s_addr = INADDR_ANY;
 	address.sin_port = htons(PORT);
 
-	ret = bind(-1, (struct sockaddr *)&address, sizeof(address));
+	ret = zsock_bind(-1, (struct sockaddr *)&address, sizeof(address));
 
 	TEST_ASSERT_EQUAL(ret, -1);
 	TEST_ASSERT_EQUAL(errno, EBADF);
@@ -449,20 +441,20 @@ void test_nrf91_socket_offload_bind_eafnosupport(void)
 	struct sockaddr_in address;
 
 	__cmock_nrf_socket_ExpectAndReturn(NRF_AF_INET, NRF_SOCK_STREAM, 0, nrf_fd);
-	fd = socket(AF_INET, SOCK_STREAM, 0);
+	fd = zsock_socket(AF_INET, SOCK_STREAM, 0);
 
 	address.sin_family = WRONG_VALUE;
 	address.sin_addr.s_addr = INADDR_ANY;
 	address.sin_port = htons(PORT);
 
-	ret = bind(fd, (struct sockaddr *)&address, sizeof(address));
+	ret = zsock_bind(fd, (struct sockaddr *)&address, sizeof(address));
 
 	TEST_ASSERT_EQUAL(ret, -1);
 	TEST_ASSERT_EQUAL(errno, EAFNOSUPPORT);
 
 	__cmock_nrf_close_ExpectAndReturn(nrf_fd, 0);
 
-	ret = close(fd);
+	ret = zsock_close(fd);
 
 	TEST_ASSERT_EQUAL(ret, 0);
 }
@@ -475,7 +467,7 @@ void test_nrf91_socket_offload_bind_ipv4_success(void)
 	struct sockaddr_in address;
 
 	__cmock_nrf_socket_ExpectAndReturn(NRF_AF_INET, NRF_SOCK_STREAM, 0, nrf_fd);
-	fd = socket(AF_INET, SOCK_STREAM, 0);
+	fd = zsock_socket(AF_INET, SOCK_STREAM, 0);
 
 	address.sin_family = AF_INET;
 	address.sin_addr.s_addr = INADDR_ANY;
@@ -484,13 +476,13 @@ void test_nrf91_socket_offload_bind_ipv4_success(void)
 	__cmock_nrf_bind_ExpectAndReturn(nrf_fd, NULL, sizeof(struct nrf_sockaddr_in), 0);
 	__cmock_nrf_bind_IgnoreArg_address();
 
-	ret = bind(fd, (struct sockaddr *)&address, sizeof(address));
+	ret = zsock_bind(fd, (struct sockaddr *)&address, sizeof(address));
 
 	TEST_ASSERT_EQUAL(ret, 0);
 
 	__cmock_nrf_close_ExpectAndReturn(nrf_fd, 0);
 
-	ret = close(fd);
+	ret = zsock_close(fd);
 
 	TEST_ASSERT_EQUAL(ret, 0);
 }
@@ -503,7 +495,7 @@ void test_nrf91_socket_offload_bind_ipv6_success(void)
 	struct sockaddr_in address;
 
 	__cmock_nrf_socket_ExpectAndReturn(NRF_AF_INET6, NRF_SOCK_STREAM, 0, nrf_fd);
-	fd = socket(AF_INET6, SOCK_STREAM, 0);
+	fd = zsock_socket(AF_INET6, SOCK_STREAM, 0);
 
 	address.sin_family = AF_INET6;
 	address.sin_addr.s_addr = INADDR_ANY;
@@ -512,13 +504,13 @@ void test_nrf91_socket_offload_bind_ipv6_success(void)
 	__cmock_nrf_bind_ExpectAndReturn(nrf_fd, NULL, sizeof(struct nrf_sockaddr_in6), 0);
 	__cmock_nrf_bind_IgnoreArg_address();
 
-	ret = bind(fd, (struct sockaddr *)&address, sizeof(address));
+	ret = zsock_bind(fd, (struct sockaddr *)&address, sizeof(address));
 
 	TEST_ASSERT_EQUAL(ret, 0);
 
 	__cmock_nrf_close_ExpectAndReturn(nrf_fd, 0);
 
-	ret = close(fd);
+	ret = zsock_close(fd);
 
 	TEST_ASSERT_EQUAL(ret, 0);
 }
@@ -527,7 +519,7 @@ void test_nrf91_socket_offload_listen_ebadf(void)
 {
 	int ret;
 
-	ret = listen(-1, 1);
+	ret = zsock_listen(-1, 1);
 
 	TEST_ASSERT_EQUAL(ret, -1);
 	TEST_ASSERT_EQUAL(errno, EBADF);
@@ -542,7 +534,7 @@ void test_nrf91_socket_offload_listen_success(void)
 	int backlog = 1;
 
 	__cmock_nrf_socket_ExpectAndReturn(NRF_AF_INET6, NRF_SOCK_STREAM, 0, nrf_fd);
-	fd = socket(AF_INET6, SOCK_STREAM, 0);
+	fd = zsock_socket(AF_INET6, SOCK_STREAM, 0);
 
 	address.sin_family = AF_INET6;
 	address.sin_addr.s_addr = INADDR_ANY;
@@ -551,19 +543,19 @@ void test_nrf91_socket_offload_listen_success(void)
 	__cmock_nrf_bind_ExpectAndReturn(nrf_fd, NULL, sizeof(struct nrf_sockaddr_in6), 0);
 	__cmock_nrf_bind_IgnoreArg_address();
 
-	ret = bind(fd, (struct sockaddr *)&address, sizeof(address));
+	ret = zsock_bind(fd, (struct sockaddr *)&address, sizeof(address));
 
 	TEST_ASSERT_EQUAL(ret, 0);
 
 	__cmock_nrf_listen_ExpectAndReturn(nrf_fd, backlog, 0);
 
-	ret = listen(fd, backlog);
+	ret = zsock_listen(fd, backlog);
 
 	TEST_ASSERT_EQUAL(ret, 0);
 
 	__cmock_nrf_close_ExpectAndReturn(nrf_fd, 0);
 
-	ret = close(fd);
+	ret = zsock_close(fd);
 
 	TEST_ASSERT_EQUAL(ret, 0);
 }
@@ -578,8 +570,7 @@ void test_nrf91_socket_offload_accept_ebadf(void)
 	address.sin_addr.s_addr = INADDR_ANY;
 	address.sin_port = htons(PORT);
 
-	ret = accept(-1, (struct sockaddr *)&address,
-		     (socklen_t *)&addrlen);
+	ret = zsock_accept(-1, (struct sockaddr *)&address, (socklen_t *)&addrlen);
 
 	TEST_ASSERT_EQUAL(ret, -1);
 	TEST_ASSERT_EQUAL(errno, EBADF);
@@ -594,7 +585,7 @@ void test_nrf91_socket_offload_accept_addr_null_addrlen_null_error(void)
 	int backlog = 1;
 
 	__cmock_nrf_socket_ExpectAndReturn(NRF_AF_INET, NRF_SOCK_STREAM, 0, nrf_fd);
-	fd = socket(AF_INET, SOCK_STREAM, 0);
+	fd = zsock_socket(AF_INET, SOCK_STREAM, 0);
 
 	address.sin_family = AF_INET;
 	address.sin_addr.s_addr = INADDR_ANY;
@@ -603,25 +594,25 @@ void test_nrf91_socket_offload_accept_addr_null_addrlen_null_error(void)
 	__cmock_nrf_bind_ExpectAndReturn(nrf_fd, NULL, sizeof(struct nrf_sockaddr_in), 0);
 	__cmock_nrf_bind_IgnoreArg_address();
 
-	ret = bind(fd, (struct sockaddr *)&address, sizeof(address));
+	ret = zsock_bind(fd, (struct sockaddr *)&address, sizeof(address));
 
 	TEST_ASSERT_EQUAL(ret, 0);
 
 	__cmock_nrf_listen_ExpectAndReturn(nrf_fd, backlog, 0);
 
-	ret = listen(fd, backlog);
+	ret = zsock_listen(fd, backlog);
 
 	TEST_ASSERT_EQUAL(ret, 0);
 
 	__cmock_nrf_accept_ExpectAndReturn(nrf_fd, NULL, NULL, -2);
 
-	ret = accept(fd, NULL, NULL);
+	ret = zsock_accept(fd, NULL, NULL);
 
 	TEST_ASSERT_EQUAL(ret, -1);
 
 	__cmock_nrf_close_ExpectAndReturn(nrf_fd, 0);
 
-	ret = close(fd);
+	ret = zsock_close(fd);
 
 	TEST_ASSERT_EQUAL(ret, 0);
 }
@@ -638,7 +629,7 @@ void test_nrf91_socket_offload_accept_addr_not_null_addrlen_not_null_enotsup(voi
 	int backlog = 1;
 
 	__cmock_nrf_socket_ExpectAndReturn(NRF_AF_INET, NRF_SOCK_STREAM, 0, nrf_fd);
-	fd = socket(AF_INET, SOCK_STREAM, 0);
+	fd = zsock_socket(AF_INET, SOCK_STREAM, 0);
 
 	address.sin_family = AF_INET;
 	address.sin_addr.s_addr = INADDR_ANY;
@@ -647,13 +638,13 @@ void test_nrf91_socket_offload_accept_addr_not_null_addrlen_not_null_enotsup(voi
 	__cmock_nrf_bind_ExpectAndReturn(nrf_fd, NULL, sizeof(struct nrf_sockaddr_in), 0);
 	__cmock_nrf_bind_IgnoreArg_address();
 
-	ret = bind(fd, (struct sockaddr *)&address, sizeof(address));
+	ret = zsock_bind(fd, (struct sockaddr *)&address, sizeof(address));
 
 	TEST_ASSERT_EQUAL(ret, 0);
 
 	__cmock_nrf_listen_ExpectAndReturn(nrf_fd, backlog, 0);
 
-	ret = listen(fd, backlog);
+	ret = zsock_listen(fd, backlog);
 
 	TEST_ASSERT_EQUAL(ret, 0);
 
@@ -664,7 +655,7 @@ void test_nrf91_socket_offload_accept_addr_not_null_addrlen_not_null_enotsup(voi
 	__cmock_nrf_accept_Stub(nrf_accept_stub);
 	__cmock_nrf_close_ExpectAndReturn(accept_fd, 0);
 
-	ret = accept(fd, (struct sockaddr *)&address, (socklen_t *)&addrlen);
+	ret = zsock_accept(fd, (struct sockaddr *)&address, (socklen_t *)&addrlen);
 
 	TEST_ASSERT_EQUAL(ret, -1);
 	TEST_ASSERT_EQUAL(errno, ENOTSUP);
@@ -672,7 +663,7 @@ void test_nrf91_socket_offload_accept_addr_not_null_addrlen_not_null_enotsup(voi
 
 	__cmock_nrf_close_ExpectAndReturn(nrf_fd, 0);
 
-	ret = close(fd);
+	ret = zsock_close(fd);
 
 	TEST_ASSERT_EQUAL(ret, 0);
 }
@@ -691,7 +682,7 @@ void test_nrf91_socket_offload_accept_ipv4_success(void)
 	int z_fd = 1;
 
 	__cmock_nrf_socket_ExpectAndReturn(NRF_AF_INET, NRF_SOCK_STREAM, 0, nrf_fd);
-	fd = socket(AF_INET, SOCK_STREAM, 0);
+	fd = zsock_socket(AF_INET, SOCK_STREAM, 0);
 
 	address.sin_family = AF_INET;
 	address.sin_port = htons(PORT);
@@ -699,13 +690,13 @@ void test_nrf91_socket_offload_accept_ipv4_success(void)
 	__cmock_nrf_bind_ExpectAndReturn(nrf_fd, NULL, sizeof(struct nrf_sockaddr_in), 0);
 	__cmock_nrf_bind_IgnoreArg_address();
 
-	ret = bind(fd, (struct sockaddr *)&address, sizeof(address));
+	ret = zsock_bind(fd, (struct sockaddr *)&address, sizeof(address));
 
 	TEST_ASSERT_EQUAL(ret, 0);
 
 	__cmock_nrf_listen_ExpectAndReturn(nrf_fd, backlog, 0);
 
-	ret = listen(fd, backlog);
+	ret = zsock_listen(fd, backlog);
 
 	TEST_ASSERT_EQUAL(ret, 0);
 
@@ -714,14 +705,14 @@ void test_nrf91_socket_offload_accept_ipv4_success(void)
 
 	__cmock_nrf_accept_Stub(nrf_accept_stub);
 
-	ret = accept(fd, (struct sockaddr *)&address, (socklen_t *)&addrlen);
+	ret = zsock_accept(fd, (struct sockaddr *)&address, (socklen_t *)&addrlen);
 
 	TEST_ASSERT_EQUAL(ret, z_fd);
 	TEST_ASSERT_EQUAL(addrlen, addrlen_unchanged);
 
 	__cmock_nrf_close_ExpectAndReturn(nrf_fd, 0);
 
-	ret = close(fd);
+	ret = zsock_close(fd);
 
 	TEST_ASSERT_EQUAL(ret, 0);
 
@@ -742,7 +733,7 @@ void test_nrf91_socket_offload_accept_ipv6_success(void)
 	int z_fd = 1;
 
 	__cmock_nrf_socket_ExpectAndReturn(NRF_AF_INET6, NRF_SOCK_STREAM, 0, nrf_fd);
-	fd = socket(AF_INET6, SOCK_STREAM, 0);
+	fd = zsock_socket(AF_INET6, SOCK_STREAM, 0);
 
 	address.sin6_family = AF_INET6;
 	address.sin6_port = htons(PORT);
@@ -750,13 +741,13 @@ void test_nrf91_socket_offload_accept_ipv6_success(void)
 	__cmock_nrf_bind_ExpectAndReturn(nrf_fd, NULL, sizeof(struct nrf_sockaddr_in6), 0);
 	__cmock_nrf_bind_IgnoreArg_address();
 
-	ret = bind(fd, (struct sockaddr *)&address, sizeof(address));
+	ret = zsock_bind(fd, (struct sockaddr *)&address, sizeof(address));
 
 	TEST_ASSERT_EQUAL(ret, 0);
 
 	__cmock_nrf_listen_ExpectAndReturn(nrf_fd, backlog, 0);
 
-	ret = listen(fd, backlog);
+	ret = zsock_listen(fd, backlog);
 
 	TEST_ASSERT_EQUAL(ret, 0);
 
@@ -765,14 +756,14 @@ void test_nrf91_socket_offload_accept_ipv6_success(void)
 
 	__cmock_nrf_accept_Stub(nrf_accept_stub);
 
-	ret = accept(fd, (struct sockaddr *)&address, (socklen_t *)&addrlen);
+	ret = zsock_accept(fd, (struct sockaddr *)&address, (socklen_t *)&addrlen);
 
 	TEST_ASSERT_EQUAL(ret, z_fd);
 	TEST_ASSERT_EQUAL(addrlen, addrlen_unchanged);
 
 	__cmock_nrf_close_ExpectAndReturn(nrf_fd, 0);
 
-	ret = close(fd);
+	ret = zsock_close(fd);
 
 	TEST_ASSERT_EQUAL(ret, 0);
 
@@ -783,7 +774,7 @@ void test_nrf91_socket_offload_setsockopt_ebadf(void)
 {
 	int ret;
 
-	ret = setsockopt(-1, 0, 0, NULL, 0);
+	ret = zsock_setsockopt(-1, 0, 0, NULL, 0);
 
 	TEST_ASSERT_EQUAL(ret, -1);
 	TEST_ASSERT_EQUAL(errno, EBADF);
@@ -799,20 +790,19 @@ void test_nrf91_socket_offload_setsockopt_bindtodevice_eopnotsup(void)
 	int proto = IPPROTO_TCP;
 	struct timeval data = { 0 };
 
-	__cmock_nrf_socket_ExpectAndReturn(NRF_AF_INET, NRF_SOCK_STREAM,
-					  NRF_IPPROTO_TCP, nrf_fd);
+	__cmock_nrf_socket_ExpectAndReturn(NRF_AF_INET, NRF_SOCK_STREAM, NRF_IPPROTO_TCP, nrf_fd);
 
-	fd = socket(family, type, proto);
+	fd = zsock_socket(family, type, proto);
 
 	TEST_ASSERT_EQUAL(fd, 0);
 
-	ret = setsockopt(fd, SOL_SOCKET, SO_BINDTODEVICE, &data, sizeof(data));
+	ret = zsock_setsockopt(fd, SOL_SOCKET, SO_BINDTODEVICE, &data, sizeof(data));
 
 	TEST_ASSERT_EQUAL(ret, -1);
 	TEST_ASSERT_EQUAL(errno, EOPNOTSUPP);
 
 	__cmock_nrf_close_ExpectAndReturn(nrf_fd, 0);
-	ret = close(fd);
+	ret = zsock_close(fd);
 
 	TEST_ASSERT_EQUAL(ret, 0);
 }
@@ -827,23 +817,22 @@ void test_nrf91_socket_offload_setsockopt_rcvtimeo_success(void)
 	int proto = IPPROTO_TCP;
 	struct timeval data = { 0 };
 
-	__cmock_nrf_socket_ExpectAndReturn(NRF_AF_INET, NRF_SOCK_STREAM,
-					  NRF_IPPROTO_TCP, nrf_fd);
+	__cmock_nrf_socket_ExpectAndReturn(NRF_AF_INET, NRF_SOCK_STREAM, NRF_IPPROTO_TCP, nrf_fd);
 
-	fd = socket(family, type, proto);
+	fd = zsock_socket(family, type, proto);
 
 	TEST_ASSERT_EQUAL(fd, 0);
 
 	__cmock_nrf_setsockopt_ExpectAndReturn(nrf_fd, NRF_SOL_SOCKET, NRF_SO_RCVTIMEO,
-					      NULL, sizeof(struct nrf_timeval), 0);
+					       NULL, sizeof(struct nrf_timeval), 0);
 	__cmock_nrf_setsockopt_IgnoreArg_option_value();
 
-	ret = setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &data, sizeof(data));
+	ret = zsock_setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &data, sizeof(data));
 
 	TEST_ASSERT_EQUAL(ret, 0);
 
 	__cmock_nrf_close_ExpectAndReturn(nrf_fd, 0);
-	ret = close(fd);
+	ret = zsock_close(fd);
 
 	TEST_ASSERT_EQUAL(ret, 0);
 }
@@ -858,24 +847,23 @@ void test_nrf91_socket_offload_setsockopt_sndtimeo_success(void)
 	int proto = IPPROTO_TCP;
 	struct timeval data = { 0 };
 
-	__cmock_nrf_socket_ExpectAndReturn(NRF_AF_INET, NRF_SOCK_STREAM,
-					  NRF_IPPROTO_TCP, nrf_fd);
+	__cmock_nrf_socket_ExpectAndReturn(NRF_AF_INET, NRF_SOCK_STREAM, NRF_IPPROTO_TCP, nrf_fd);
 
-	fd = socket(family, type, proto);
+	fd = zsock_socket(family, type, proto);
 
 	TEST_ASSERT_EQUAL(fd, 0);
 
 	__cmock_nrf_setsockopt_ExpectAndReturn(nrf_fd, NRF_SOL_SOCKET, NRF_SO_SNDTIMEO,
-					      NULL, sizeof(struct nrf_timeval), 0);
+					       NULL, sizeof(struct nrf_timeval), 0);
 	__cmock_nrf_setsockopt_IgnoreArg_option_value();
 
-	ret = setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &data, sizeof(data));
+	ret = zsock_setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &data, sizeof(data));
 
 	TEST_ASSERT_EQUAL(ret, 0);
 
 	__cmock_nrf_close_ExpectAndReturn(nrf_fd, 0);
 
-	ret = close(fd);
+	ret = zsock_close(fd);
 
 	TEST_ASSERT_EQUAL(ret, 0);
 }
@@ -890,24 +878,23 @@ void test_nrf91_socket_offload_setsockopt_tls_session_cache_success(void)
 	int proto = IPPROTO_TCP;
 	uint8_t data = 0;
 
-	__cmock_nrf_socket_ExpectAndReturn(NRF_AF_INET, NRF_SOCK_STREAM,
-					  NRF_IPPROTO_TCP, nrf_fd);
+	__cmock_nrf_socket_ExpectAndReturn(NRF_AF_INET, NRF_SOCK_STREAM, NRF_IPPROTO_TCP, nrf_fd);
 
-	fd = socket(family, type, proto);
+	fd = zsock_socket(family, type, proto);
 
 	TEST_ASSERT_EQUAL(fd, 0);
 
 	__cmock_nrf_setsockopt_ExpectAndReturn(nrf_fd, NRF_SOL_SECURE, NRF_SO_SEC_SESSION_CACHE,
-					      NULL, sizeof(nrf_sec_session_cache_t), 0);
+					       NULL, sizeof(int), 0);
 	__cmock_nrf_setsockopt_IgnoreArg_option_value();
 
-	ret = setsockopt(fd, SOL_TLS, TLS_SESSION_CACHE, &data, sizeof(data));
+	ret = zsock_setsockopt(fd, SOL_TLS, TLS_SESSION_CACHE, &data, sizeof(data));
 
 	TEST_ASSERT_EQUAL(ret, 0);
 
 	__cmock_nrf_close_ExpectAndReturn(nrf_fd, 0);
 
-	ret = close(fd);
+	ret = zsock_close(fd);
 
 	TEST_ASSERT_EQUAL(ret, 0);
 }
@@ -916,7 +903,7 @@ void test_nrf91_socket_offload_getsockopt_ebadf(void)
 {
 	int ret;
 
-	ret = getsockopt(-1, 0, 0, NULL, NULL);
+	ret = zsock_getsockopt(-1, 0, 0, NULL, NULL);
 
 	TEST_ASSERT_EQUAL(ret, -1);
 	TEST_ASSERT_EQUAL(errno, EBADF);
@@ -933,25 +920,24 @@ void test_nrf91_socket_offload_getsockopt_rcvtimeo_error(void)
 	struct timeval data = { 0 };
 	int data_len = sizeof(data);
 
-	__cmock_nrf_socket_ExpectAndReturn(NRF_AF_INET, NRF_SOCK_STREAM,
-					  NRF_IPPROTO_TCP, nrf_fd);
+	__cmock_nrf_socket_ExpectAndReturn(NRF_AF_INET, NRF_SOCK_STREAM, NRF_IPPROTO_TCP, nrf_fd);
 
-	fd = socket(family, type, proto);
+	fd = zsock_socket(family, type, proto);
 
 	TEST_ASSERT_EQUAL(fd, 0);
 
 	__cmock_nrf_getsockopt_ExpectAndReturn(nrf_fd, NRF_SOL_SOCKET, NRF_SO_RCVTIMEO,
-					      NULL, NULL, -1);
+					       NULL, NULL, -1);
 	__cmock_nrf_getsockopt_IgnoreArg_option_value();
 	__cmock_nrf_getsockopt_IgnoreArg_option_len();
 
-	ret = getsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &data, &data_len);
+	ret = zsock_getsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &data, &data_len);
 
 	TEST_ASSERT_EQUAL(ret, -1);
 
 	__cmock_nrf_close_ExpectAndReturn(nrf_fd, 0);
 
-	ret = close(fd);
+	ret = zsock_close(fd);
 
 	TEST_ASSERT_EQUAL(ret, 0);
 }
@@ -967,25 +953,24 @@ void test_nrf91_socket_offload_getsockopt_sndtimeo_error(void)
 	struct timeval data = { 0 };
 	int data_len = sizeof(data);
 
-	__cmock_nrf_socket_ExpectAndReturn(NRF_AF_INET, NRF_SOCK_STREAM,
-					  NRF_IPPROTO_TCP, nrf_fd);
+	__cmock_nrf_socket_ExpectAndReturn(NRF_AF_INET, NRF_SOCK_STREAM, NRF_IPPROTO_TCP, nrf_fd);
 
-	fd = socket(family, type, proto);
+	fd = zsock_socket(family, type, proto);
 
 	TEST_ASSERT_EQUAL(fd, 0);
 
 	__cmock_nrf_getsockopt_ExpectAndReturn(nrf_fd, NRF_SOL_SOCKET, NRF_SO_SNDTIMEO,
-					      NULL, NULL, -1);
+					       NULL, NULL, -1);
 	__cmock_nrf_getsockopt_IgnoreArg_option_value();
 	__cmock_nrf_getsockopt_IgnoreArg_option_len();
 
-	ret = getsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &data, &data_len);
+	ret = zsock_getsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &data, &data_len);
 
 	TEST_ASSERT_EQUAL(ret, -1);
 
 	__cmock_nrf_close_ExpectAndReturn(nrf_fd, 0);
 
-	ret = close(fd);
+	ret = zsock_close(fd);
 
 	TEST_ASSERT_EQUAL(ret, 0);
 }
@@ -1001,15 +986,14 @@ void test_nrf91_socket_offload_getsockopt_rcvtimeo_success(void)
 	struct timeval data = { 0 };
 	int data_len = sizeof(data);
 
-	__cmock_nrf_socket_ExpectAndReturn(NRF_AF_INET, NRF_SOCK_STREAM,
-					  NRF_IPPROTO_TCP, nrf_fd);
+	__cmock_nrf_socket_ExpectAndReturn(NRF_AF_INET, NRF_SOCK_STREAM, NRF_IPPROTO_TCP, nrf_fd);
 
-	fd = socket(family, type, proto);
+	fd = zsock_socket(family, type, proto);
 
 	TEST_ASSERT_EQUAL(fd, 0);
 
 	__cmock_nrf_getsockopt_ExpectAndReturn(nrf_fd, NRF_SOL_SOCKET, NRF_SO_RCVTIMEO,
-					      NULL, NULL, 0);
+					       NULL, NULL, 0);
 	__cmock_nrf_getsockopt_IgnoreArg_option_value();
 	__cmock_nrf_getsockopt_IgnoreArg_option_len();
 
@@ -1018,14 +1002,14 @@ void test_nrf91_socket_offload_getsockopt_rcvtimeo_success(void)
 	 */
 	data_len = data_len + 1;
 
-	ret = getsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &data, &data_len);
+	ret = zsock_getsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &data, &data_len);
 
 	TEST_ASSERT_EQUAL(ret, 0);
 	TEST_ASSERT_EQUAL(data_len, sizeof(struct timeval));
 
 	__cmock_nrf_close_ExpectAndReturn(nrf_fd, 0);
 
-	ret = close(fd);
+	ret = zsock_close(fd);
 
 	TEST_ASSERT_EQUAL(ret, 0);
 }
@@ -1041,15 +1025,14 @@ void test_nrf91_socket_offload_getsockopt_sndtimeo_success(void)
 	struct timeval data = { 0 };
 	int data_len = sizeof(data);
 
-	__cmock_nrf_socket_ExpectAndReturn(NRF_AF_INET, NRF_SOCK_STREAM,
-					  NRF_IPPROTO_TCP, nrf_fd);
+	__cmock_nrf_socket_ExpectAndReturn(NRF_AF_INET, NRF_SOCK_STREAM, NRF_IPPROTO_TCP, nrf_fd);
 
-	fd = socket(family, type, proto);
+	fd = zsock_socket(family, type, proto);
 
 	TEST_ASSERT_EQUAL(fd, 0);
 
 	__cmock_nrf_getsockopt_ExpectAndReturn(nrf_fd, NRF_SOL_SOCKET, NRF_SO_SNDTIMEO,
-					      NULL, NULL, 0);
+					       NULL, NULL, 0);
 	__cmock_nrf_getsockopt_IgnoreArg_option_value();
 	__cmock_nrf_getsockopt_IgnoreArg_option_len();
 
@@ -1058,14 +1041,14 @@ void test_nrf91_socket_offload_getsockopt_sndtimeo_success(void)
 	 */
 	data_len = data_len + 1;
 
-	ret = getsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &data, &data_len);
+	ret = zsock_getsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &data, &data_len);
 
 	TEST_ASSERT_EQUAL(ret, 0);
 	TEST_ASSERT_EQUAL(data_len, sizeof(struct timeval));
 
 	__cmock_nrf_close_ExpectAndReturn(nrf_fd, 0);
 
-	ret = close(fd);
+	ret = zsock_close(fd);
 
 	TEST_ASSERT_EQUAL(ret, 0);
 }
@@ -1081,27 +1064,25 @@ void test_nrf91_socket_offload_getsockopt_so_error_success(void)
 	int data = 1;
 	int data_len = 42;
 
-	__cmock_nrf_socket_ExpectAndReturn(NRF_AF_INET, NRF_SOCK_STREAM,
-					  NRF_IPPROTO_TCP, nrf_fd);
+	__cmock_nrf_socket_ExpectAndReturn(NRF_AF_INET, NRF_SOCK_STREAM, NRF_IPPROTO_TCP, nrf_fd);
 
-	fd = socket(family, type, proto);
+	fd = zsock_socket(family, type, proto);
 
 	TEST_ASSERT_EQUAL(fd, 0);
 
-	__cmock_nrf_getsockopt_ExpectAndReturn(nrf_fd, NRF_SOL_SOCKET, NRF_SO_ERROR,
-					      NULL, NULL, 0);
+	__cmock_nrf_getsockopt_ExpectAndReturn(nrf_fd, NRF_SOL_SOCKET, NRF_SO_ERROR, NULL, NULL, 0);
 	__cmock_nrf_getsockopt_IgnoreArg_option_value();
 	__cmock_nrf_getsockopt_IgnoreArg_option_len();
 	__cmock_nrf_modem_os_errno_set_Expect(data);
 
-	ret = getsockopt(fd, SOL_SOCKET, SO_ERROR, &data, &data_len);
+	ret = zsock_getsockopt(fd, SOL_SOCKET, SO_ERROR, &data, &data_len);
 
 	TEST_ASSERT_EQUAL(ret, 0);
 	TEST_ASSERT_EQUAL(data, errno);
 
 	__cmock_nrf_close_ExpectAndReturn(nrf_fd, 0);
 
-	ret = close(fd);
+	ret = zsock_close(fd);
 
 	TEST_ASSERT_EQUAL(ret, 0);
 }
@@ -1110,7 +1091,7 @@ void test_nrf91_socket_offload_recvfrom_ebadf(void)
 {
 	int ret;
 
-	ret = recvfrom(-1, NULL, 0, 0, NULL, NULL);
+	ret = zsock_recvfrom(-1, NULL, 0, 0, NULL, NULL);
 
 	TEST_ASSERT_EQUAL(ret, -1);
 	TEST_ASSERT_EQUAL(errno, EBADF);
@@ -1126,33 +1107,32 @@ void test_nrf91_socket_offload_recvfrom_from_null_error(void)
 	int proto = IPPROTO_TCP;
 	uint8_t data[8] = { 1 };
 	size_t data_len = sizeof(data);
-	int flags = MSG_WAITALL;
+	int flags = ZSOCK_MSG_WAITALL;
 	socklen_t fromlen = 0;
 
-	__cmock_nrf_socket_ExpectAndReturn(NRF_AF_INET, NRF_SOCK_STREAM,
-					  NRF_IPPROTO_TCP, nrf_fd);
+	__cmock_nrf_socket_ExpectAndReturn(NRF_AF_INET, NRF_SOCK_STREAM, NRF_IPPROTO_TCP, nrf_fd);
 
-	fd = socket(family, type, proto);
+	fd = zsock_socket(family, type, proto);
 
 	TEST_ASSERT_EQUAL(fd, 0);
 
-	/* Skip connect, etc. since for testing we just
-	 * need a working socket
+	/* Skip zsock_connect, etc. since for testing we just
+	 * need a working zsock_socket
 	 */
 
 	/* Expect that with `from` NULL the modem library call receives a forced
 	 * `fromlen` NULL as well despite passing a pointer to the Zephyr call
 	 */
 	__cmock_nrf_recvfrom_ExpectAndReturn(nrf_fd, data, data_len, NRF_MSG_WAITALL,
-					    NULL, NULL, -1);
+					     NULL, NULL, -1);
 
-	ret = recvfrom(fd, data, data_len, flags, NULL, &fromlen);
+	ret = zsock_recvfrom(fd, data, data_len, flags, NULL, &fromlen);
 
 	TEST_ASSERT_EQUAL(ret, -1);
 
 	__cmock_nrf_close_ExpectAndReturn(nrf_fd, 0);
 
-	ret = close(fd);
+	ret = zsock_close(fd);
 
 	TEST_ASSERT_EQUAL(ret, 0);
 }
@@ -1167,33 +1147,32 @@ void test_nrf91_socket_offload_recvfrom_from_null_success(void)
 	int proto = IPPROTO_TCP;
 	uint8_t data[8] = { 1 };
 	size_t data_len = sizeof(data);
-	int flags = MSG_WAITALL;
+	int flags = ZSOCK_MSG_WAITALL;
 	socklen_t fromlen = 0;
 
-	__cmock_nrf_socket_ExpectAndReturn(NRF_AF_INET, NRF_SOCK_STREAM,
-					  NRF_IPPROTO_TCP, nrf_fd);
+	__cmock_nrf_socket_ExpectAndReturn(NRF_AF_INET, NRF_SOCK_STREAM, NRF_IPPROTO_TCP, nrf_fd);
 
-	fd = socket(family, type, proto);
+	fd = zsock_socket(family, type, proto);
 
 	TEST_ASSERT_EQUAL(fd, 0);
 
-	/* Skip connect, etc. since for testing we just
-	 * need a working socket
+	/* Skip zsock_connect, etc. since for testing we just
+	 * need a working zsock_socket
 	 */
 
 	/* Expect that with `from` NULL the modem library call receives a forced
 	 * `fromlen` NULL as well despite passing a pointer to the Zephyr call
 	 */
 	__cmock_nrf_recvfrom_ExpectAndReturn(nrf_fd, data, data_len, NRF_MSG_WAITALL,
-					    NULL, NULL, 8);
+					     NULL, NULL, 8);
 
-	ret = recvfrom(fd, data, data_len, flags, NULL, &fromlen);
+	ret = zsock_recvfrom(fd, data, data_len, flags, NULL, &fromlen);
 
 	TEST_ASSERT_EQUAL(ret, 8);
 
 	__cmock_nrf_close_ExpectAndReturn(nrf_fd, 0);
 
-	ret = close(fd);
+	ret = zsock_close(fd);
 
 	TEST_ASSERT_EQUAL(ret, 0);
 }
@@ -1208,19 +1187,18 @@ void test_nrf91_socket_offload_recvfrom_ipv4_success(void)
 	int proto = IPPROTO_TCP;
 	uint8_t data[8] = { 1 };
 	size_t data_len = sizeof(data);
-	int flags = MSG_WAITALL;
+	int flags = ZSOCK_MSG_WAITALL;
 	struct sockaddr from = { 0 };
 	socklen_t fromlen = 0;
 
-	__cmock_nrf_socket_ExpectAndReturn(NRF_AF_INET, NRF_SOCK_STREAM,
-					  NRF_IPPROTO_TCP, nrf_fd);
+	__cmock_nrf_socket_ExpectAndReturn(NRF_AF_INET, NRF_SOCK_STREAM, NRF_IPPROTO_TCP, nrf_fd);
 
-	fd = socket(family, type, proto);
+	fd = zsock_socket(family, type, proto);
 
 	TEST_ASSERT_EQUAL(fd, 0);
 
-	/* Skip connect, etc. since for testing we just
-	 * need a working socket
+	/* Skip zsock_connect, etc. since for testing we just
+	 * need a working zsock_socket
 	 */
 
 	test_state_nrf_recvfrom.cliaddr.sa_family = NRF_AF_INET;
@@ -1229,7 +1207,7 @@ void test_nrf91_socket_offload_recvfrom_ipv4_success(void)
 
 	__cmock_nrf_recvfrom_Stub(nrf_recvfrom_stub);
 
-	ret = recvfrom(fd, data, data_len, flags, &from, &fromlen);
+	ret = zsock_recvfrom(fd, data, data_len, flags, &from, &fromlen);
 
 	TEST_ASSERT_EQUAL(ret, 8);
 	TEST_ASSERT_EQUAL(from.sa_family, AF_INET);
@@ -1237,7 +1215,7 @@ void test_nrf91_socket_offload_recvfrom_ipv4_success(void)
 
 	__cmock_nrf_close_ExpectAndReturn(nrf_fd, 0);
 
-	ret = close(fd);
+	ret = zsock_close(fd);
 
 	TEST_ASSERT_EQUAL(ret, 0);
 }
@@ -1252,19 +1230,18 @@ void test_nrf91_socket_offload_recvfrom_ipv6_success(void)
 	int proto = IPPROTO_TCP;
 	uint8_t data[8] = { 1 };
 	size_t data_len = sizeof(data);
-	int flags = MSG_WAITALL;
+	int flags = ZSOCK_MSG_WAITALL;
 	struct sockaddr from = { 0 };
 	socklen_t fromlen = 0;
 
-	__cmock_nrf_socket_ExpectAndReturn(NRF_AF_INET, NRF_SOCK_STREAM,
-					  NRF_IPPROTO_TCP, nrf_fd);
+	__cmock_nrf_socket_ExpectAndReturn(NRF_AF_INET, NRF_SOCK_STREAM, NRF_IPPROTO_TCP, nrf_fd);
 
-	fd = socket(family, type, proto);
+	fd = zsock_socket(family, type, proto);
 
 	TEST_ASSERT_EQUAL(fd, 0);
 
-	/* Skip connect, etc. since for testing we just
-	 * need a working socket
+	/* Skip zsock_connect, etc. since for testing we just
+	 * need a working zsock_socket
 	 */
 
 	test_state_nrf_recvfrom.cliaddr.sa_family = NRF_AF_INET6;
@@ -1273,7 +1250,7 @@ void test_nrf91_socket_offload_recvfrom_ipv6_success(void)
 
 	__cmock_nrf_recvfrom_Stub(nrf_recvfrom_stub);
 
-	ret = recvfrom(fd, data, data_len, flags, &from, &fromlen);
+	ret = zsock_recvfrom(fd, data, data_len, flags, &from, &fromlen);
 
 	TEST_ASSERT_EQUAL(ret, 8);
 	TEST_ASSERT_EQUAL(from.sa_family, AF_INET6);
@@ -1281,7 +1258,7 @@ void test_nrf91_socket_offload_recvfrom_ipv6_success(void)
 
 	__cmock_nrf_close_ExpectAndReturn(nrf_fd, 0);
 
-	ret = close(fd);
+	ret = zsock_close(fd);
 
 	TEST_ASSERT_EQUAL(ret, 0);
 }
@@ -1290,7 +1267,7 @@ void test_nrf91_socket_offload_sendto_ebadf(void)
 {
 	int ret;
 
-	ret = sendto(-1, NULL, 0, 0, NULL, 0);
+	ret = zsock_sendto(-1, NULL, 0, 0, NULL, 0);
 
 	TEST_ASSERT_EQUAL(ret, -1);
 	TEST_ASSERT_EQUAL(errno, EBADF);
@@ -1306,32 +1283,30 @@ void test_nrf91_socket_offload_sendto_to_null_success(void)
 	int proto = IPPROTO_TCP;
 	uint8_t data[8] = { 1 };
 	size_t data_len = sizeof(data);
-	int flags = MSG_DONTWAIT;
+	int flags = ZSOCK_MSG_DONTWAIT;
 
-	__cmock_nrf_socket_ExpectAndReturn(NRF_AF_INET, NRF_SOCK_STREAM,
-					  NRF_IPPROTO_TCP, nrf_fd);
+	__cmock_nrf_socket_ExpectAndReturn(NRF_AF_INET, NRF_SOCK_STREAM, NRF_IPPROTO_TCP, nrf_fd);
 
-	fd = socket(family, type, proto);
+	fd = zsock_socket(family, type, proto);
 
 	TEST_ASSERT_EQUAL(fd, 0);
 
-	/* Skip connect, etc. since for testing we just
-	 * need a working socket
+	/* Skip zsock_connect, etc. since for testing we just
+	 * need a working zsock_socket
 	 */
 
 	/* Observe that the `tolen` parameter will be changed to zero when
 	 * the `to` parameter is NULL
 	 */
-	__cmock_nrf_sendto_ExpectAndReturn(nrf_fd, data, data_len,
-					  NRF_MSG_DONTWAIT, NULL, 0, 8);
+	__cmock_nrf_sendto_ExpectAndReturn(nrf_fd, data, data_len, NRF_MSG_DONTWAIT, NULL, 0, 8);
 
-	ret = sendto(fd, data, data_len, flags, NULL, 42);
+	ret = zsock_sendto(fd, data, data_len, flags, NULL, 42);
 
 	TEST_ASSERT_EQUAL(ret, 8);
 
 	__cmock_nrf_close_ExpectAndReturn(nrf_fd, 0);
 
-	ret = close(fd);
+	ret = zsock_close(fd);
 
 	TEST_ASSERT_EQUAL(ret, 0);
 }
@@ -1346,18 +1321,17 @@ void test_nrf91_socket_offload_sendto_ipv4_error(void)
 	int proto = IPPROTO_TCP;
 	uint8_t data[8] = { 1 };
 	size_t data_len = sizeof(data);
-	int flags = MSG_DONTWAIT;
+	int flags = ZSOCK_MSG_DONTWAIT;
 	struct sockaddr to = { .sa_family = family };
 
-	__cmock_nrf_socket_ExpectAndReturn(NRF_AF_INET, NRF_SOCK_STREAM,
-					  NRF_IPPROTO_TCP, nrf_fd);
+	__cmock_nrf_socket_ExpectAndReturn(NRF_AF_INET, NRF_SOCK_STREAM, NRF_IPPROTO_TCP, nrf_fd);
 
-	fd = socket(family, type, proto);
+	fd = zsock_socket(family, type, proto);
 
 	TEST_ASSERT_EQUAL(fd, 0);
 
-	/* Skip connect, etc. since for testing we just
-	 * need a working socket
+	/* Skip zsock_connect, etc. since for testing we just
+	 * need a working zsock_socket
 	 */
 
 	/* Observe that the `tolen` parameter will be changed to size of struct
@@ -1365,17 +1339,17 @@ void test_nrf91_socket_offload_sendto_ipv4_error(void)
 	 * `AF_INET`
 	 */
 	__cmock_nrf_sendto_ExpectAndReturn(nrf_fd, data, data_len,
-					  NRF_MSG_DONTWAIT, NULL,
-					  sizeof(struct nrf_sockaddr_in), -1);
+					   NRF_MSG_DONTWAIT, NULL,
+					   sizeof(struct nrf_sockaddr_in), -1);
 	__cmock_nrf_sendto_IgnoreArg_dest_addr();
 
-	ret = sendto(fd, data, data_len, flags, &to, 42);
+	ret = zsock_sendto(fd, data, data_len, flags, &to, 42);
 
 	TEST_ASSERT_EQUAL(ret, -1);
 
 	__cmock_nrf_close_ExpectAndReturn(nrf_fd, 0);
 
-	ret = close(fd);
+	ret = zsock_close(fd);
 
 	TEST_ASSERT_EQUAL(ret, 0);
 }
@@ -1390,18 +1364,17 @@ void test_nrf91_socket_offload_sendto_ipv4_success(void)
 	int proto = IPPROTO_TCP;
 	uint8_t data[8] = { 1 };
 	size_t data_len = sizeof(data);
-	int flags = MSG_DONTWAIT;
+	int flags = ZSOCK_MSG_DONTWAIT;
 	struct sockaddr to = { .sa_family = family };
 
-	__cmock_nrf_socket_ExpectAndReturn(NRF_AF_INET, NRF_SOCK_STREAM,
-					  NRF_IPPROTO_TCP, nrf_fd);
+	__cmock_nrf_socket_ExpectAndReturn(NRF_AF_INET, NRF_SOCK_STREAM, NRF_IPPROTO_TCP, nrf_fd);
 
-	fd = socket(family, type, proto);
+	fd = zsock_socket(family, type, proto);
 
 	TEST_ASSERT_EQUAL(fd, 0);
 
-	/* Skip connect, etc. since for testing we just
-	 * need a working socket
+	/* Skip zsock_connect, etc. since for testing we just
+	 * need a working zsock_socket
 	 */
 
 	/* Observe that the `tolen` parameter will be changed to size of struct
@@ -1409,17 +1382,17 @@ void test_nrf91_socket_offload_sendto_ipv4_success(void)
 	 * `AF_INET`
 	 */
 	__cmock_nrf_sendto_ExpectAndReturn(nrf_fd, data, data_len,
-					  NRF_MSG_DONTWAIT, NULL,
-					  sizeof(struct nrf_sockaddr_in), 8);
+					   NRF_MSG_DONTWAIT, NULL,
+					   sizeof(struct nrf_sockaddr_in), 8);
 	__cmock_nrf_sendto_IgnoreArg_dest_addr();
 
-	ret = sendto(fd, data, data_len, flags, &to, 42);
+	ret = zsock_sendto(fd, data, data_len, flags, &to, 42);
 
 	TEST_ASSERT_EQUAL(ret, 8);
 
 	__cmock_nrf_close_ExpectAndReturn(nrf_fd, 0);
 
-	ret = close(fd);
+	ret = zsock_close(fd);
 
 	TEST_ASSERT_EQUAL(ret, 0);
 }
@@ -1434,18 +1407,17 @@ void test_nrf91_socket_offload_sendto_ipv6_success(void)
 	int proto = IPPROTO_TCP;
 	uint8_t data[8] = { 1 };
 	size_t data_len = sizeof(data);
-	int flags = MSG_DONTWAIT;
+	int flags = ZSOCK_MSG_DONTWAIT;
 	struct sockaddr to = { .sa_family = family };
 
-	__cmock_nrf_socket_ExpectAndReturn(NRF_AF_INET6, NRF_SOCK_STREAM,
-					  NRF_IPPROTO_TCP, nrf_fd);
+	__cmock_nrf_socket_ExpectAndReturn(NRF_AF_INET6, NRF_SOCK_STREAM, NRF_IPPROTO_TCP, nrf_fd);
 
-	fd = socket(family, type, proto);
+	fd = zsock_socket(family, type, proto);
 
 	TEST_ASSERT_EQUAL(fd, 0);
 
-	/* Skip connect, etc. since for testing we just
-	 * need a working socket
+	/* Skip zsock_connect, etc. since for testing we just
+	 * need a working zsock_socket
 	 */
 
 	/* Observe that the `tolen` parameter will be changed to size of struct
@@ -1453,17 +1425,17 @@ void test_nrf91_socket_offload_sendto_ipv6_success(void)
 	 * `AF_INET`
 	 */
 	__cmock_nrf_sendto_ExpectAndReturn(nrf_fd, data, data_len,
-					  NRF_MSG_DONTWAIT, NULL,
-					  sizeof(struct nrf_sockaddr_in6), 8);
+					   NRF_MSG_DONTWAIT, NULL,
+					   sizeof(struct nrf_sockaddr_in6), 8);
 	__cmock_nrf_sendto_IgnoreArg_dest_addr();
 
-	ret = sendto(fd, data, data_len, flags, &to, 42);
+	ret = zsock_sendto(fd, data, data_len, flags, &to, 42);
 
 	TEST_ASSERT_EQUAL(ret, 8);
 
 	__cmock_nrf_close_ExpectAndReturn(nrf_fd, 0);
 
-	ret = close(fd);
+	ret = zsock_close(fd);
 
 	TEST_ASSERT_EQUAL(ret, 0);
 }
@@ -1478,28 +1450,27 @@ void test_nrf91_socket_offload_sendto_not_ipv4_not_ipv6_eafnosupport(void)
 	int proto = IPPROTO_TCP;
 	uint8_t data[8] = { 1 };
 	size_t data_len = sizeof(data);
-	int flags = MSG_DONTWAIT;
+	int flags = ZSOCK_MSG_DONTWAIT;
 	struct sockaddr to = { 0 };
 
-	__cmock_nrf_socket_ExpectAndReturn(NRF_AF_INET, NRF_SOCK_STREAM,
-					  NRF_IPPROTO_TCP, nrf_fd);
+	__cmock_nrf_socket_ExpectAndReturn(NRF_AF_INET, NRF_SOCK_STREAM, NRF_IPPROTO_TCP, nrf_fd);
 
-	fd = socket(family, type, proto);
+	fd = zsock_socket(family, type, proto);
 
 	TEST_ASSERT_EQUAL(fd, 0);
 
-	/* Skip connect, etc. since for testing we just
-	 * need a working socket
+	/* Skip zsock_connect, etc. since for testing we just
+	 * need a working zsock_socket
 	 */
 
-	ret = sendto(fd, data, data_len, flags, &to, 42);
+	ret = zsock_sendto(fd, data, data_len, flags, &to, 42);
 
 	TEST_ASSERT_EQUAL(ret, -1);
 	TEST_ASSERT_EQUAL(errno, EAFNOSUPPORT);
 
 	__cmock_nrf_close_ExpectAndReturn(nrf_fd, 0);
 
-	ret = close(fd);
+	ret = zsock_close(fd);
 
 	TEST_ASSERT_EQUAL(ret, 0);
 }
@@ -1508,7 +1479,7 @@ void test_nrf91_socket_offload_sendmsg_ebadf(void)
 {
 	int ret;
 
-	ret = sendmsg(-1, NULL, 0);
+	ret = zsock_sendmsg(-1, NULL, 0);
 
 	TEST_ASSERT_EQUAL(ret, -1);
 	TEST_ASSERT_EQUAL(errno, EBADF);
@@ -1522,27 +1493,26 @@ void test_nrf91_socket_offload_sendmsg_msg_null_einval(void)
 	int family = AF_INET;
 	int type = SOCK_STREAM;
 	int proto = IPPROTO_TCP;
-	int flags = MSG_DONTWAIT;
+	int flags = ZSOCK_MSG_DONTWAIT;
 
-	__cmock_nrf_socket_ExpectAndReturn(NRF_AF_INET, NRF_SOCK_STREAM,
-					  NRF_IPPROTO_TCP, nrf_fd);
+	__cmock_nrf_socket_ExpectAndReturn(NRF_AF_INET, NRF_SOCK_STREAM, NRF_IPPROTO_TCP, nrf_fd);
 
-	fd = socket(family, type, proto);
+	fd = zsock_socket(family, type, proto);
 
 	TEST_ASSERT_EQUAL(fd, 0);
 
-	/* Skip connect, etc. since for testing we just
-	 * need a working socket
+	/* Skip zsock_connect, etc. since for testing we just
+	 * need a working zsock_socket
 	 */
 
-	ret = sendmsg(fd, NULL, flags);
+	ret = zsock_sendmsg(fd, NULL, flags);
 
 	TEST_ASSERT_EQUAL(ret, -1);
 	TEST_ASSERT_EQUAL(errno, EINVAL);
 
 	__cmock_nrf_close_ExpectAndReturn(nrf_fd, 0);
 
-	ret = close(fd);
+	ret = zsock_close(fd);
 
 	TEST_ASSERT_EQUAL(ret, 0);
 }
@@ -1555,21 +1525,20 @@ void test_nrf91_socket_offload_sendmsg_fits_buf(void)
 	int family = AF_INET;
 	int type = SOCK_STREAM;
 	int proto = IPPROTO_TCP;
-	int flags = MSG_DONTWAIT;
+	int flags = ZSOCK_MSG_DONTWAIT;
 	struct msghdr msg = { 0 };
 	struct iovec chunks[2] = { 0 };
 	int chunk_1 = 42;
 	int chunk_2 = 43;
 
-	__cmock_nrf_socket_ExpectAndReturn(NRF_AF_INET, NRF_SOCK_STREAM,
-					  NRF_IPPROTO_TCP, nrf_fd);
+	__cmock_nrf_socket_ExpectAndReturn(NRF_AF_INET, NRF_SOCK_STREAM, NRF_IPPROTO_TCP, nrf_fd);
 
-	fd = socket(family, type, proto);
+	fd = zsock_socket(family, type, proto);
 
 	TEST_ASSERT_EQUAL(fd, 0);
 
-	/* Skip connect, etc. since for testing we just
-	 * need a working socket
+	/* Skip zsock_connect, etc. since for testing we just
+	 * need a working zsock_socket
 	 */
 
 	chunks[0].iov_base = &chunk_1;
@@ -1580,17 +1549,17 @@ void test_nrf91_socket_offload_sendmsg_fits_buf(void)
 	msg.msg_iovlen = 2;
 
 	__cmock_nrf_sendto_ExpectAndReturn(nrf_fd, NULL, 2 * sizeof(int),
-					  NRF_MSG_DONTWAIT,
-					  NULL, 0, 2 * sizeof(int));
+					   NRF_MSG_DONTWAIT,
+					   NULL, 0, 2 * sizeof(int));
 	__cmock_nrf_sendto_IgnoreArg_message();
 
-	ret = sendmsg(fd, &msg, flags);
+	ret = zsock_sendmsg(fd, &msg, flags);
 
 	TEST_ASSERT_EQUAL(ret, 2 * sizeof(int));
 
 	__cmock_nrf_close_ExpectAndReturn(nrf_fd, 0);
 
-	ret = close(fd);
+	ret = zsock_close(fd);
 
 	TEST_ASSERT_EQUAL(ret, 0);
 }
@@ -1603,7 +1572,7 @@ void test_nrf91_socket_offload_sendmsg_not_fits_buf(void)
 	int family = AF_INET;
 	int type = SOCK_STREAM;
 	int proto = IPPROTO_TCP;
-	int flags = MSG_DONTWAIT;
+	int flags = ZSOCK_MSG_DONTWAIT;
 	struct msghdr msg = { 0 };
 	struct iovec chunks[3] = { 0 };
 
@@ -1614,15 +1583,14 @@ void test_nrf91_socket_offload_sendmsg_not_fits_buf(void)
 	int chunk_2 = 43;
 	int chunk_3 = 44;
 
-	__cmock_nrf_socket_ExpectAndReturn(NRF_AF_INET, NRF_SOCK_STREAM,
-					  NRF_IPPROTO_TCP, nrf_fd);
+	__cmock_nrf_socket_ExpectAndReturn(NRF_AF_INET, NRF_SOCK_STREAM, NRF_IPPROTO_TCP, nrf_fd);
 
-	fd = socket(family, type, proto);
+	fd = zsock_socket(family, type, proto);
 
 	TEST_ASSERT_EQUAL(fd, 0);
 
-	/* Skip connect, etc. since for testing we just
-	 * need a working socket
+	/* Skip zsock_connect, etc. since for testing we just
+	 * need a working zsock_socket
 	 */
 
 	chunks[0].iov_base = &chunk_1;
@@ -1636,27 +1604,27 @@ void test_nrf91_socket_offload_sendmsg_not_fits_buf(void)
 
 	/* First send doesn't send all data of the first chunk */
 	__cmock_nrf_sendto_ExpectAndReturn(nrf_fd, &chunk_1, sizeof(int),
-					  NRF_MSG_DONTWAIT,
-					  NULL, 0, sizeof(int) - 1);
+					   NRF_MSG_DONTWAIT,
+					   NULL, 0, sizeof(int) - 1);
 	/* Second send will send the remaining part of the first chunk */
 	__cmock_nrf_sendto_ExpectAndReturn(nrf_fd, ((uint8_t *)&chunk_1) + sizeof(int) - 1, 1,
-					  NRF_MSG_DONTWAIT,
-					  NULL, 0, 1);
+					   NRF_MSG_DONTWAIT,
+					   NULL, 0, 1);
 	__cmock_nrf_sendto_ExpectAndReturn(nrf_fd, &chunk_2, sizeof(int),
-					  NRF_MSG_DONTWAIT,
-					  NULL, 0, sizeof(int));
+					   NRF_MSG_DONTWAIT,
+					   NULL, 0, sizeof(int));
 	__cmock_nrf_sendto_ExpectAndReturn(nrf_fd, &chunk_3, sizeof(int),
-					  NRF_MSG_DONTWAIT,
-					  NULL, 0, sizeof(int));
+					   NRF_MSG_DONTWAIT,
+					   NULL, 0, sizeof(int));
 	__cmock_nrf_sendto_IgnoreArg_message();
 
-	ret = sendmsg(fd, &msg, flags);
+	ret = zsock_sendmsg(fd, &msg, flags);
 
 	TEST_ASSERT_EQUAL(ret, 3 * sizeof(int));
 
 	__cmock_nrf_close_ExpectAndReturn(nrf_fd, 0);
 
-	ret = close(fd);
+	ret = zsock_close(fd);
 
 	TEST_ASSERT_EQUAL(ret, 0);
 }
@@ -1671,25 +1639,24 @@ void test_nrf91_socket_offload_fcntl_einval(void)
 	int proto = IPPROTO_TCP;
 	int wrong_command = ~(F_SETFL | F_GETFL);
 
-	__cmock_nrf_socket_ExpectAndReturn(NRF_AF_INET, NRF_SOCK_STREAM,
-					  NRF_IPPROTO_TCP, nrf_fd);
+	__cmock_nrf_socket_ExpectAndReturn(NRF_AF_INET, NRF_SOCK_STREAM, NRF_IPPROTO_TCP, nrf_fd);
 
-	fd = socket(family, type, proto);
+	fd = zsock_socket(family, type, proto);
 
 	TEST_ASSERT_EQUAL(fd, 0);
 
-	/* Skip connect, etc. since for testing we just
-	 * need a working socket
+	/* Skip zsock_connect, etc. since for testing we just
+	 * need a working zsock_socket
 	 */
 
-	ret = fcntl(fd, wrong_command);
+	ret = zsock_fcntl(fd, wrong_command);
 
 	TEST_ASSERT_EQUAL(ret, -1);
 	TEST_ASSERT_EQUAL(errno, EINVAL);
 
 	__cmock_nrf_close_ExpectAndReturn(nrf_fd, 0);
 
-	ret = close(fd);
+	ret = zsock_close(fd);
 
 	TEST_ASSERT_EQUAL(ret, 0);
 }
@@ -1703,26 +1670,25 @@ void test_nrf91_socket_offload_fcntl_f_setfl(void)
 	int type = SOCK_STREAM;
 	int proto = IPPROTO_TCP;
 
-	__cmock_nrf_socket_ExpectAndReturn(NRF_AF_INET, NRF_SOCK_STREAM,
-					  NRF_IPPROTO_TCP, nrf_fd);
+	__cmock_nrf_socket_ExpectAndReturn(NRF_AF_INET, NRF_SOCK_STREAM, NRF_IPPROTO_TCP, nrf_fd);
 
-	fd = socket(family, type, proto);
+	fd = zsock_socket(family, type, proto);
 
 	TEST_ASSERT_EQUAL(fd, 0);
 
-	/* Skip connect, etc. since for testing we just
-	 * need a working socket
+	/* Skip zsock_connect, etc. since for testing we just
+	 * need a working zsock_socket
 	 */
 
 	__cmock_nrf_fcntl_ExpectAndReturn(nrf_fd, NRF_F_SETFL, NRF_O_NONBLOCK, 0);
 
-	ret = fcntl(fd, F_SETFL, O_NONBLOCK);
+	ret = zsock_fcntl(fd, F_SETFL, O_NONBLOCK);
 
 	TEST_ASSERT_EQUAL(ret, 0);
 
 	__cmock_nrf_close_ExpectAndReturn(nrf_fd, 0);
 
-	ret = close(fd);
+	ret = zsock_close(fd);
 
 	TEST_ASSERT_EQUAL(ret, 0);
 }
@@ -1736,26 +1702,25 @@ void test_nrf91_socket_offload_fcntl_f_getfl(void)
 	int type = SOCK_STREAM;
 	int proto = IPPROTO_TCP;
 
-	__cmock_nrf_socket_ExpectAndReturn(NRF_AF_INET, NRF_SOCK_STREAM,
-					  NRF_IPPROTO_TCP, nrf_fd);
+	__cmock_nrf_socket_ExpectAndReturn(NRF_AF_INET, NRF_SOCK_STREAM, NRF_IPPROTO_TCP, nrf_fd);
 
-	fd = socket(family, type, proto);
+	fd = zsock_socket(family, type, proto);
 
 	TEST_ASSERT_EQUAL(fd, 0);
 
-	/* Skip connect, etc. since for testing we just
-	 * need a working socket
+	/* Skip zsock_connect, etc. since for testing we just
+	 * need a working zsock_socket
 	 */
 
 	__cmock_nrf_fcntl_ExpectAndReturn(nrf_fd, NRF_F_GETFL, 0, NRF_O_NONBLOCK);
 
-	ret = fcntl(fd, F_GETFL);
+	ret = zsock_fcntl(fd, F_GETFL);
 
 	TEST_ASSERT_EQUAL(ret, O_NONBLOCK);
 
 	__cmock_nrf_close_ExpectAndReturn(nrf_fd, 0);
 
-	ret = close(fd);
+	ret = zsock_close(fd);
 
 	TEST_ASSERT_EQUAL(ret, 0);
 }
@@ -1788,31 +1753,31 @@ void test_nrf91_socket_offload_poll(void)
 	int family = AF_INET;
 	int type = SOCK_DGRAM;
 	int proto = IPPROTO_UDP;
-	struct pollfd fds[3] = { 0 };
+	struct zsock_pollfd fds[3] = { 0 };
 
 	__cmock_nrf_socket_ExpectAndReturn(NRF_AF_INET, NRF_SOCK_DGRAM, NRF_IPPROTO_UDP, nrf_fd);
 
-	fd = socket(family, type, proto);
+	fd = zsock_socket(family, type, proto);
 	TEST_ASSERT_EQUAL(fd, 0);
 
 	fds[0].fd = fd;
-	fds[0].events = POLLOUT;
+	fds[0].events = ZSOCK_POLLOUT;
 	fds[1].fd = 42;
-	fds[1].events = POLLOUT;
+	fds[1].events = ZSOCK_POLLOUT;
 	fds[2].fd = 43;
-	fds[2].events = POLLOUT;
+	fds[2].events = ZSOCK_POLLOUT;
 
 	__cmock_nrf_setsockopt_Stub(stub_nrf_setsockopt_pollcb);
 
-	ret = poll(fds, 3, 0);
+	ret = zsock_poll(fds, 3, 0);
 	TEST_ASSERT_EQUAL(3, ret);
-	TEST_ASSERT_EQUAL(POLLOUT, fds[0].revents);
-	TEST_ASSERT_EQUAL(POLLNVAL, fds[1].revents);
-	TEST_ASSERT_EQUAL(POLLNVAL, fds[2].revents);
+	TEST_ASSERT_EQUAL(ZSOCK_POLLOUT, fds[0].revents);
+	TEST_ASSERT_EQUAL(ZSOCK_POLLNVAL, fds[1].revents);
+	TEST_ASSERT_EQUAL(ZSOCK_POLLNVAL, fds[2].revents);
 
 	__cmock_nrf_close_ExpectAndReturn(nrf_fd, 0);
 
-	ret = close(fd);
+	ret = zsock_close(fd);
 	TEST_ASSERT_EQUAL(ret, 0);
 }
 

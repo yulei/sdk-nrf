@@ -1,11 +1,11 @@
 .. _bt_mesh_models:
 
-Bluetooth mesh models
+Bluetooth Mesh models
 #####################
 
-Nordic Semiconductor provides a variety of model implementations from the `Bluetooth mesh model specification`_ and their API documentation, as well as vendor-specific models.
+Nordic Semiconductor provides a variety of model implementations from the `Bluetooth Mesh model specification`_ and their API documentation, as well as vendor-specific models.
 
-For more information about these and other models, see also `Bluetooth mesh model overview`_.
+For more information about these and other models, see also `Bluetooth Mesh model overview`_.
 
 .. toctree::
    :maxdepth: 1
@@ -31,3 +31,4 @@ For more information about these and other models, see also `Bluetooth mesh mode
    scheduler.rst
    vnd/silvair_enocean_srv.rst
    vnd/dm.rst
+   vnd/le_pair_resp.rst

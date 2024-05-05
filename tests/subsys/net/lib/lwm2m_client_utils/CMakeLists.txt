@@ -12,8 +12,9 @@ FILE(GLOB app_sources src/*.c)
 target_sources(app
   PRIVATE
     ${app_sources}
-    $ENV{ZEPHYR_BASE}/subsys/net/lib/lwm2m/lwm2m_util.c
+    ${ZEPHYR_BASE}/subsys/net/lib/lwm2m/lwm2m_util.c
 )
+zephyr_linker_sources(SECTIONS src/iterables.ld)
 
 set(options
   -DCONFIG_LWM2M_ENGINE_MAX_PENDING=5
@@ -43,6 +44,8 @@ set(options
   -DCONFIG_NET_MGMT_EVENT_INFO
   -DCONFIG_NET_MGMT_EVENT
   -DCONFIG_LWM2M_CLIENT_UTILS_RAI
+  -DCONFIG_LWM2M_ENGINE_DEFAULT_LIFETIME=43200
+  -DCONFIG_LWM2M_CLIENT_UTILS_DTLS_CON_MANAGEMENT
 )
 
 target_compile_options(app
@@ -55,11 +58,11 @@ target_compile_options(..__nrf__subsys__net__lib__lwm2m_client_utils
 )
 
 set(includes
-"$ENV{ZEPHYR_BASE}/subsys/net/lib/lwm2m/"
-"$ENV{ZEPHYR_BASE}/../nrfxlib/nrf_modem/include/"
-"$ENV{ZEPHYR_BASE}/../modules/lib/cjson/"
-"$ENV{ZEPHYR_BASE}/../nrf/subsys/net/lib/nrf_cloud/include/"
-"$ENV{ZEPHYR_BASE}/../nrf/subsys/net/lib/fota_download/include/"
+"${ZEPHYR_BASE}/subsys/net/lib/lwm2m/"
+"${ZEPHYR_BASE}/../nrfxlib/nrf_modem/include/"
+"${ZEPHYR_BASE}/../modules/lib/cjson/"
+"${ZEPHYR_BASE}/../nrf/subsys/net/lib/nrf_cloud/include/"
+"${ZEPHYR_BASE}/../nrf/subsys/net/lib/fota_download/include/"
 "src/"
 )
 

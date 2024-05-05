@@ -23,9 +23,9 @@ static void on_modem_shutdown(void *ctx)
 	printk("> Shutting down\n");
 }
 
-LTE_LC_ON_CFUN(cfun_monitor, on_cfun, NULL);
+NRF_MODEM_LIB_ON_CFUN(cfun_monitor, on_cfun, NULL);
 
-static void on_cfun(enum lte_lc_func_mode mode, void *ctx)
+static void on_cfun(int mode, void *ctx)
 {
 	printk("> Functional mode has changed to %d\n", mode);
 }
@@ -43,10 +43,10 @@ int main(void)
 		return 0;
 	}
 
-	printk("Changing functional mode\n");
-	err = lte_lc_init_and_connect();
+	printk("Connecting to network\n");
+	err = lte_lc_connect();
 	if (err) {
-		printk("lte_lc_init_and_connect() failed, err %d\n", err);
+		printk("Connecting to network failed, err %d\n", err);
 	}
 
 	printk("Shutting down modem library\n");

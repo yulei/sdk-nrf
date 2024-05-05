@@ -1,13 +1,13 @@
 .. _bluetooth_mesh_light_dim:
 
-Bluetooth mesh: Light dimmer and scene selector
+Bluetooth Mesh: Light dimmer and scene selector
 ###############################################
 
 .. contents::
    :local:
    :depth: 2
 
-The Bluetooth® mesh light dimmer and scene selector sample demonstrates how to set up a light dimmer and scene selector application, and control dimmable LEDs with Bluetooth mesh using the :ref:`bt_mesh_lvl_readme`, the :ref:`bt_mesh_onoff_readme`, and the :ref:`bt_mesh_scene_readme`.
+The Bluetooth® Mesh light dimmer and scene selector sample demonstrates how to set up a light dimmer and scene selector application, and control dimmable LEDs with Bluetooth Mesh using the :ref:`bt_mesh_lvl_readme`, the :ref:`bt_mesh_onoff_readme`, and the :ref:`bt_mesh_scene_readme`.
 The sample provides the following functionality:
 
   * On/off and dim up/down using one button
@@ -50,12 +50,12 @@ The sample instantiates the following models:
 
 Devices are nodes with a provisionee role in a mesh network.
 Provisioning is performed using the `nRF Mesh mobile app`_.
-This mobile application is also used to configure key bindings, and publication and subscription settings of the Bluetooth mesh model instances in the sample.
+This mobile application is also used to configure key bindings, and publication and subscription settings of the Bluetooth Mesh model instances in the sample.
 After provisioning and configuring the mesh models supported by the sample in the `nRF Mesh mobile app`_, **Button 1** on the Mesh Light Dimmer device can be used to control the configured network nodes' LEDs, while **Button 2** can be used to store and restore scenes on the network nodes.
 
 .. note::
-  When running this sample on a Thingy:53, the scene selection functionality will not be available as the device only has one button.
-  The Thingy:53's single button will have the dimming and on/off functionality as described for **Button 1** in this documentation.
+  When running this sample on Thingy:53 or the :ref:`zephyr:nrf52840dongle_nrf52840`, the scene selection functionality will not be available as the device only has one button.
+  The single button of Thingy:53 and the dongle will be used for dimming and the on/off functionality as described for **Button 1** in this documentation.
 
 Provisioning
 ============
@@ -115,6 +115,9 @@ Button 2:
    Each press of the button will recall the next scene, meaning, the first press will recall scene 2, the next press will recall scene 3, and so on, before wrapping around back to scene 1.
 
    On long press and release, **Button 2** will publish a Scene Store message using the configured publication parameters of its model instance, and store the current LED state of all the targets under the scene with the most recently recalled scene number.
+
+.. note::
+   :ref:`zephyr:thingy53_nrf5340` and the :ref:`zephyr:nrf52840dongle_nrf52840` only support dimming and the on/off functionality, not the scene selection functionality.
 
 LEDs:
    Show the OOB authentication value during provisioning if the "Push button" OOB method is used.

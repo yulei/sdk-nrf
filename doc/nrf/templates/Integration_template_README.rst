@@ -12,7 +12,7 @@ Template: Integration
    Refer to the following instructions to create the description:
 
    * Provide a title that starts with the product or service name with "integration" as a suffix, for example, "Memfault integration".
-   * Place the documentation inside the :file:`nrf/doc/nrf` folder.
+   * Place the documentation inside the :file:`nrf/doc/nrf/external_comp` folder.
    * List the file name with path in the ``.. toctree:`` of the :file:`integrations` RST file.
    * Sections with * are optional and can be left out.
      All other sections are required.
@@ -48,7 +48,7 @@ Integration prerequisites
 Before you start the |NCS| integration with AVSystem's Coiote IoT Device Management, make sure that the following prerequisites are completed:
 
 * :ref:`Install the nRF Connect SDK <installation>`.
-* :ref:`Set up nRF9160 DK <ug_nrf9160_gs>`.
+* :ref:`Setup of an nRF91 Series DK <ug_nrf91>`.
 * :ref:`Create an nRF Cloud account <creating_cloud_account>`.
 * Create an account for `AVSystem Coiote Device Management <Coiote Device Management server_>`_.
 

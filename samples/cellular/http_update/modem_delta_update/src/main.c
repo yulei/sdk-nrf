@@ -261,8 +261,6 @@ static int cert_provision(void)
  */
 static int modem_configure_and_connect(void)
 {
-	BUILD_ASSERT(!IS_ENABLED(CONFIG_LTE_AUTO_INIT_AND_CONNECT),
-			"This sample does not support auto init and connect");
 	int err;
 
 #if defined(CONFIG_USE_HTTPS)
@@ -275,7 +273,7 @@ static int modem_configure_and_connect(void)
 #endif /* CONFIG_USE_HTTPS */
 
 	printk("LTE Link Connecting ...\n");
-	err = lte_lc_init_and_connect_async(lte_lc_handler);
+	err = lte_lc_connect_async(lte_lc_handler);
 	if (err) {
 		printk("LTE link could not be established.");
 		return err;
@@ -288,6 +286,8 @@ static int update_download(void)
 {
 	int err;
 	const char *file;
+	int sec_tag = SEC_TAG;
+	uint8_t sec_tag_count = sec_tag < 0 ? 0 : 1;
 
 	err = modem_info_string_get(MODEM_INFO_FW_VERSION, modem_version,
 				    MAX_MODEM_VERSION_LEN);
@@ -309,9 +309,10 @@ static int update_download(void)
 	}
 
 	/* Functions for getting the host and file */
-	err = fota_download_start(CONFIG_DOWNLOAD_HOST, file, SEC_TAG, 0, 0);
+	err = fota_download(CONFIG_DOWNLOAD_HOST, file, &sec_tag, sec_tag_count, 0, 0,
+			    DFU_TARGET_IMAGE_TYPE_MODEM_DELTA);
 	if (err) {
-		printk("fota_download_start() failed, err %d\n", err);
+		printk("fota_download_any() failed, err %d\n", err);
 		return err;
 	}
 
@@ -401,7 +402,7 @@ static void fota_work_cb(struct k_work *work)
 		break;
 	case UPDATE_APPLY:
 		printk("Applying firmware update. This can take a while.\n");
-		lte_lc_deinit();
+		lte_lc_power_off();
 		/* Re-initialize the modem to apply the update. */
 		err = nrf_modem_lib_shutdown();
 		if (err) {

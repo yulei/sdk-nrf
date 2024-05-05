@@ -24,6 +24,8 @@ Navigate to the compatibility matrix for your chip and select *Thread CIDs*.
 
 Depending on your development approach, you have several certification options when using Nordic Semiconductor devices.
 
+.. _ug_thread_cert_inheritance_without_modifications:
+
 Certification by inheritance without modifications to binaries
 ==============================================================
 
@@ -64,25 +66,26 @@ Complete the following steps to prepare for the certification tests:
 
 #. Build the certification image.
 
-   Use the :ref:`ot_cli_sample` sample as a base, and apply the :file:`overlay-ci.conf` and :file:`overlay-multiprotocol.conf` overlay files.
+   Use the :ref:`ot_cli_sample` sample as a base, and apply the ``ci`` and ``multiprotocol`` snippets.
 
    * If building on the command line, use the following command:
 
      .. code-block::
 
         cd ncs/nrf/samples/openthread/cli/
-        west build -b nrf52840dk_nrf52840 -- -DOVERLAY_CONFIG="overlay-ci.conf;overlay-multiprotocol.conf" -DCONFIG_OPENTHREAD_LIBRARY=y
+        west build -b nrf52840dk/nrf52840 -S ci -S multiprotocol -- -DCONFIG_OPENTHREAD_LIBRARY=y
 
    * If building using Visual Studio Code, you must first `create and build the application <How to build an application_>`_ using the CLI sample.
-     Select the :file:`overlay-ci.conf` and :file:`overlay-multiprotocol.conf` overlay files in the :guilabel:`Kconfig fragment` drop-down menu and add the following lines to the **Additional CMake arguments** text field:
+     Add the following lines to the **Additional CMake arguments** text field:
 
      .. code-block::
 
-        CONFIG_OPENTHREAD_LIBRARY=y
+        -DSNIPPET="ci;multiprotocol"
+        -DCONFIG_OPENTHREAD_LIBRARY=y
 
    .. note::
       The configuration option selects the precompiled OpenThread libraries.
-      The :file:`overlay-multiprotocol.conf` overlay file enables :ref:`multiprotocol support <ug_multiprotocol_support>` with Bluetooth® LE advertising.
+      The ``multiprotocol`` snippet enables :ref:`multiprotocol support <ug_multiprotocol_support>` with Bluetooth® LE advertising.
 
 #. Prepare Thread Test Harness.
 
@@ -172,4 +175,4 @@ Due to a collision of USB PID:VID with another vendor, Nordic devices are not au
 This is valid only for Nordic Semiconductor development kits with a J-Link virtual COM port.
 
 To add an nRF52840 DK, drag the nRF52840 DK and drop it on the test bed configuration page.
-After that, the device is configured and the proper baud rate (115200) and COM port are set.
+After that, the device is configured and the :ref:`proper baud rate (115200) <test_and_optimize>` and COM port are set.

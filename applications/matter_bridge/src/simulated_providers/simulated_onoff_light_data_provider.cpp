@@ -12,12 +12,15 @@ LOG_MODULE_DECLARE(app, CONFIG_CHIP_APP_LOG_LEVEL);
 
 using namespace ::chip;
 using namespace ::chip::app;
+using namespace Nrf;
 
 void SimulatedOnOffLightDataProvider::Init()
 {
+#ifdef CONFIG_BRIDGED_DEVICE_SIMULATED_ONOFF_AUTOMATIC
 	k_timer_init(&mTimer, SimulatedOnOffLightDataProvider::TimerTimeoutCallback, nullptr);
 	k_timer_user_data_set(&mTimer, this);
 	k_timer_start(&mTimer, K_MSEC(kOnOffIntervalMs), K_MSEC(kOnOffIntervalMs));
+#endif
 }
 
 void SimulatedOnOffLightDataProvider::NotifyUpdateState(chip::ClusterId clusterId, chip::AttributeId attributeId,
@@ -41,17 +44,18 @@ CHIP_ERROR SimulatedOnOffLightDataProvider::UpdateState(chip::ClusterId clusterI
 
 	switch (attributeId) {
 	case Clusters::OnOff::Attributes::OnOff::Id: {
-		mOnOff = *buffer;
+		memcpy(&mOnOff, buffer, sizeof(mOnOff));
 		NotifyUpdateState(clusterId, attributeId, &mOnOff, sizeof(mOnOff));
 		return CHIP_NO_ERROR;
 	}
 	default:
-		return CHIP_ERROR_INVALID_ARGUMENT;
+		return CHIP_ERROR_UNSUPPORTED_CHIP_FEATURE;
 	}
 
 	return CHIP_NO_ERROR;
 }
 
+#ifdef CONFIG_BRIDGED_DEVICE_SIMULATED_ONOFF_AUTOMATIC
 void SimulatedOnOffLightDataProvider::TimerTimeoutCallback(k_timer *timer)
 {
 	if (!timer || !timer->user_data) {
@@ -68,6 +72,7 @@ void SimulatedOnOffLightDataProvider::TimerTimeoutCallback(k_timer *timer)
 
 	DeviceLayer::PlatformMgr().ScheduleWork(NotifyAttributeChange, reinterpret_cast<intptr_t>(provider));
 }
+#endif
 
 void SimulatedOnOffLightDataProvider::NotifyAttributeChange(intptr_t context)
 {

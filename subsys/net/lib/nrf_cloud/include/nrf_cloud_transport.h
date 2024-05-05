@@ -30,10 +30,14 @@ enum nct_evt_type {
 };
 
 enum nct_cc_opcode {
+	/* State (shadow) request */
 	NCT_CC_OPCODE_GET_REQ,
-	NCT_CC_OPCODE_UPDATE_REQ,
-	NCT_CC_OPCODE_UPDATE_REJECT_RSP,
-	NCT_CC_OPCODE_UPDATE_ACCEPT_RSP,
+	/* Shadow update: accepted (trimmed) */
+	NCT_CC_OPCODE_UPDATE_ACCEPTED,
+	/* Shadow update: rejected */
+	NCT_CC_OPCODE_UPDATE_REJECTED,
+	/* Shadow update: delta */
+	NCT_CC_OPCODE_UPDATE_DELTA,
 };
 
 struct nct_dc_data {
@@ -63,7 +67,7 @@ struct nct_evt {
 int nct_socket_get(void);
 
 /** @brief Initialization routine for the transport. */
-int nct_init(const char * const client_id);
+int nct_initialize(const char * const client_id);
 
 /** @brief Unintialize the transport; reset state and free allocated memory */
 void nct_uninit(void);

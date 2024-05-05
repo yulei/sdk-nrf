@@ -195,8 +195,6 @@ static void cloud_lwm2m_init(void)
 	snprintk(endpoint_name, sizeof(endpoint_name), "%s%s", CONFIG_MOSH_LWM2M_ENDPOINT_PREFIX,
 		 imei_buf);
 
-	lwm2m_init_device();
-
 	cloud_lwm2m_init_device(imei_buf);
 	lwm2m_init_security(&client, endpoint_name, NULL);
 
@@ -209,6 +207,9 @@ static void cloud_lwm2m_init(void)
 				       sizeof(CONFIG_MOSH_LWM2M_PSK), true,
 				       endpoint_name);
 	}
+
+	/* Disable unnecessary time updates. */
+	lwm2m_update_device_service_period(0);
 }
 
 static void cloud_lwm2m_rd_client_update_lifetime(int srv_obj_inst)
@@ -224,6 +225,7 @@ static void cloud_lwm2m_rd_client_event_cb(struct lwm2m_ctx *client_ctx,
 					   enum lwm2m_rd_client_event client_event)
 {
 	switch (client_event) {
+	case LWM2M_RD_CLIENT_EVENT_SERVER_DISABLED:
 	case LWM2M_RD_CLIENT_EVENT_DEREGISTER:
 	case LWM2M_RD_CLIENT_EVENT_NONE:
 		/* Do nothing. */

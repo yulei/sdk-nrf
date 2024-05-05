@@ -8,7 +8,11 @@ UDP
 	:depth: 2
 
 The UDP sample demonstrates how to perform sequential transmissions of UDP packets to a server using an IP-connected device.
-The sample connects to an LTE network using an nRF91 Series DK or Thingy:91, or to Wi-Fi using the nRF7002 DK.
+The sample connects to an LTE network using an nRF91 Series DK or a Thingy:91, or to Wi-Fi® using the nRF7002 DK.
+
+.. |wifi| replace:: Wi-Fi
+
+.. include:: /includes/net_connection_manager.txt
 
 Requirements
 ************
@@ -55,14 +59,19 @@ CONFIG_UDP_SAMPLE_SERVER_ADDRESS_STATIC - UDP Server IP Address
 CONFIG_UDP_SAMPLE_SERVER_PORT - UDP server port configuration
    This configuration option sets the server address port number.
 
+.. include:: /includes/wifi_credentials_shell.txt
+
+.. include:: /includes/wifi_credentials_static.txt
+
 Configuration files
 ===================
 
 The sample provides predefined configuration files for the following development kits:
 
 * :file:`prj.conf` - General configuration file for all devices.
-* :file:`boards/nrf9160dk_nrf9160_ns.conf` - Configuration file for the nRF9160 DK.
+* :file:`boards/nrf9151dk_nrf9151_ns.conf` - Configuration file for the nRF9151 DK.
 * :file:`boards/nrf9161dk_nrf9161_ns.conf` - Configuration file for the nRF9161 DK.
+* :file:`boards/nrf9160dk_nrf9160_ns.conf` - Configuration file for the nRF9160 DK.
 * :file:`boards/thingy91_nrf9160_ns.conf` - Configuration file for the Thingy:91.
 * :file:`boards/nrf7002dk_nrf5340_cpuapp.conf` - Configuration file for the nRF7002 DK.
 * :file:`boards/qemu_x86.conf` - Configuration file for QEMU x86 emulation.

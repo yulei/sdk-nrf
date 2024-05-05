@@ -7,6 +7,7 @@
 #include <zephyr/kernel.h>
 #include <stdio.h>
 #include <zephyr/logging/log.h>
+#include <zephyr/sys_clock.h>
 #include <date_time.h>
 #include <nrf_modem_gnss.h>
 
@@ -34,11 +35,8 @@ LOG_MODULE_REGISTER(slm_gnss, CONFIG_SLM_LOG_LEVEL);
 
 #define LOCATION_REPORT_MS 5000
 
-#define SEC_PER_MIN	(60UL)
-#define MIN_PER_HOUR	(60UL)
 #define SEC_PER_HOUR	(MIN_PER_HOUR * SEC_PER_MIN)
-#define HOURS_PER_DAY	(24UL)
-#define SEC_PER_DAY	(HOURS_PER_DAY * SEC_PER_HOUR)
+#define SEC_PER_DAY	(HOUR_PER_DAY * SEC_PER_HOUR)
 /* (6.1.1980 UTC - 1.1.1970 UTC) */
 #define GPS_TO_UNIX_UTC_OFFSET_SECONDS	(315964800UL)
 /* UTC/GPS time offset as of 1st of January 2017. */
@@ -99,15 +97,15 @@ static bool is_gnss_activated(void)
 	int cfun_mode = 0;
 
 	/*parse %XSYSTEMMODE=<LTE_M_support>,<NB_IoT_support>,<GNSS_support>,<LTE_preference> */
-	if (nrf_modem_at_scanf("AT%XSYSTEMMODE?",
-			       "%XSYSTEMMODE: %*d,%*d,%d", &activated) == 1) {
+	if (slm_util_at_scanf("AT%XSYSTEMMODE?",
+			       "%%XSYSTEMMODE: %*d,%*d,%d", &activated) == 1) {
 		if (activated == 0) {
 			return false;
 		}
 	}
 
 	/*parse +CFUN: <fun> */
-	if (nrf_modem_at_scanf("AT+CFUN?", "+CFUN: %d", &cfun_mode) == 1) {
+	if (slm_util_at_scanf("AT+CFUN?", "+CFUN: %d", &cfun_mode) == 1) {
 		if (cfun_mode == 1 || cfun_mode == 31) {
 			return true;
 		}
@@ -129,7 +127,7 @@ static void gnss_status_set(enum gnss_status status)
 	/* A notification is sent when the GNSS status is updated.
 	 * However this gets called in interrupt context (from gnss_event_handler()),
 	 * from which UART messages cannot be sent. This task is thus delegated
-	 * to a worker, to which the the new GNSS status is passed.
+	 * to a worker, to which the new GNSS status is passed.
 	 * A FIFO rather than a single variable is used to not miss GNSS status changes
 	 * in case they happen twice (or more) before the worker had the time to process them.
 	 */
@@ -504,8 +502,8 @@ static void fix_rep_wk(struct k_work *work)
 
 	/* GIS accuracy: http://wiki.gis.com/wiki/index.php/Decimal_degrees, use default .6lf */
 	rsp_send("\r\n#XGPS: %lf,%lf,%f,%f,%f,%f,\"%04u-%02u-%02u %02u:%02u:%02u\"\r\n",
-		pvt.latitude, pvt.longitude, pvt.altitude,
-		pvt.accuracy, pvt.speed, pvt.heading,
+		pvt.latitude, pvt.longitude, (double)pvt.altitude,
+		(double)pvt.accuracy, (double)pvt.speed, (double)pvt.heading,
 		pvt.datetime.year, pvt.datetime.month, pvt.datetime.day,
 		pvt.datetime.hour, pvt.datetime.minute, pvt.datetime.seconds);
 
@@ -603,14 +601,15 @@ static void gnss_event_handler(int event)
 	}
 }
 
-/* Handles AT#XGPS commands. */
-int handle_at_gps(enum at_cmd_type cmd_type)
+SLM_AT_CMD_CUSTOM(xgps_set, "AT#XGPS=", handle_at_gps);
+SLM_AT_CMD_CUSTOM(xgps_read, "AT#XGPS?", handle_at_gps);
+static int handle_at_gps(enum at_cmd_type cmd_type, const struct at_param_list *param_list,
+			 uint32_t param_count)
 {
 	int err = -EINVAL;
 	uint16_t op;
 	uint16_t interval;
 	uint16_t timeout;
-	uint32_t param_count;
 
 	enum {
 		OP_IDX = 1,
@@ -621,8 +620,7 @@ int handle_at_gps(enum at_cmd_type cmd_type)
 	};
 	switch (cmd_type) {
 	case AT_CMD_TYPE_SET_COMMAND:
-		param_count = at_params_valid_count_get(&slm_at_param_list);
-		err = at_params_unsigned_short_get(&slm_at_param_list, OP_IDX, &op);
+		err = at_params_unsigned_short_get(param_list, OP_IDX, &op);
 		if (err) {
 			return err;
 		}
@@ -633,7 +631,7 @@ int handle_at_gps(enum at_cmd_type cmd_type)
 			}
 
 			err = at_params_unsigned_short_get(
-				&slm_at_param_list, CLOUD_ASSISTANCE_IDX, &gnss_cloud_assistance);
+				param_list, CLOUD_ASSISTANCE_IDX, &gnss_cloud_assistance);
 			if (err || gnss_cloud_assistance > 1) {
 				return -EINVAL;
 			}
@@ -654,8 +652,7 @@ int handle_at_gps(enum at_cmd_type cmd_type)
 				return -ENOTCONN;
 			}
 
-			err = at_params_unsigned_short_get(
-				&slm_at_param_list, INTERVAL_IDX, &interval);
+			err = at_params_unsigned_short_get(param_list, INTERVAL_IDX, &interval);
 			if (err || (interval > 1 && interval < 10)) {
 				return -EINVAL;
 			}
@@ -689,7 +686,7 @@ int handle_at_gps(enum at_cmd_type cmd_type)
 					timeout = 60;  /* default value */
 				} else {
 					err = at_params_unsigned_short_get(
-						&slm_at_param_list, TIMEOUT_IDX, &timeout);
+						param_list, TIMEOUT_IDX, &timeout);
 					if (err || param_count != MAX_PARAM_COUNT) {
 						return -EINVAL;
 					}
@@ -733,15 +730,16 @@ int handle_at_gps(enum at_cmd_type cmd_type)
 	return err;
 }
 
-/* Handles AT#XGPSDEL commands. */
-int handle_at_gps_delete(enum at_cmd_type cmd_type)
+SLM_AT_CMD_CUSTOM(xgpsdel, "AT#XGPSDEL", handle_at_gps_delete);
+static int handle_at_gps_delete(enum at_cmd_type cmd_type, const struct at_param_list *param_list,
+				uint32_t)
 {
 	int err = -EINVAL;
 	uint32_t mask;
 
 	switch (cmd_type) {
 	case AT_CMD_TYPE_SET_COMMAND:
-		err = at_params_unsigned_int_get(&slm_at_param_list, 1, &mask);
+		err = at_params_unsigned_int_get(param_list, 1, &mask);
 		if (err || !mask || (mask & NRF_MODEM_GNSS_DELETE_TCXO_OFFSET)) {
 			return -EINVAL;
 		}

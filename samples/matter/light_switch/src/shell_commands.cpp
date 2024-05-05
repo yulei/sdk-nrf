@@ -5,7 +5,7 @@
  */
 
 #include "shell_commands.h"
-#include "binding_handler.h"
+#include "binding/binding_handler.h"
 #include "light_switch.h"
 
 #include <platform/CHIPDeviceLayer.h>
@@ -43,7 +43,7 @@ static CHIP_ERROR SwitchCommandHandler(int argc, char **argv)
 
 static CHIP_ERROR TableCommandHelper(int argc, char **argv)
 {
-	BindingHandler::GetInstance().PrintBindingTable();
+	Nrf::Matter::BindingHandler::PrintBindingTable();
 	return CHIP_NO_ERROR;
 }
 
@@ -65,37 +65,43 @@ namespace Unicast
 
 	static CHIP_ERROR OnCommandHandler(int argc, char **argv)
 	{
-		BindingHandler::BindingData *data = Platform::New<BindingHandler::BindingData>();
+		Nrf::Matter::BindingHandler::BindingData *data =
+			Platform::New<Nrf::Matter::BindingHandler::BindingData>();
 		data->EndpointId = LightSwitch::GetInstance().GetLightSwitchEndpointId();
 		data->CommandId = Clusters::OnOff::Commands::On::Id;
 		data->ClusterId = Clusters::OnOff::Id;
+		data->InvokeCommandFunc = LightSwitch::SwitchChangedHandler;
+		data->IsGroup.SetValue(false);
 
-		DeviceLayer::PlatformMgr().ScheduleWork(BindingHandler::SwitchWorkerHandler,
-							reinterpret_cast<intptr_t>(data));
+		Nrf::Matter::BindingHandler::RunBoundClusterAction(data);
 		return CHIP_NO_ERROR;
 	}
 
 	static CHIP_ERROR OffCommandHandler(int argc, char **argv)
 	{
-		BindingHandler::BindingData *data = Platform::New<BindingHandler::BindingData>();
+		Nrf::Matter::BindingHandler::BindingData *data =
+			Platform::New<Nrf::Matter::BindingHandler::BindingData>();
 		data->EndpointId = LightSwitch::GetInstance().GetLightSwitchEndpointId();
 		data->CommandId = Clusters::OnOff::Commands::Off::Id;
 		data->ClusterId = Clusters::OnOff::Id;
+		data->InvokeCommandFunc = LightSwitch::SwitchChangedHandler;
+		data->IsGroup.SetValue(false);
 
-		DeviceLayer::PlatformMgr().ScheduleWork(BindingHandler::SwitchWorkerHandler,
-							reinterpret_cast<intptr_t>(data));
+		Nrf::Matter::BindingHandler::RunBoundClusterAction(data);
 		return CHIP_NO_ERROR;
 	}
 
 	static CHIP_ERROR ToggleCommandHandler(int argc, char **argv)
 	{
-		BindingHandler::BindingData *data = Platform::New<BindingHandler::BindingData>();
+		Nrf::Matter::BindingHandler::BindingData *data =
+			Platform::New<Nrf::Matter::BindingHandler::BindingData>();
 		data->EndpointId = LightSwitch::GetInstance().GetLightSwitchEndpointId();
 		data->CommandId = Clusters::OnOff::Commands::Toggle::Id;
 		data->ClusterId = Clusters::OnOff::Id;
+		data->InvokeCommandFunc = LightSwitch::SwitchChangedHandler;
+		data->IsGroup.SetValue(false);
 
-		DeviceLayer::PlatformMgr().ScheduleWork(BindingHandler::SwitchWorkerHandler,
-							reinterpret_cast<intptr_t>(data));
+		Nrf::Matter::BindingHandler::RunBoundClusterAction(data);
 		return CHIP_NO_ERROR;
 	}
 } /* namespace Unicast */
@@ -134,40 +140,43 @@ namespace Group
 
 	CHIP_ERROR OnCommandHandler(int argc, char **argv)
 	{
-		BindingHandler::BindingData *data = Platform::New<BindingHandler::BindingData>();
+		Nrf::Matter::BindingHandler::BindingData *data =
+			Platform::New<Nrf::Matter::BindingHandler::BindingData>();
 		data->EndpointId = LightSwitch::GetInstance().GetLightSwitchEndpointId();
 		data->CommandId = Clusters::OnOff::Commands::On::Id;
 		data->ClusterId = Clusters::OnOff::Id;
-		data->IsGroup = true;
+		data->InvokeCommandFunc = LightSwitch::SwitchChangedHandler;
+		data->IsGroup.SetValue(true);
 
-		DeviceLayer::PlatformMgr().ScheduleWork(BindingHandler::SwitchWorkerHandler,
-							reinterpret_cast<intptr_t>(data));
+		Nrf::Matter::BindingHandler::RunBoundClusterAction(data);
 		return CHIP_NO_ERROR;
 	}
 
 	CHIP_ERROR OffCommandHandler(int argc, char **argv)
 	{
-		BindingHandler::BindingData *data = Platform::New<BindingHandler::BindingData>();
+		Nrf::Matter::BindingHandler::BindingData *data =
+			Platform::New<Nrf::Matter::BindingHandler::BindingData>();
 		data->EndpointId = LightSwitch::GetInstance().GetLightSwitchEndpointId();
 		data->CommandId = Clusters::OnOff::Commands::Off::Id;
 		data->ClusterId = Clusters::OnOff::Id;
-		data->IsGroup = true;
+		data->InvokeCommandFunc = LightSwitch::SwitchChangedHandler;
+		data->IsGroup.SetValue(true);
 
-		DeviceLayer::PlatformMgr().ScheduleWork(BindingHandler::SwitchWorkerHandler,
-							reinterpret_cast<intptr_t>(data));
+		Nrf::Matter::BindingHandler::RunBoundClusterAction(data);
 		return CHIP_NO_ERROR;
 	}
 
 	CHIP_ERROR ToggleCommandHandler(int argc, char **argv)
 	{
-		BindingHandler::BindingData *data = Platform::New<BindingHandler::BindingData>();
+		Nrf::Matter::BindingHandler::BindingData *data =
+			Platform::New<Nrf::Matter::BindingHandler::BindingData>();
 		data->EndpointId = LightSwitch::GetInstance().GetLightSwitchEndpointId();
 		data->CommandId = Clusters::OnOff::Commands::Toggle::Id;
 		data->ClusterId = Clusters::OnOff::Id;
-		data->IsGroup = true;
+		data->InvokeCommandFunc = LightSwitch::SwitchChangedHandler;
+		data->IsGroup.SetValue(true);
 
-		DeviceLayer::PlatformMgr().ScheduleWork(BindingHandler::SwitchWorkerHandler,
-							reinterpret_cast<intptr_t>(data));
+		Nrf::Matter::BindingHandler::RunBoundClusterAction(data);
 		return CHIP_NO_ERROR;
 	}
 

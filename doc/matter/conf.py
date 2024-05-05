@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2023 Nordic Semiconductor
+# Copyright (c) 2024 Nordic Semiconductor
 #
 # SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
 #
@@ -21,9 +21,9 @@ ZEPHYR_BASE = utils.get_projdir("zephyr")
 # General configuration --------------------------------------------------------
 
 project = "Matter SDK"
-copyright = "2020-2023, Matter Contributors"
+copyright = "2020-2024, Matter Contributors"
 author = "Matter Contributors"
-version = "1.1.0"
+version = "1.2.0"
 
 sys.path.insert(0, str(ZEPHYR_BASE / "doc" / "_extensions"))
 sys.path.insert(0, str(NRF_BASE / "doc" / "_extensions"))
@@ -59,11 +59,14 @@ external_content_contents = [
     (MATTER_BASE / "docs" / "guides", "nrfconnect_examples_configuration.md"),
     (MATTER_BASE / "docs" / "guides", "nrfconnect_examples_cli.md"),
     (MATTER_BASE / "docs" / "guides", "nrfconnect_examples_software_update.md"),
+    (MATTER_BASE / "docs" / "guides", "openthread_border_router_pi.md"),
+    (MATTER_BASE / "docs" / "guides", "openthread_rcp_nrf_dongle.md"),
     (MATTER_BASE / "docs" / "guides", "nrfconnect_factory_data_configuration.md"),
     (MATTER_BASE / "docs" / "guides", "BUILDING.md"),
     (MATTER_BASE / "docs" / "guides", "chip_tool_guide.md"),
     (MATTER_BASE / "docs" / "guides", "access-control-guide.md"),
     (MATTER_BASE / "src" / "tools" / "chip-cert", "README.md"),
+
 ]
 
 

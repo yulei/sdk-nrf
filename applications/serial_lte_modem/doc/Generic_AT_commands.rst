@@ -7,7 +7,7 @@ Generic AT commands
    :local:
    :depth: 2
 
-The following commands list contains generic AT commands.
+This page describes generic AT commands.
 
 SLM version #XSLMVER
 ====================
@@ -32,11 +32,13 @@ Response syntax
 
 ::
 
-   #XSLMVER: <ncs_version>,<libmodem_version>
+   #XSLMVER: <ncs_version>,<libmodem_version>[,<customer_version>]
 
-The ``<ncs_version>`` value returns a string containing the version of the |NCS|.
+The ``<ncs_version>`` value is a string containing the version of the |NCS|.
 
-The ``<libmodem_version>`` value returns a string containing the version of the modem library.
+The ``<libmodem_version>`` value is a string containing the version of the modem library.
+
+The ``<customer_version>`` value is the :ref:`CONFIG_SLM_CUSTOMER_VERSION <CONFIG_SLM_CUSTOMER_VERSION>` string, if defined.
 
 Example
 ~~~~~~~
@@ -46,7 +48,11 @@ The following command example reads the versions:
 ::
 
    AT#XSLMVER
-   #XSLMVER: "2.3.0","2.3.0"
+   #XSLMVER: "2.5.0","2.5.0-lte-5ccd2d4dd54c"
+   OK
+
+   AT#XSLMVER
+   #XSLMVER: "2.5.99","2.5.0-lte-5ccd2d4dd54c","Onomondo 2.1.0"
    OK
 
 Read command
@@ -137,25 +143,23 @@ Syntax
 
 The ``<sleep_mode>`` parameter accepts only the following integer values:
 
-* ``0`` - Deprecated.
 * ``1`` - Enter Sleep.
   In this mode, both the SLM service and the LTE connection are terminated.
 
-  The nRF91 Series SiP can be woken up using the :ref:`CONFIG_SLM_WAKEUP_PIN <CONFIG_SLM_WAKEUP_PIN>`.
+  The nRF91 Series SiP can be woken up using the pin specified with the :ref:`CONFIG_SLM_POWER_PIN <CONFIG_SLM_POWER_PIN>` Kconfig option.
 
 * ``2`` - Enter Idle.
-
   In this mode, both the SLM service and the LTE connection are maintained.
-  The nRF91 Series SiP can be made to exit idle using the :ref:`CONFIG_SLM_WAKEUP_PIN <CONFIG_SLM_WAKEUP_PIN>`.
-  If the :ref:`CONFIG_SLM_INDICATE_PIN <CONFIG_SLM_INDICATE_PIN>` is defined, SLM toggle this GPIO when there is data for MCU.
-  MCU could in turn make SLM to exit idle by :ref:`CONFIG_SLM_WAKEUP_PIN <CONFIG_SLM_WAKEUP_PIN>`.
-  The data is buffered during the idle status and sent to MCU after exiting the idle status.
+
+  The nRF91 Series SiP can be made to exit idle using the pin specified with the :ref:`CONFIG_SLM_POWER_PIN <CONFIG_SLM_POWER_PIN>` Kconfig option.
+  If the :ref:`CONFIG_SLM_INDICATE_PIN <CONFIG_SLM_INDICATE_PIN>` Kconfig option is defined, SLM toggles the specified pin when there is data for the MCU to read.
+  The MCU can in turn make SLM exit idle by toggling the pin specified with the :ref:`CONFIG_SLM_POWER_PIN <CONFIG_SLM_POWER_PIN>` Kconfig option.
+  The data is buffered when SLM is idle and sent to the MCU after having exited idle.
 
 .. note::
 
-   * This parameter does not accept ``0`` anymore.
-   * If the modem is on, entering Sleep mode sends a ``+CFUN=0`` command to the modem, which causes a non-volatile memory (NVM) write.
-     Take the NVM wear into account, or put the modem in flight mode by issuing a ``AT+CFUN=4`` before Sleep mode.
+   * If the modem is on, entering Sleep mode (by issuing ``AT#XSLEEP=1`` ) sends a ``+CFUN=0`` command to the modem, which causes a write to non-volatile memory (NVM).
+     Take the NVM wear into account, or put the modem in flight mode by issuing ``AT+CFUN=4`` before Sleep mode.
 
 Examples
 ~~~~~~~~
@@ -236,7 +240,7 @@ Syntax
 
 .. note::
 
-   In this case the nRF91 Series SiP cannot be woken up using the :ref:`CONFIG_SLM_WAKEUP_PIN <CONFIG_SLM_WAKEUP_PIN>`..
+   In this case the nRF91 Series SiP cannot be woken up using the pin specified with the :ref:`CONFIG_SLM_POWER_PIN <CONFIG_SLM_POWER_PIN>` Kconfig option.
 
 Example
 ~~~~~~~~
@@ -401,51 +405,52 @@ The test command is not supported.
 Native TLS CMNG #XCMNG
 ======================
 
-The ``#XCMNG`` command manages the credentials to support :ref:`CONFIG_SLM_NATIVE_TLS <CONFIG_SLM_NATIVE_TLS>`.
-This command is similar to the modem ``%CMNG`` command.
+The ``#XCMNG`` command manages the credentials to support :ref:`CONFIG_SLM_NATIVE_TLS <CONFIG_SLM_NATIVE_TLS>`, which is activated with the :file:`overlay-native_tls.conf` configuration file.
+This command is similar to the modem ``%CMNG`` command, but it utilizes Zephyr setting storage instead of modem credential storage.
+
+.. note::
+
+   The Zephyr setting storage is unencrypted and accessible through the debug port of the nRF91 Series devices.
 
 Set command
 -----------
 
 The set command is used for credential storage management.
-The command writes, reads, deletes, and checks the existence of keys and certificates.
+The command writes and deletes credentials.
+It can also list the ``sec_tag`` and ``type`` values of existing credentials.
 
 Syntax
 ~~~~~~
 
-The following is the syntax when :ref:`CONFIG_SLM_NATIVE_TLS <CONFIG_SLM_NATIVE_TLS>` is selected:
 ::
 
-   #XCMNG=<opcode>[,<sec_tag>[,<type>[,<content>]]]
+   #XCMNG=<op>[,<sec_tag>[,<type>[,<content>]]]
 
-The ``<opcode>`` parameter is an integer.
-It accepts the following values:
+The ``<op>`` parameter can have the following integer values:
 
 * ``0`` - Write a credential.
-* ``1`` - List credentials (currently not supported).
-* ``2`` - Read a credential (currently not supported).
+* ``1`` - List credentials.
 * ``3`` - Delete a credential.
 
-The ``<sec_tag>`` parameter is an integer ranging between ``0`` and ``2147483647``.
-It is mandatory for *write*, *read*, and *delete* operations.
-It is optional for *list* operations.
+The ``<sec_tag>`` parameter can have an integer value ranging between ``0`` and ``2147483647``.
+It is mandatory for *write* and *delete* operations.
 
-The ``<type>`` parameter is an integer.
-It accepts the following values:
+The ``<type>`` parameter can have the following integer values:
 
-* ``0`` - Root CA certificate (ASCII text)
-* ``1`` - Certificate (ASCII text)
-* ``2`` - Private key (ASCII text)
+* ``0`` - Root CA certificate (PEM format)
+* ``1`` - Certificate (PEM format)
+* ``2`` - Private key (PEM format)
+* ``3`` - Pre-shared key (PSK) (ASCII text)
+* ``4`` - PSK identity (ASCII text)
 
-The ``<content>`` parameter is a string.
-It is mandatory if ``<opcode>`` is ``0`` (write a credential).
-It is the content of a Privacy Enhanced Mail (PEM) file enclosed in double quotes (X.509 PEM entities).
-An empty string is not allowed.
+It is mandatory for *write* and *delete* operations.
 
-Response syntax
-~~~~~~~~~~~~~~~
+The ``<content>`` parameter can have the following string values:
 
-There is no response.
+* The credential in Privacy Enhanced Mail (PEM) format when ``<type>`` has a value of ``0``, ``1`` or ``2``.
+* The credential in ASCII text when ``<type>`` has a value of ``3`` or ``4``.
+
+It is mandatory for *write* operations.
 
 Example
 ~~~~~~~
@@ -469,6 +474,26 @@ Example
    OVqOMNAlzR6v4YHlI9InxU01quIRtQIhAOTITnLNuA0r0571SSBKZyrNGzxJxcPO
    FDkGjew9OVov
    -----END CERTIFICATE-----"
+
+   OK
+
+   AT#XCMNG=0,11,3,"PSK"
+
+   OK
+
+   AT#XCMNG=0,11,4,"Identity"
+
+   OK
+
+   AT#XCMNG=1
+
+   #XCMNG: 11,4
+   #XCMNG: 11,3
+   #XCMNG: 10,0
+
+   OK
+
+   AT#XCMNG=3,10,0
 
    OK
 

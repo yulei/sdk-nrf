@@ -12,15 +12,13 @@
 #include <limits.h>
 #include <zephyr/init.h>
 #include <zephyr/kernel.h>
+#include <zephyr/net/socket.h>
 #include <zephyr/sys/slist.h>
 #include <zephyr/logging/log.h>
 #include <nrf_modem_at.h>
 #include <modem/pdn.h>
 #include <modem/at_monitor.h>
 #include <modem/nrf_modem_lib.h>
-#if defined(CONFIG_LTE_LINK_CONTROL)
-#include <modem/lte_lc.h>
-#endif
 
 LOG_MODULE_REGISTER(pdn, CONFIG_PDN_LOG_LEVEL);
 
@@ -31,6 +29,10 @@ LOG_MODULE_REGISTER(pdn, CONFIG_PDN_LOG_LEVEL);
 #define PDN_ACT_REASON_IPV6_ONLY (1)
 
 #define APN_STR_MAX_LEN 64
+
+#define MODEM_CFUN_POWER_OFF 0
+#define MODEM_CFUN_NORMAL 1
+#define MODEM_CFUN_ACTIVATE_LTE 21
 
 static K_MUTEX_DEFINE(list_mutex);
 
@@ -58,8 +60,10 @@ static K_SEM_DEFINE(sem_cnec, 0, 1);
 /* Use one monitor for all CGEV events and distinguish
  * between the different type of events later (ME, IPV6, etc).
  */
+#ifndef CONFIG_UNITY
 AT_MONITOR(pdn_cgev, "+CGEV", on_cgev);
 AT_MONITOR(pdn_cnec_esm, "+CNEC_ESM", on_cnec_esm);
+#endif
 
 static struct pdn *pdn_find(int cid)
 {
@@ -83,6 +87,9 @@ static struct pdn *pdn_ctx_new(void)
 		return NULL;
 	}
 
+	pdn->context_id = INT8_MAX;
+	pdn->callback = NULL;
+
 	k_mutex_lock(&list_mutex, K_FOREVER);
 	sys_slist_append(&pdn_contexts, &pdn->node);
 	k_mutex_unlock(&list_mutex);
@@ -90,7 +97,11 @@ static struct pdn *pdn_ctx_new(void)
 	return pdn;
 }
 
+#ifdef CONFIG_UNITY
+void on_cnec_esm(const char *notif)
+#else
 static void on_cnec_esm(const char *notif)
+#endif
 {
 	char *p;
 	uint32_t cid;
@@ -215,15 +226,49 @@ static void parse_cgev_apn_rate_ctrl(const char *notif)
 	}
 }
 
+#ifdef CONFIG_UNITY
+void on_cgev(const char *notif)
+#else
 static void on_cgev(const char *notif)
+#endif
 {
 	parse_cgev(notif);
 	parse_cgev_apn_rate_ctrl(notif);
 }
 
-NRF_MODEM_LIB_ON_INIT(modem_init_hook, on_modem_init, NULL);
+#if defined(CONFIG_PDN_DEFAULTS_OVERRIDE)
+static void pdn_defaults_override(void)
+{
+	int err;
 
+	err = pdn_ctx_configure(0, CONFIG_PDN_DEFAULT_APN,
+				CONFIG_PDN_DEFAULT_FAM, NULL);
+	if (err) {
+		LOG_ERR("Failed to configure default CID, err %d", err);
+		return;
+	}
+
+#if defined(CONFIG_PDN_DEFAULT_AUTH_PAP) || defined(CONFIG_PDN_DEFAULT_AUTH_CHAP)
+	/* +CGAUTH=<cid>[,<auth_prot>[,<userid>[,<password>]]] */
+	BUILD_ASSERT(sizeof(CONFIG_PDN_DEFAULT_USERNAME) > 1, "Username not defined");
+
+	err = pdn_ctx_auth_set(0, CONFIG_PDN_DEFAULT_AUTH,
+			       CONFIG_PDN_DEFAULT_USERNAME,
+			       CONFIG_PDN_DEFAULT_PASSWORD);
+	if (err) {
+		LOG_ERR("Failed to set auth params for default CID, err %d", err);
+		return;
+	}
+#endif /* CONFIG_PDN_DEFAULT_AUTH_PAP || CONFIG_PDN_DEFAULT_AUTH_CHAP */
+}
+#endif /* CONFIG_PDN_DEFAULTS_OVERRIDE */
+
+#ifdef CONFIG_UNITY
+void on_modem_init(int ret, void *ctx)
+#else
+NRF_MODEM_LIB_ON_INIT(modem_init_hook, on_modem_init, NULL);
 static void on_modem_init(int ret, void *ctx)
+#endif
 {
 	int err;
 	(void) err;
@@ -248,26 +293,8 @@ static void on_modem_init(int ret, void *ctx)
 #endif /* CONFIG_PDN_LEGACY_PCO */
 
 #if defined(CONFIG_PDN_DEFAULTS_OVERRIDE)
-	err = pdn_ctx_configure(0, CONFIG_PDN_DEFAULT_APN,
-				CONFIG_PDN_DEFAULT_FAM, NULL);
-	if (err) {
-		LOG_ERR("Failed to configure default CID, err %d", err);
-		return;
-	}
-
-#if defined(CONFIG_PDN_DEFAULT_AUTH_PAP) || defined(CONFIG_PDN_DEFAULT_AUTH_CHAP)
-	/* +CGAUTH=<cid>[,<auth_prot>[,<userid>[,<password>]]] */
-	BUILD_ASSERT(sizeof(CONFIG_PDN_DEFAULT_USERNAME) > 1, "Username not defined");
-
-	err = pdn_ctx_auth_set(0, CONFIG_PDN_DEFAULT_AUTH,
-			       CONFIG_PDN_DEFAULT_USERNAME,
-			       CONFIG_PDN_DEFAULT_PASSWORD);
-	if (err) {
-		LOG_ERR("Failed to set auth params for default CID, err %d", err);
-		return;
-	}
-#endif /* CONFIG_PDN_DEFAULT_AUTH_PAP || CONFIG_PDN_DEFAULT_AUTH_CHAP */
-#endif /* CONFIG_PDN_DEFAULTS_OVERRIDE */
+	pdn_defaults_override();
+#endif
 }
 
 int pdn_default_ctx_cb_reg(pdn_event_handler_t cb)
@@ -293,21 +320,25 @@ int pdn_default_ctx_cb_reg(pdn_event_handler_t cb)
 
 int pdn_default_ctx_cb_dereg(pdn_event_handler_t cb)
 {
-	bool remvd;
+	bool removed;
 	struct pdn *pdn;
 	struct pdn *tmp;
 
-	remvd = false;
+	if (!cb) {
+		return -EFAULT;
+	}
+
+	removed = false;
 	k_mutex_lock(&list_mutex, K_FOREVER);
 	SYS_SLIST_FOR_EACH_CONTAINER_SAFE(&pdn_contexts, pdn, tmp, node) {
 		if (pdn->callback == cb) {
-			remvd = sys_slist_find_and_remove(&pdn_contexts, &pdn->node);
+			removed = sys_slist_find_and_remove(&pdn_contexts, &pdn->node);
 			break;
 		}
 	}
 	k_mutex_unlock(&list_mutex);
 
-	if (!remvd) {
+	if (!removed) {
 		return -EINVAL;
 	}
 
@@ -319,13 +350,19 @@ int pdn_default_ctx_cb_dereg(pdn_event_handler_t cb)
 
 static void pdn_ctx_free(struct pdn *pdn)
 {
+	bool removed;
+
 	if (!pdn) {
 		return;
 	}
 
 	k_mutex_lock(&list_mutex, K_FOREVER);
-	sys_slist_find_and_remove(&pdn_contexts, &pdn->node);
+	removed = sys_slist_find_and_remove(&pdn_contexts, &pdn->node);
 	k_mutex_unlock(&list_mutex);
+
+	if (!removed) {
+		return;
+	}
 
 	k_free(pdn);
 }
@@ -349,6 +386,10 @@ int pdn_ctx_create(uint8_t *cid, pdn_event_handler_t cb)
 	if (err < 0) {
 		pdn_ctx_free(pdn);
 		return err;
+	} else if (err == 0) {
+		/* no argument matched */
+		pdn_ctx_free(pdn);
+		return -EBADMSG;
 	}
 
 	if (ctx_id_tmp > SCHAR_MAX || ctx_id_tmp < SCHAR_MIN) {
@@ -508,13 +549,14 @@ int pdn_activate(uint8_t cid, int *esm, enum pdn_fam *fam)
 			*fam = PDN_FAM_IPV4;
 		} else if (pdn_act_notif.reason == PDN_ACT_REASON_IPV6_ONLY) {
 			*fam = PDN_FAM_IPV6;
-		}
+		} /* TODO SHOULD WE SET fam TO SOMETHING HERE IF REASON IS PDN_ACT_REASON_NONE? */
 	}
+
 	if (esm) {
 		timeout = k_sem_take(&sem_cnec, K_MSEC(CONFIG_PDN_ESM_TIMEOUT));
 		if (!timeout) {
 			*esm = pdn_act_notif.esm;
-		} else if (timeout == -EAGAIN) {
+		} else {
 			*esm = 0;
 		}
 	}
@@ -561,6 +603,34 @@ int pdn_id_get(uint8_t cid)
 	return strtoul(p + 1, NULL, 10);
 }
 
+int pdn_dynamic_params_get(uint8_t cid, struct in_addr *dns4_pri,
+			   struct in_addr *dns4_sec, unsigned int *ipv4_mtu)
+{
+	int ret;
+	const char *fmt;
+	char dns4_pri_str[INET_ADDRSTRLEN];
+	char dns4_sec_str[INET_ADDRSTRLEN];
+	char at_cmd[sizeof("AT+CGCONTRDP=10")];
+
+	if (snprintf(at_cmd, sizeof(at_cmd), "AT+CGCONTRDP=%u", cid) >= sizeof(at_cmd)) {
+		return -E2BIG;
+	}
+	   /* "+CGCONTRDP: 0,,"example.com","","","198.276.154.230","12.34.56.78",,,,,1464" */
+	fmt = "+CGCONTRDP: %*u,,\"%*[^\"]\",\"\",\"\",\"%15[0-9.]\",\"%15[0-9.]\",,,,,%u";
+
+	/* If IPv4 is enabled, it will be the first response line. */
+	ret = nrf_modem_at_scanf(at_cmd, fmt, &dns4_pri_str, &dns4_sec_str, ipv4_mtu);
+	if (ret != 3) {
+		return -EBADMSG;
+	}
+
+	if (zsock_inet_pton(AF_INET, dns4_pri_str, dns4_pri) != 1
+	 || zsock_inet_pton(AF_INET, dns4_sec_str, dns4_sec) != 1) {
+		return -EADDRNOTAVAIL;
+	}
+	return 0;
+}
+
 int pdn_default_apn_get(char *buf, size_t len)
 {
 	int err;
@@ -572,6 +642,9 @@ int pdn_default_apn_get(char *buf, size_t len)
 	if (err < 0) {
 		LOG_ERR("Failed to read PDP contexts, err %d", err);
 		return err;
+	} else if (err == 0) {
+		/* no argument matched */
+		return -EFAULT;
 	}
 
 	if (strlen(apn) + 1 > len) {
@@ -582,15 +655,14 @@ int pdn_default_apn_get(char *buf, size_t len)
 	return 0;
 }
 
-#if defined(CONFIG_LTE_LINK_CONTROL)
-LTE_LC_ON_CFUN(pdn_cfun_hook, on_cfun, NULL);
+NRF_MODEM_LIB_ON_CFUN(pdn_cfun_hook, on_cfun, NULL);
 
-static void on_cfun(enum lte_lc_func_mode mode, void *ctx)
+static void on_cfun(int mode, void *ctx)
 {
 	int err;
 
-	if (mode == LTE_LC_FUNC_MODE_NORMAL ||
-	    mode == LTE_LC_FUNC_MODE_ACTIVATE_LTE) {
+	if (mode == MODEM_CFUN_NORMAL ||
+	    mode == MODEM_CFUN_ACTIVATE_LTE) {
 		LOG_DBG("Subscribing to +CNEC=16 and +CGEREP=1");
 		err = nrf_modem_at_printf("AT+CNEC=16");
 		if (err) {
@@ -601,5 +673,10 @@ static void on_cfun(enum lte_lc_func_mode mode, void *ctx)
 			LOG_ERR("Unable to subscribe to +CGEREP=1, err %d", err);
 		}
 	}
+
+	if (mode == MODEM_CFUN_POWER_OFF) {
+#if defined(CONFIG_PDN_DEFAULTS_OVERRIDE)
+		pdn_defaults_override();
+#endif
+	}
 }
-#endif /* CONFIG_LTE_LINK_CONTROL */

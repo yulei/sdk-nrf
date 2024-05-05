@@ -8,7 +8,11 @@ Memfault
    :depth: 2
 
 The Memfault sample shows how to use the `Memfault SDK`_ in an |NCS| application to collect coredumps and metrics.
-The sample connects to an LTE network using an nRF91 Series DK or Thingy:91, or to Wi-Fi using the nRF7002 DK, and sends the collected data to Memfault's cloud using HTTPS.
+The sample connects to an LTE network using an nRF91 Series DK or a Thingy:91, or to Wi-Fi®  using the nRF7002 DK, and sends the collected data to Memfault's cloud using HTTPS.
+
+.. |wifi| replace:: Wi-Fi
+
+.. include:: /includes/net_connection_manager.txt
 
 To get started with Memfault integration in |NCS|, see :ref:`ug_memfault`.
 
@@ -42,25 +46,25 @@ There are also some metrics, which are specific to |NCS| that are enabled by def
 * LTE metrics:
 
   * Enabled and disabled using :kconfig:option:`CONFIG_MEMFAULT_NCS_LTE_METRICS`.
-  * ``Ncs_LteTimeToConnect`` - Time from the point when the device starts to search for an LTE network until the time when it gets registered with the network.
-  *  ``Ncs_LteConnectionLossCount`` - The number of times that the device has lost the LTE network connection after the initial network registration.
+  * ``ncs_lte_time_to_connect_ms`` - Time from the point when the device starts to search for an LTE network until the time when it gets registered with the network.
+  * ``ncs_lte_connection_loss_count`` - The number of times that the device has lost the LTE network connection after the initial network registration.
 
 * Stack usage metrics:
 
   * Shows how many bytes of unused space is left in a stack.
   * Configurable using :kconfig:option:`CONFIG_MEMFAULT_NCS_STACK_METRICS`.
-  * ``Ncs_ConnectionPollUnusedStack``- Stack used by the cloud libraries for :ref:`lib_nrf_cloud`, :ref:`lib_aws_iot` and :ref:`lib_azure_iot_hub`.
+  * ``ncs_connection_poll_unused_stack``- Stack used by the cloud libraries for :ref:`lib_nrf_cloud`, :ref:`lib_aws_iot` and :ref:`lib_azure_iot_hub`.
 
 In addition to showing the capturing of metrics provided by the Memfault SDK integration layer in |NCS|, the sample also shows how to capture an application-specific metric.
 This metric is defined in :file:`samples/debug/memfault/config/memfault_metrics_heartbeat_config.h`:
 
-*  ``Switch1ToggleCount`` - The number of times **Switch 1** has been toggled on an nRF9160 DK.
+*  ``switch_1_toggle_count`` - The number of times **Switch 1** has been toggled on an nRF9160 DK.
 
-Error Tracking with trace events
+Error tracking with trace events
 ================================
 
 The sample implements a user-defined trace reason for demonstration purposes.
-The trace reason is called ``Switch2Toggled``, and is collected every time **Switch 2** is toggled on an nRF9160 DK.
+The trace reason is called ``switch_2_toggled``, and is collected every time **Switch 2** is toggled on an nRF9160 DK.
 In addition to detection of the event, the trace includes the current switch state.
 See `Memfault: Error Tracking with Trace Events`_ for information on how to configure and use trace events.
 
@@ -124,7 +128,7 @@ Check and configure the following options in Memfault SDK that are used by the s
 * :kconfig:option:`CONFIG_MEMFAULT_HTTP_PERIODIC_UPLOAD_USE_DEDICATED_WORKQUEUE`
 * :kconfig:option:`CONFIG_MEMFAULT_COREDUMP_COLLECT_BSS_REGIONS`
 
-If :kconfig:option:`CONFIG_MEMFAULT_ROOT_CERT_STORAGE_NRF9160_MODEM` is enabled, TLS certificates used for HTTP uploads are provisioned to the cellular modem when :c:func:`memfault_zephyr_port_install_root_certs` is called.
+If :kconfig:option:`CONFIG_MEMFAULT_ROOT_CERT_STORAGE_NRF9160_MODEM` is enabled, TLS certificates used for HTTP uploads are provisioned to the nRF91 Series modem when :c:func:`memfault_zephyr_port_install_root_certs` is called.
 
 Check and configure the following options for Memfault that are specific to |NCS|:
 
@@ -135,6 +139,9 @@ Check and configure the following options for Memfault that are specific to |NCS
 
 If :kconfig:option:`CONFIG_MEMFAULT_NCS_INTERNAL_FLASH_BACKED_COREDUMP` is enabled, :kconfig:option:`CONFIG_PM_PARTITION_SIZE_MEMFAULT_STORAGE` can be used to set the flash partition size for the flash storage.
 
+.. include:: /includes/wifi_credentials_shell.txt
+
+.. include:: /includes/wifi_credentials_static.txt
 
 .. include:: /libraries/modem/nrf_modem_lib/nrf_modem_lib_trace.rst
    :start-after: modem_lib_sending_traces_UART_start
@@ -178,7 +185,7 @@ Before testing, ensure that your device is configured with the project key of yo
 
         <inf> memfault_sample: Connected to network.
 
-#. If LTE is used, the sample displays the captured LTE time-to-connect metric (``Ncs_LteTimeToConnect``) in the terminal:
+#. If LTE is used, the sample displays the captured LTE time-to-connect metric (``ncs_lte_time_to_connect_ms``) in the terminal:
 
    .. code-block:: console
 
@@ -224,7 +231,7 @@ Before testing, ensure that your device is configured with the project key of yo
 Dependencies
 ************
 
-The sample requires the Memfault SDK, which is part of |NCS|'s West manifest, and will be downloaded automatically when ``west update`` is run.
+The sample requires the Memfault SDK, which is part of |NCS|'s west manifest, and will be downloaded automatically when ``west update`` is run.
 
 This sample uses the following |NCS| libraries and drivers:
 

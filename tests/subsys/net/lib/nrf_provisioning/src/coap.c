@@ -22,29 +22,32 @@
 #include "cmock_nrf_provisioning_at.h"
 #include "cmock_coap_client.h"
 #include "cmock_settings.h"
+#include "cmock_nrf_provisioning_jwt.h"
 
 #include "nrf_provisioning_codec.h"
 #include "nrf_provisioning_coap.h"
 #include "nrf_provisioning_internal.h"
 #include "net/nrf_provisioning.h"
 
-#define ATT_DUMMY "dummy_attestation_token"
+#define JWT_DUMMY "dummy_json_web_token"
 #define VER_NMB	  "99.99.99"
 #define RESP_CODE 10
 
-char tok_att_plain[] = ATT_DUMMY;
+char tok_jwt_plain[] = JWT_DUMMY;
 
 char MFW_VER[] = "mfw_nrf9161_99.99.99-DUMMY";
 char MFW_VER_NMB[] = VER_NMB;
 char DUMMY_ADDR[] = "dummy_address";
 
-static const char *auth_path = "p/auth";
+static const char *auth_path = "p/auth-jwt";
 static const char *cmd_path = "p/cmd";
 static const char *resp_path = "p/rsp";
 
-static void dummy_nrf_provisioning_device_mode_cb(void *user_data)
+static void dummy_nrf_provisioning_device_mode_cb(enum nrf_provisioning_event event,
+						  void *user_data)
 {
 	(void)user_data;
+	(void)event;
 }
 
 static int dummy_nrf_provisioning_modem_mode_cb(enum lte_lc_func_mode new_mode, void *user_data)
@@ -152,13 +155,14 @@ static unsigned char cbor_cmds2_valid[] = {
 	0x36, 0x38, 0x34, 0x32, 0x37, 0x35, 0x33, 0x2c, 0x32, 0x2c, 0x31, 0x80};
 
 static int coap_client_auth_cb(struct coap_client *client, int sock, const struct sockaddr *addr,
-			       struct coap_client_request *req, int retries, int cmock_num_calls)
+			       struct coap_client_request *req,
+			       struct coap_transmission_parameters *params, int cmock_num_calls)
 {
-	char path[] = "p/auth?mver=" VER_NMB "&cver=1";
+	char path[] = "p/auth-jwt?mver=" VER_NMB "&cver=1";
 
 	if (strncmp(req->path, auth_path, strlen(auth_path)) == 0) {
 		TEST_ASSERT_EQUAL_STRING(path, req->path);
-		TEST_ASSERT_EQUAL_STRING(ATT_DUMMY, req->payload);
+		TEST_ASSERT_EQUAL_STRING(JWT_DUMMY, req->payload);
 		req->cb(COAP_RESPONSE_CODE_CREATED, 0, NULL, 0, true, req->user_data);
 	} else {
 		req->cb(COAP_RESPONSE_CODE_OK, 0, NULL, 0, true, req->user_data);
@@ -169,7 +173,8 @@ static int coap_client_auth_cb(struct coap_client *client, int sock, const struc
 
 static int coap_client_auth_failed_cb(struct coap_client *client, int sock,
 				      const struct sockaddr *addr, struct coap_client_request *req,
-				      int retries, int cmock_num_calls)
+				      struct coap_transmission_parameters *params,
+				      int cmock_num_calls)
 {
 	if (strncmp(req->path, auth_path, strlen(auth_path)) == 0) {
 		req->cb(COAP_RESPONSE_CODE_FORBIDDEN, 0, NULL, 0, true, req->user_data);
@@ -180,7 +185,8 @@ static int coap_client_auth_failed_cb(struct coap_client *client, int sock,
 
 static int coap_client_auth_server_error_cb(struct coap_client *client, int sock,
 					    const struct sockaddr *addr,
-					    struct coap_client_request *req, int retries,
+					    struct coap_client_request *req,
+					    struct coap_transmission_parameters *params,
 					    int cmock_num_calls)
 {
 	if (strncmp(req->path, auth_path, strlen(auth_path)) == 0) {
@@ -192,7 +198,8 @@ static int coap_client_auth_server_error_cb(struct coap_client *client, int sock
 
 static int coap_client_auth_unsupported_code_cb(struct coap_client *client, int sock,
 						const struct sockaddr *addr,
-						struct coap_client_request *req, int retries,
+						struct coap_client_request *req,
+						struct coap_transmission_parameters *params,
 						int cmock_num_calls)
 {
 	if (strncmp(req->path, auth_path, strlen(auth_path)) == 0) {
@@ -204,7 +211,8 @@ static int coap_client_auth_unsupported_code_cb(struct coap_client *client, int 
 
 static int coap_client_cmds_bad_request_cb(struct coap_client *client, int sock,
 					   const struct sockaddr *addr,
-					   struct coap_client_request *req, int retries,
+					   struct coap_client_request *req,
+					   struct coap_transmission_parameters *params,
 					   int cmock_num_calls)
 {
 	if (strncmp(req->path, auth_path, strlen(auth_path)) == 0) {
@@ -218,7 +226,8 @@ static int coap_client_cmds_bad_request_cb(struct coap_client *client, int sock,
 
 static int coap_client_cmds_server_error_cb(struct coap_client *client, int sock,
 					    const struct sockaddr *addr,
-					    struct coap_client_request *req, int retries,
+					    struct coap_client_request *req,
+					    struct coap_transmission_parameters *params,
 					    int cmock_num_calls)
 {
 	if (strncmp(req->path, auth_path, strlen(auth_path)) == 0) {
@@ -232,7 +241,8 @@ static int coap_client_cmds_server_error_cb(struct coap_client *client, int sock
 
 static int coap_client_cmds_unsupported_code_cb(struct coap_client *client, int sock,
 						const struct sockaddr *addr,
-						struct coap_client_request *req, int retries,
+						struct coap_client_request *req,
+						struct coap_transmission_parameters *params,
 						int cmock_num_calls)
 {
 	if (strncmp(req->path, auth_path, strlen(auth_path)) == 0) {
@@ -246,7 +256,8 @@ static int coap_client_cmds_unsupported_code_cb(struct coap_client *client, int 
 
 static int coap_client_cmds_valid_path_cb(struct coap_client *client, int sock,
 					  const struct sockaddr *addr,
-					  struct coap_client_request *req, int retries,
+					  struct coap_client_request *req,
+					  struct coap_transmission_parameters *params,
 					  int cmock_num_calls)
 {
 	char path[] = "p/cmd?after=&rxMaxSize=" STRINGIFY(CONFIG_NRF_PROVISIONING_RX_BUF_SZ)
@@ -264,7 +275,8 @@ static int coap_client_cmds_valid_path_cb(struct coap_client *client, int sock,
 
 static int coap_client_no_commands_cb(struct coap_client *client, int sock,
 				      const struct sockaddr *addr, struct coap_client_request *req,
-				      int retries, int cmock_num_calls)
+				      struct coap_transmission_parameters *params,
+				      int cmock_num_calls)
 {
 	if (strncmp(req->path, auth_path, strlen(auth_path)) == 0) {
 		req->cb(COAP_RESPONSE_CODE_CREATED, 0, NULL, 0, true, req->user_data);
@@ -277,7 +289,8 @@ static int coap_client_no_commands_cb(struct coap_client *client, int sock,
 
 static int coap_client_rsp_bad_request_cb(struct coap_client *client, int sock,
 					  const struct sockaddr *addr,
-					  struct coap_client_request *req, int retries,
+					  struct coap_client_request *req,
+					  struct coap_transmission_parameters *params,
 					  int cmock_num_calls)
 {
 	if (strncmp(req->path, auth_path, strlen(auth_path)) == 0) {
@@ -296,7 +309,8 @@ static int coap_client_rsp_bad_request_cb(struct coap_client *client, int sock,
 
 static int coap_client_rsp_server_error_cb(struct coap_client *client, int sock,
 					   const struct sockaddr *addr,
-					   struct coap_client_request *req, int retries,
+					   struct coap_client_request *req,
+					   struct coap_transmission_parameters *params,
 					   int cmock_num_calls)
 {
 	if (strncmp(req->path, auth_path, strlen(auth_path)) == 0) {
@@ -315,7 +329,8 @@ static int coap_client_rsp_server_error_cb(struct coap_client *client, int sock,
 
 static int coap_client_rsp_unsupported_code_cb(struct coap_client *client, int sock,
 					       const struct sockaddr *addr,
-					       struct coap_client_request *req, int retries,
+					       struct coap_client_request *req,
+					       struct coap_transmission_parameters *params,
 					       int cmock_num_calls)
 {
 	if (strncmp(req->path, auth_path, strlen(auth_path)) == 0) {
@@ -333,7 +348,8 @@ static int coap_client_rsp_unsupported_code_cb(struct coap_client *client, int s
 }
 
 static int coap_client_ok_cb(struct coap_client *client, int sock, const struct sockaddr *addr,
-			     struct coap_client_request *req, int retries, int cmock_num_calls)
+			     struct coap_client_request *req,
+			     struct coap_transmission_parameters *params, int cmock_num_calls)
 {
 	if (strncmp(req->path, auth_path, strlen(auth_path)) == 0) {
 		req->cb(COAP_RESPONSE_CODE_CREATED, 0, NULL, 0, true, req->user_data);
@@ -351,7 +367,7 @@ static int coap_client_ok_cb(struct coap_client *client, int sock, const struct 
 
 static int coap_client_commands_cb(struct coap_client *client, int sock,
 				   const struct sockaddr *addr, struct coap_client_request *req,
-				   int retries, int cmock_num_calls)
+				   struct coap_transmission_parameters *params, int cmock_num_calls)
 {
 	if (cmock_num_calls < 4) {
 		if (strncmp(req->path, auth_path, strlen(auth_path)) == 0) {
@@ -376,9 +392,9 @@ static int coap_client_commands_cb(struct coap_client *client, int sock,
 }
 
 /*
- * - Attestation token is generated and placed to coap request payload
+ * - JWT token is generated and placed to coap request payload
  * - To have a valid token for authentication
- * - Retrieves a dummy attestation token and generates coap request based on it
+ * - Retrieves a dummy JWT token and generates coap request based on it
  */
 void test_coap_auth_valid(void)
 {
@@ -389,9 +405,10 @@ void test_coap_auth_valid(void)
 	__cmock_modem_info_string_get_ExpectAnyArgsAndReturn(sizeof(MFW_VER));
 	__cmock_modem_info_string_get_ReturnArrayThruPtr_buf(MFW_VER, strlen(MFW_VER) + 1);
 
-	__cmock_nrf_provisioning_at_attest_token_get_ExpectAnyArgsAndReturn(0);
-	__cmock_nrf_provisioning_at_attest_token_get_ReturnArrayThruPtr_buff(
-		tok_att_plain, strlen(tok_att_plain) + 1);
+	__cmock_nrf_provisioning_jwt_generate_ExpectAnyArgsAndReturn(0);
+	__cmock_nrf_provisioning_jwt_generate_CMockReturnMemThruPtr_jwt_buf(
+		CONFIG_NRF_PROVISIONING_JWT_MAX_VALID_TIME_S, tok_jwt_plain,
+		strlen(tok_jwt_plain) + 1);
 
 	__cmock_coap_client_req_AddCallback(coap_client_auth_cb);
 	__cmock_coap_client_req_ExpectAnyArgsAndReturn(0);
@@ -412,9 +429,10 @@ void test_coap_auth_failed(void)
 	__cmock_modem_info_string_get_ExpectAnyArgsAndReturn(sizeof(MFW_VER));
 	__cmock_modem_info_string_get_ReturnArrayThruPtr_buf(MFW_VER, strlen(MFW_VER) + 1);
 
-	__cmock_nrf_provisioning_at_attest_token_get_ExpectAnyArgsAndReturn(0);
-	__cmock_nrf_provisioning_at_attest_token_get_ReturnArrayThruPtr_buff(
-		tok_att_plain, strlen(tok_att_plain) + 1);
+	__cmock_nrf_provisioning_jwt_generate_ExpectAnyArgsAndReturn(0);
+	__cmock_nrf_provisioning_jwt_generate_CMockReturnMemThruPtr_jwt_buf(
+		CONFIG_NRF_PROVISIONING_JWT_MAX_VALID_TIME_S, tok_jwt_plain,
+		strlen(tok_jwt_plain) + 1);
 
 	__cmock_coap_client_req_AddCallback(coap_client_auth_failed_cb);
 	__cmock_coap_client_req_ExpectAnyArgsAndReturn(0);
@@ -436,9 +454,10 @@ void test_coap_auth_server_error(void)
 	__cmock_modem_info_string_get_ExpectAnyArgsAndReturn(sizeof(MFW_VER));
 	__cmock_modem_info_string_get_ReturnArrayThruPtr_buf(MFW_VER, strlen(MFW_VER) + 1);
 
-	__cmock_nrf_provisioning_at_attest_token_get_ExpectAnyArgsAndReturn(0);
-	__cmock_nrf_provisioning_at_attest_token_get_ReturnArrayThruPtr_buff(
-		tok_att_plain, strlen(tok_att_plain) + 1);
+	__cmock_nrf_provisioning_jwt_generate_ExpectAnyArgsAndReturn(0);
+	__cmock_nrf_provisioning_jwt_generate_CMockReturnMemThruPtr_jwt_buf(
+		CONFIG_NRF_PROVISIONING_JWT_MAX_VALID_TIME_S, tok_jwt_plain,
+		strlen(tok_jwt_plain) + 1);
 
 	__cmock_coap_client_req_AddCallback(coap_client_auth_server_error_cb);
 	__cmock_coap_client_req_ExpectAnyArgsAndReturn(0);
@@ -460,9 +479,10 @@ void test_coap_auth_unsupported_code(void)
 	__cmock_modem_info_string_get_ExpectAnyArgsAndReturn(sizeof(MFW_VER));
 	__cmock_modem_info_string_get_ReturnArrayThruPtr_buf(MFW_VER, strlen(MFW_VER) + 1);
 
-	__cmock_nrf_provisioning_at_attest_token_get_ExpectAnyArgsAndReturn(0);
-	__cmock_nrf_provisioning_at_attest_token_get_ReturnArrayThruPtr_buff(
-		tok_att_plain, strlen(tok_att_plain) + 1);
+	__cmock_nrf_provisioning_jwt_generate_ExpectAnyArgsAndReturn(0);
+	__cmock_nrf_provisioning_jwt_generate_CMockReturnMemThruPtr_jwt_buf(
+		CONFIG_NRF_PROVISIONING_JWT_MAX_VALID_TIME_S, tok_jwt_plain,
+		strlen(tok_jwt_plain) + 1);
 
 	__cmock_coap_client_req_AddCallback(coap_client_auth_unsupported_code_cb);
 	__cmock_coap_client_req_ExpectAnyArgsAndReturn(0);
@@ -485,9 +505,10 @@ void test_coap_no_more_commands(void)
 	__cmock_modem_info_string_get_ExpectAnyArgsAndReturn(sizeof(MFW_VER));
 	__cmock_modem_info_string_get_ReturnArrayThruPtr_buf(MFW_VER, strlen(MFW_VER) + 1);
 
-	__cmock_nrf_provisioning_at_attest_token_get_ExpectAnyArgsAndReturn(0);
-	__cmock_nrf_provisioning_at_attest_token_get_ReturnArrayThruPtr_buff(
-		tok_att_plain, strlen(tok_att_plain) + 1);
+	__cmock_nrf_provisioning_jwt_generate_ExpectAnyArgsAndReturn(0);
+	__cmock_nrf_provisioning_jwt_generate_CMockReturnMemThruPtr_jwt_buf(
+		CONFIG_NRF_PROVISIONING_JWT_MAX_VALID_TIME_S, tok_jwt_plain,
+		strlen(tok_jwt_plain) + 1);
 
 	__cmock_coap_client_req_AddCallback(coap_client_no_commands_cb);
 	__cmock_coap_client_req_ExpectAnyArgsAndReturn(0);
@@ -510,9 +531,10 @@ void test_coap_cmds_valid_path(void)
 	__cmock_modem_info_string_get_ExpectAnyArgsAndReturn(sizeof(MFW_VER));
 	__cmock_modem_info_string_get_ReturnArrayThruPtr_buf(MFW_VER, strlen(MFW_VER) + 1);
 
-	__cmock_nrf_provisioning_at_attest_token_get_ExpectAnyArgsAndReturn(0);
-	__cmock_nrf_provisioning_at_attest_token_get_ReturnArrayThruPtr_buff(
-		tok_att_plain, strlen(tok_att_plain) + 1);
+	__cmock_nrf_provisioning_jwt_generate_ExpectAnyArgsAndReturn(0);
+	__cmock_nrf_provisioning_jwt_generate_CMockReturnMemThruPtr_jwt_buf(
+		CONFIG_NRF_PROVISIONING_JWT_MAX_VALID_TIME_S, tok_jwt_plain,
+		strlen(tok_jwt_plain) + 1);
 
 	__cmock_coap_client_req_AddCallback(coap_client_cmds_valid_path_cb);
 	__cmock_coap_client_req_ExpectAnyArgsAndReturn(0);
@@ -536,9 +558,10 @@ void test_coap_cmds_bad_request(void)
 	__cmock_modem_info_string_get_ExpectAnyArgsAndReturn(sizeof(MFW_VER));
 	__cmock_modem_info_string_get_ReturnArrayThruPtr_buf(MFW_VER, strlen(MFW_VER) + 1);
 
-	__cmock_nrf_provisioning_at_attest_token_get_ExpectAnyArgsAndReturn(0);
-	__cmock_nrf_provisioning_at_attest_token_get_ReturnArrayThruPtr_buff(
-		tok_att_plain, strlen(tok_att_plain) + 1);
+	__cmock_nrf_provisioning_jwt_generate_ExpectAnyArgsAndReturn(0);
+	__cmock_nrf_provisioning_jwt_generate_CMockReturnMemThruPtr_jwt_buf(
+		CONFIG_NRF_PROVISIONING_JWT_MAX_VALID_TIME_S, tok_jwt_plain,
+		strlen(tok_jwt_plain) + 1);
 
 	__cmock_coap_client_req_AddCallback(coap_client_cmds_bad_request_cb);
 	__cmock_coap_client_req_ExpectAnyArgsAndReturn(0);
@@ -562,9 +585,10 @@ void test_coap_cmds_server_error(void)
 	__cmock_modem_info_string_get_ExpectAnyArgsAndReturn(sizeof(MFW_VER));
 	__cmock_modem_info_string_get_ReturnArrayThruPtr_buf(MFW_VER, strlen(MFW_VER) + 1);
 
-	__cmock_nrf_provisioning_at_attest_token_get_ExpectAnyArgsAndReturn(0);
-	__cmock_nrf_provisioning_at_attest_token_get_ReturnArrayThruPtr_buff(
-		tok_att_plain, strlen(tok_att_plain) + 1);
+	__cmock_nrf_provisioning_jwt_generate_ExpectAnyArgsAndReturn(0);
+	__cmock_nrf_provisioning_jwt_generate_CMockReturnMemThruPtr_jwt_buf(
+		CONFIG_NRF_PROVISIONING_JWT_MAX_VALID_TIME_S, tok_jwt_plain,
+		strlen(tok_jwt_plain) + 1);
 
 	__cmock_coap_client_req_AddCallback(coap_client_cmds_server_error_cb);
 	__cmock_coap_client_req_ExpectAnyArgsAndReturn(0);
@@ -588,9 +612,10 @@ void test_coap_cmds_unsupported_code(void)
 	__cmock_modem_info_string_get_ExpectAnyArgsAndReturn(sizeof(MFW_VER));
 	__cmock_modem_info_string_get_ReturnArrayThruPtr_buf(MFW_VER, strlen(MFW_VER) + 1);
 
-	__cmock_nrf_provisioning_at_attest_token_get_ExpectAnyArgsAndReturn(0);
-	__cmock_nrf_provisioning_at_attest_token_get_ReturnArrayThruPtr_buff(
-		tok_att_plain, strlen(tok_att_plain) + 1);
+	__cmock_nrf_provisioning_jwt_generate_ExpectAnyArgsAndReturn(0);
+	__cmock_nrf_provisioning_jwt_generate_CMockReturnMemThruPtr_jwt_buf(
+		CONFIG_NRF_PROVISIONING_JWT_MAX_VALID_TIME_S, tok_jwt_plain,
+		strlen(tok_jwt_plain) + 1);
 
 	__cmock_coap_client_req_AddCallback(coap_client_cmds_unsupported_code_cb);
 	__cmock_coap_client_req_ExpectAnyArgsAndReturn(0);
@@ -731,9 +756,10 @@ void test_provisioning_task_valid(void)
 	__cmock_modem_info_string_get_ExpectAnyArgsAndReturn(sizeof(MFW_VER));
 	__cmock_modem_info_string_get_ReturnArrayThruPtr_buf(MFW_VER, strlen(MFW_VER) + 1);
 
-	__cmock_nrf_provisioning_at_attest_token_get_ExpectAnyArgsAndReturn(0);
-	__cmock_nrf_provisioning_at_attest_token_get_ReturnArrayThruPtr_buff(
-		tok_att_plain, strlen(tok_att_plain) + 1);
+	__cmock_nrf_provisioning_jwt_generate_ExpectAnyArgsAndReturn(0);
+	__cmock_nrf_provisioning_jwt_generate_CMockReturnMemThruPtr_jwt_buf(
+		CONFIG_NRF_PROVISIONING_JWT_MAX_VALID_TIME_S, tok_jwt_plain,
+		strlen(tok_jwt_plain) + 1);
 
 	__cmock_coap_client_req_AddCallback(coap_client_ok_cb);
 	__cmock_coap_client_req_ExpectAnyArgsAndReturn(0);
@@ -808,9 +834,10 @@ void test_provisioning_commands(void)
 	__cmock_modem_info_string_get_ExpectAnyArgsAndReturn(sizeof(MFW_VER));
 	__cmock_modem_info_string_get_ReturnArrayThruPtr_buf(MFW_VER, strlen(MFW_VER) + 1);
 
-	__cmock_nrf_provisioning_at_attest_token_get_ExpectAnyArgsAndReturn(0);
-	__cmock_nrf_provisioning_at_attest_token_get_ReturnArrayThruPtr_buff(
-		tok_att_plain, strlen(tok_att_plain) + 1);
+	__cmock_nrf_provisioning_jwt_generate_ExpectAnyArgsAndReturn(0);
+	__cmock_nrf_provisioning_jwt_generate_CMockReturnMemThruPtr_jwt_buf(
+		CONFIG_NRF_PROVISIONING_JWT_MAX_VALID_TIME_S, tok_jwt_plain,
+		strlen(tok_jwt_plain) + 1);
 
 	__cmock_coap_client_req_AddCallback(coap_client_commands_cb);
 	__cmock_coap_client_req_ExpectAnyArgsAndReturn(0);
@@ -858,9 +885,10 @@ void test_coap_rps_bad_request(void)
 	__cmock_modem_info_string_get_ExpectAnyArgsAndReturn(sizeof(MFW_VER));
 	__cmock_modem_info_string_get_ReturnArrayThruPtr_buf(MFW_VER, strlen(MFW_VER) + 1);
 
-	__cmock_nrf_provisioning_at_attest_token_get_ExpectAnyArgsAndReturn(0);
-	__cmock_nrf_provisioning_at_attest_token_get_ReturnArrayThruPtr_buff(
-		tok_att_plain, strlen(tok_att_plain) + 1);
+	__cmock_nrf_provisioning_jwt_generate_ExpectAnyArgsAndReturn(0);
+	__cmock_nrf_provisioning_jwt_generate_CMockReturnMemThruPtr_jwt_buf(
+		CONFIG_NRF_PROVISIONING_JWT_MAX_VALID_TIME_S, tok_jwt_plain,
+		strlen(tok_jwt_plain) + 1);
 
 	__cmock_coap_client_req_AddCallback(coap_client_rsp_bad_request_cb);
 	__cmock_coap_client_req_ExpectAnyArgsAndReturn(0);
@@ -895,9 +923,10 @@ void test_coap_rsp_server_error(void)
 	__cmock_modem_info_string_get_ExpectAnyArgsAndReturn(sizeof(MFW_VER));
 	__cmock_modem_info_string_get_ReturnArrayThruPtr_buf(MFW_VER, strlen(MFW_VER) + 1);
 
-	__cmock_nrf_provisioning_at_attest_token_get_ExpectAnyArgsAndReturn(0);
-	__cmock_nrf_provisioning_at_attest_token_get_ReturnArrayThruPtr_buff(
-		tok_att_plain, strlen(tok_att_plain) + 1);
+	__cmock_nrf_provisioning_jwt_generate_ExpectAnyArgsAndReturn(0);
+	__cmock_nrf_provisioning_jwt_generate_CMockReturnMemThruPtr_jwt_buf(
+		CONFIG_NRF_PROVISIONING_JWT_MAX_VALID_TIME_S, tok_jwt_plain,
+		strlen(tok_jwt_plain) + 1);
 
 	__cmock_coap_client_req_AddCallback(coap_client_rsp_server_error_cb);
 	__cmock_coap_client_req_ExpectAnyArgsAndReturn(0);
@@ -932,9 +961,10 @@ void test_coap_rsp_unsupported_code(void)
 	__cmock_modem_info_string_get_ExpectAnyArgsAndReturn(sizeof(MFW_VER));
 	__cmock_modem_info_string_get_ReturnArrayThruPtr_buf(MFW_VER, strlen(MFW_VER) + 1);
 
-	__cmock_nrf_provisioning_at_attest_token_get_ExpectAnyArgsAndReturn(0);
-	__cmock_nrf_provisioning_at_attest_token_get_ReturnArrayThruPtr_buff(
-		tok_att_plain, strlen(tok_att_plain) + 1);
+	__cmock_nrf_provisioning_jwt_generate_ExpectAnyArgsAndReturn(0);
+	__cmock_nrf_provisioning_jwt_generate_CMockReturnMemThruPtr_jwt_buf(
+		CONFIG_NRF_PROVISIONING_JWT_MAX_VALID_TIME_S, tok_jwt_plain,
+		strlen(tok_jwt_plain) + 1);
 
 	__cmock_coap_client_req_AddCallback(coap_client_rsp_unsupported_code_cb);
 	__cmock_coap_client_req_ExpectAnyArgsAndReturn(0);

@@ -105,10 +105,10 @@ static int16_t get_utc_delta(const struct bt_mesh_time_srv *srv, int64_t uptime)
 	return srv->data.sync.status.tai_utc_delta;
 }
 
-static int send_zone_status(struct bt_mesh_model *model,
+static int send_zone_status(const struct bt_mesh_model *model,
 			    struct bt_mesh_msg_ctx *ctx)
 {
-	struct bt_mesh_time_srv *srv = model->user_data;
+	struct bt_mesh_time_srv *srv = model->rt->user_data;
 	struct bt_mesh_time_zone_status resp = {
 		.current_offset = get_zone_offset(srv, k_uptime_get()),
 		.time_zone_change = srv->data.time_zone_change,
@@ -126,10 +126,10 @@ static int send_zone_status(struct bt_mesh_model *model,
 	return bt_mesh_model_send(model, ctx, &msg, NULL, NULL);
 }
 
-static int send_tai_utc_delta_status(struct bt_mesh_model *model,
+static int send_tai_utc_delta_status(const struct bt_mesh_model *model,
 				     struct bt_mesh_msg_ctx *ctx)
 {
-	struct bt_mesh_time_srv *srv = model->user_data;
+	struct bt_mesh_time_srv *srv = model->rt->user_data;
 	struct bt_mesh_time_tai_utc_delta_status resp = {
 		.delta_current = get_utc_delta(srv, k_uptime_get()),
 		.tai_utc_change = srv->data.tai_utc_change,
@@ -146,10 +146,10 @@ static int send_tai_utc_delta_status(struct bt_mesh_model *model,
 	return bt_mesh_model_send(model, ctx, &msg, NULL, NULL);
 }
 
-static int send_role_status(struct bt_mesh_model *model,
+static int send_role_status(const struct bt_mesh_model *model,
 			    struct bt_mesh_msg_ctx *ctx)
 {
-	struct bt_mesh_time_srv *srv = model->user_data;
+	struct bt_mesh_time_srv *srv = model->rt->user_data;
 	uint8_t resp = srv->data.role;
 
 	BT_MESH_MODEL_BUF_DEFINE(msg, BT_MESH_TIME_OP_TIME_ROLE_STATUS,
@@ -161,10 +161,10 @@ static int send_role_status(struct bt_mesh_model *model,
 	return bt_mesh_model_send(model, ctx, &msg, NULL, NULL);
 }
 
-static int send_time_status(struct bt_mesh_model *model,
+static int send_time_status(const struct bt_mesh_model *model,
 			    struct bt_mesh_msg_ctx *ctx, int64_t uptime)
 {
-	struct bt_mesh_time_srv *srv = model->user_data;
+	struct bt_mesh_time_srv *srv = model->rt->user_data;
 	struct bt_mesh_time_status status;
 	int err;
 
@@ -174,7 +174,7 @@ static int send_time_status(struct bt_mesh_model *model,
 
 	err = bt_mesh_time_srv_status(srv, uptime, &status);
 	if (err) {
-		/* Mesh Model Specification 5.2.1.3: If the TAI Seconds field is
+		/* MshMDLv1.1: 5.2.1.3: If the TAI Seconds field is
 		 * 0, all other fields shall be omitted
 		 */
 		bt_mesh_time_buf_put_tai_sec(&msg, 0);
@@ -195,10 +195,10 @@ static void time_status_send_after_delay(struct k_work *work)
 	(void)bt_mesh_time_srv_time_status_send(srv, NULL);
 }
 
-static int handle_time_status(struct bt_mesh_model *model, struct bt_mesh_msg_ctx *ctx,
+static int handle_time_status(const struct bt_mesh_model *model, struct bt_mesh_msg_ctx *ctx,
 			      struct net_buf_simple *buf)
 {
-	struct bt_mesh_time_srv *srv = model->user_data;
+	struct bt_mesh_time_srv *srv = model->rt->user_data;
 
 	if ((srv->data.role != BT_MESH_TIME_CLIENT) &&
 	    (srv->data.role != BT_MESH_TIME_RELAY)) {
@@ -247,7 +247,7 @@ static int handle_time_status(struct bt_mesh_model *model, struct bt_mesh_msg_ct
 	return 0;
 }
 
-static int handle_time_get(struct bt_mesh_model *model, struct bt_mesh_msg_ctx *ctx,
+static int handle_time_get(const struct bt_mesh_model *model, struct bt_mesh_msg_ctx *ctx,
 			   struct net_buf_simple *buf)
 {
 	send_time_status(model, ctx, k_uptime_get());
@@ -255,10 +255,10 @@ static int handle_time_get(struct bt_mesh_model *model, struct bt_mesh_msg_ctx *
 	return 0;
 }
 
-static int handle_time_set(struct bt_mesh_model *model, struct bt_mesh_msg_ctx *ctx,
+static int handle_time_set(const struct bt_mesh_model *model, struct bt_mesh_msg_ctx *ctx,
 			   struct net_buf_simple *buf)
 {
-	struct bt_mesh_time_srv *srv = model->user_data;
+	struct bt_mesh_time_srv *srv = model->rt->user_data;
 
 	bt_mesh_time_decode_time_params(buf, &srv->data.sync.status);
 	srv->data.sync.uptime = k_uptime_get();
@@ -275,7 +275,7 @@ static int handle_time_set(struct bt_mesh_model *model, struct bt_mesh_msg_ctx *
 	return 0;
 }
 
-static int handle_zone_get(struct bt_mesh_model *model, struct bt_mesh_msg_ctx *ctx,
+static int handle_zone_get(const struct bt_mesh_model *model, struct bt_mesh_msg_ctx *ctx,
 			   struct net_buf_simple *buf)
 {
 	send_zone_status(model, ctx);
@@ -283,10 +283,10 @@ static int handle_zone_get(struct bt_mesh_model *model, struct bt_mesh_msg_ctx *
 	return 0;
 }
 
-static int handle_zone_set(struct bt_mesh_model *model, struct bt_mesh_msg_ctx *ctx,
+static int handle_zone_set(const struct bt_mesh_model *model, struct bt_mesh_msg_ctx *ctx,
 			   struct net_buf_simple *buf)
 {
-	struct bt_mesh_time_srv *srv = model->user_data;
+	struct bt_mesh_time_srv *srv = model->rt->user_data;
 
 	srv->data.time_zone_change.new_offset =
 		net_buf_simple_pull_u8(buf) - ZONE_CHANGE_ZERO_POINT;
@@ -302,7 +302,7 @@ static int handle_zone_set(struct bt_mesh_model *model, struct bt_mesh_msg_ctx *
 	return 0;
 }
 
-static int handle_tai_utc_delta_get(struct bt_mesh_model *model, struct bt_mesh_msg_ctx *ctx,
+static int handle_tai_utc_delta_get(const struct bt_mesh_model *model, struct bt_mesh_msg_ctx *ctx,
 				    struct net_buf_simple *buf)
 {
 	send_tai_utc_delta_status(model, ctx);
@@ -310,10 +310,10 @@ static int handle_tai_utc_delta_get(struct bt_mesh_model *model, struct bt_mesh_
 	return 0;
 }
 
-static int handle_tai_utc_delta_set(struct bt_mesh_model *model, struct bt_mesh_msg_ctx *ctx,
+static int handle_tai_utc_delta_set(const struct bt_mesh_model *model, struct bt_mesh_msg_ctx *ctx,
 				    struct net_buf_simple *buf)
 {
-	struct bt_mesh_time_srv *srv = model->user_data;
+	struct bt_mesh_time_srv *srv = model->rt->user_data;
 
 	srv->data.tai_utc_change.delta_new =
 		net_buf_simple_pull_le16(buf) - UTC_CHANGE_ZERO_POINT;
@@ -328,7 +328,7 @@ static int handle_tai_utc_delta_set(struct bt_mesh_model *model, struct bt_mesh_
 	return 0;
 }
 
-static int handle_role_get(struct bt_mesh_model *model, struct bt_mesh_msg_ctx *ctx,
+static int handle_role_get(const struct bt_mesh_model *model, struct bt_mesh_msg_ctx *ctx,
 			   struct net_buf_simple *buf)
 {
 	send_role_status(model, ctx);
@@ -336,10 +336,10 @@ static int handle_role_get(struct bt_mesh_model *model, struct bt_mesh_msg_ctx *
 	return 0;
 }
 
-static int handle_role_set(struct bt_mesh_model *model, struct bt_mesh_msg_ctx *ctx,
+static int handle_role_set(const struct bt_mesh_model *model, struct bt_mesh_msg_ctx *ctx,
 			   struct net_buf_simple *buf)
 {
-	struct bt_mesh_time_srv *srv = model->user_data;
+	struct bt_mesh_time_srv *srv = model->rt->user_data;
 	enum bt_mesh_time_role role;
 
 	role = net_buf_simple_pull_u8(buf);
@@ -409,26 +409,30 @@ const struct bt_mesh_model_op _bt_mesh_time_setup_srv_op[] = {
 	BT_MESH_MODEL_OP_END,
 };
 
-static int bt_mesh_time_srv_init(struct bt_mesh_model *model)
+static int bt_mesh_time_srv_init(const struct bt_mesh_model *model)
 {
-	struct bt_mesh_time_srv *srv = model->user_data;
+	struct bt_mesh_time_srv *srv = model->rt->user_data;
 
 	srv->model = model;
 	srv->data.timestamp = -STATUS_INTERVAL_MIN;
 	net_buf_simple_init(srv->pub.msg, 0);
+	srv->is_unsolicited = false;
+	srv->cached_ttl = 0;
 
 	k_work_init_delayable(&srv->status_delay, time_status_send_after_delay);
 
 	return 0;
 }
 
-static void bt_mesh_time_srv_reset(struct bt_mesh_model *model)
+static void bt_mesh_time_srv_reset(const struct bt_mesh_model *model)
 {
-	struct bt_mesh_time_srv *srv = model->user_data;
+	struct bt_mesh_time_srv *srv = model->rt->user_data;
 	struct bt_mesh_time_srv_data data = { .timestamp = -STATUS_INTERVAL_MIN };
 
 	srv->data = data;
 	net_buf_simple_reset(srv->pub.msg);
+	srv->is_unsolicited = false;
+	srv->cached_ttl = 0;
 	(void)k_work_cancel_delayable(&srv->status_delay);
 
 	if (IS_ENABLED(CONFIG_BT_SETTINGS)) {
@@ -438,11 +442,11 @@ static void bt_mesh_time_srv_reset(struct bt_mesh_model *model)
 }
 
 #ifdef CONFIG_BT_MESH_TIME_SRV_PERSISTENT
-static int bt_mesh_time_srv_settings_set(struct bt_mesh_model *model,
+static int bt_mesh_time_srv_settings_set(const struct bt_mesh_model *model,
 					 const char *name, size_t len_rd,
 					 settings_read_cb read_cb, void *cb_arg)
 {
-	struct bt_mesh_time_srv *srv = model->user_data;
+	struct bt_mesh_time_srv *srv = model->rt->user_data;
 	struct bt_mesh_time_srv_settings_data data;
 
 	if (read_cb(cb_arg, &data, sizeof(data)) != sizeof(data)) {
@@ -467,9 +471,9 @@ const struct bt_mesh_model_cb _bt_mesh_time_srv_cb = {
 #endif
 };
 
-static int bt_mesh_time_setup_srv_init(struct bt_mesh_model *model)
+static int bt_mesh_time_setup_srv_init(const struct bt_mesh_model *model)
 {
-	struct bt_mesh_time_srv *srv = model->user_data;
+	struct bt_mesh_time_srv *srv = model->rt->user_data;
 #if defined(CONFIG_BT_MESH_COMP_PAGE_1)
 	int err = bt_mesh_model_correspond(model, srv->model);
 
@@ -486,9 +490,10 @@ const struct bt_mesh_model_cb _bt_mesh_time_setup_srv_cb = {
 	.init = bt_mesh_time_setup_srv_init,
 };
 
-int _bt_mesh_time_srv_update_handler(struct bt_mesh_model *model)
+int _bt_mesh_time_srv_update_handler(const struct bt_mesh_model *model)
 {
-	struct bt_mesh_time_srv *srv = model->user_data;
+	struct bt_mesh_time_srv *srv = model->rt->user_data;
+	struct bt_mesh_model_pub *pub = srv->model->pub;
 	struct bt_mesh_time_status status;
 	int64_t uptime;
 	int err;
@@ -504,6 +509,15 @@ int _bt_mesh_time_srv_update_handler(struct bt_mesh_model *model)
 		return err;
 	}
 
+	/* If sent as an unsolicited message, the Time Status message shall be sent
+	 * with TTL=0 to avoid building up cumulative time errors resulting from delays
+	 * in processing the messages by relays.
+	 */
+	if (!bt_mesh_model_pub_is_retransmission(pub->mod) && srv->is_unsolicited) {
+		pub->ttl = srv->cached_ttl;
+		srv->is_unsolicited = false;
+	}
+
 	srv->data.timestamp = uptime;
 	/* Account for delay in TX processing: */
 	status.uncertainty += CONFIG_BT_MESH_TIME_MESH_HOP_UNCERTAINTY;
@@ -517,10 +531,11 @@ int _bt_mesh_time_srv_update_handler(struct bt_mesh_model *model)
 int bt_mesh_time_srv_time_status_send(struct bt_mesh_time_srv *srv,
 				      struct bt_mesh_msg_ctx *ctx)
 {
+	struct bt_mesh_model_pub *pub = srv->model->pub;
 	int64_t uptime = k_uptime_get();
 	int err;
 
-	/** Mesh Model Specification 5.3.1.2.2:
+	/** MshMDLv1.1: 5.3.1.2.2:
 	 * The message (Time Status) may be sent as an unsolicited message at any time
 	 * if the value of the Time Role state is 0x01 (Time Authority) or 0x02 (Time Relay).
 	 */
@@ -528,7 +543,14 @@ int bt_mesh_time_srv_time_status_send(struct bt_mesh_time_srv *srv,
 		return -EOPNOTSUPP;
 	}
 
-	srv->model->pub->ttl = 0;
+	if (ctx) {
+		ctx->send_ttl = 0;
+		ctx->rnd_delay = false;
+	} else {
+		srv->cached_ttl = srv->is_unsolicited ? srv->cached_ttl : pub->ttl;
+		srv->is_unsolicited = true;
+		pub->ttl = 0;
+	}
 
 	err = send_time_status(srv->model, ctx, uptime);
 	if (!err) {

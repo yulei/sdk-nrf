@@ -98,6 +98,10 @@ Device Firmware Upgrade support
     :start-after: matter_door_lock_sample_build_with_dfu_start
     :end-before: matter_door_lock_sample_build_with_dfu_end
 
+.. include:: ../template/README.rst
+    :start-after: matter_template_nrf54l15_build_with_dfu_start
+    :end-before: matter_template_nrf54l15_build_with_dfu_end
+
 FEM support
 ===========
 
@@ -113,18 +117,29 @@ Factory data support
 User interface
 **************
 
+.. include:: ../template/README.rst
+   :start-after: matter_template_nrf54l15_0_3_0_interface_start
+   :end-before: matter_template_nrf54l15_0_3_0_interface_end
+
 .. include:: ../lock/README.rst
     :start-after: matter_door_lock_sample_led1_start
     :end-before: matter_door_lock_sample_led1_end
 
-LED 2:
+LED 2
     Indicates the lift position of the window cover, which is represented by the brightness of the LED.
     The brightness level ranges from ``0`` to ``255``, where the brightness level set to ``0`` (switched off LED) indicates a fully opened window cover (lifted) and the brightness level set to ``255`` indicates a fully closed window cover (lowered).
 
     Additionally, the LED starts blinking evenly (500 ms on/500 ms off) when the Identify command of the Identify cluster is received on the endpoint ``1``.
     The command's argument can be used to specify the duration of the effect.
 
-LED 3:
+LED 3 (nRF52840 DK and nRF5340 DK)
+    Indicates the tilt position of the window cover, which is represented by the brightness of the LED.
+    The brightness level ranges from ``0`` to ``255``, where the brightness level set to ``0`` (switched off LED) indicates a fully opened window cover (tilted to a horizontal position) and the brightness level set to ``255`` indicates a fully closed window cover (tilted to a vertical position).
+
+LED 4 (nRF54L15 PDK)
+    .. note::
+       This is **LED 3** on the board revision v0.3.0.
+
     Indicates the tilt position of the window cover, which is represented by the brightness of the LED.
     The brightness level ranges from ``0`` to ``255``, where the brightness level set to ``0`` (switched off LED) indicates a fully opened window cover (tilted to a horizontal position) and the brightness level set to ``255`` indicates a fully closed window cover (tilted to a vertical position).
 
@@ -150,10 +165,6 @@ Button 2 and Button 3:
     The cover position and the LED brightness values are stored in non-volatile memory and are restored after every device reset.
     After the firmware update or factory reset both LEDs are switched off by default, which corresponds to the cover being fully open, both lift-wise and tilt-wise.
 
-Button 4:
-    Starts the NFC tag emulation, enables Bluetooth LE advertising for the predefined period of time (15 minutes by default), and makes the device discoverable over Bluetooth LE.
-    This button is used during the :ref:`commissioning procedure <matter_window_cover_sample_remote_control_commissioning>`.
-
 .. include:: ../lock/README.rst
     :start-after: matter_door_lock_sample_jlink_start
     :end-before: matter_door_lock_sample_jlink_end
@@ -171,38 +182,8 @@ Building and running
 Selecting a build type
 ======================
 
-Before you start testing the application, you can select one of the `Matter window covering build types`_, depending on your building method.
-
-Selecting a build type in |VSC|
--------------------------------
-
-.. include:: /config_and_build/modifying.rst
-   :start-after: build_types_selection_vsc_start
-   :end-before: build_types_selection_vsc_end
-
-Selecting a build type from command line
-----------------------------------------
-
-.. include:: /config_and_build/modifying.rst
-   :start-after: build_types_selection_cmd_start
-   :end-before: For example, you can replace the
-
-For example, you can replace the *selected_build_type* variable to build the ``release`` firmware for ``nrf52840dk_nrf52840`` by running the following command in the project directory:
-
-.. parsed-literal::
-   :class: highlight
-
-   west build -b nrf52840dk_nrf52840 -d build_nrf52840dk_nrf52840 -- -DCONF_FILE=prj_release.conf
-
-The ``build_nrf52840dk_nrf52840`` parameter specifies the output directory for the build files.
-
-.. note::
-   If the selected board does not support the selected build type, the build is interrupted.
-   For example, if the ``shell`` build type is not supported by the selected board, the following notification appears:
-
-   .. code-block:: console
-
-      File not found: ./ncs/nrf/samples/matter/window_covering/configuration/nrf52840dk_nrf52840/prj_shell.conf
+Before you start testing the application, you can select one of the `Matter window covering build types`_.
+See :ref:`cmake_options` for information about how to select a build type.
 
 Testing
 =======
@@ -222,7 +203,7 @@ After building the sample and programming it to your development kit, complete t
    **LED 3** light up and its brightness increases with each button press until it reaches full brightness.
 #. Press **Button 2** 20 times to fully tilt the cover into the open position.
    The brightness of **LED 3** decreases with each button press until the LED turns off.
-#. Press **Button 1** to initiate the factory reset of the device.
+#. Keep the **Button 1** pressed for more than six seconds to initiate factory reset of the device.
 
 The device reboots after all its settings are erased.
 
@@ -245,7 +226,7 @@ Commissioning the device
     :end-before: matter_light_bulb_sample_commissioning_end
 
 Before starting the commissioning procedure, the device must be made discoverable over Bluetooth LE.
-Press **Button 4** to enable the Bluetooth LE advertising.
+Press **Button 1** to enable the Bluetooth LE advertising.
 
 Onboarding information
 ++++++++++++++++++++++

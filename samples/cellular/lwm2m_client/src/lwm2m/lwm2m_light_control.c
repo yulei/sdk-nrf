@@ -8,16 +8,17 @@
 #include <zephyr/net/lwm2m.h>
 #include <lwm2m_resource_ids.h>
 #include <stdlib.h>
-
+#include "lwm2m_engine.h"
 #include "lwm2m_app_utils.h"
 #include "ui_led.h"
 
 #include <zephyr/logging/log.h>
 LOG_MODULE_DECLARE(app_lwm2m, CONFIG_APP_LOG_LEVEL);
 
-#if defined(CONFIG_BOARD_THINGY91_NRF9160_NS) && defined(CONFIG_UI_LED_USE_PWM)
+#if (defined(CONFIG_BOARD_THINGY91_NRF9160_NS) || \
+	defined(CONFIG_BOARD_THINGY91X_NRF9151_NS)) && defined(CONFIG_UI_LED_USE_PWM)
 #define APP_TYPE	"RGB PWM LED controller"
-#elif defined(CONFIG_BOARD_THINGY91_NRF9160_NS)
+#elif defined(CONFIG_BOARD_THINGY91_NRF9160_NS) || defined(CONFIG_BOARD_THINGY91X_NRF9151_NS)
 #define APP_TYPE	"RGB GPIO LED controller"
 #elif defined(CONFIG_BOARD_NRF9160DK_NRF9160_NS) && defined(CONFIG_UI_LED_USE_PWM)
 #define APP_TYPE	"PWM LED controller"
@@ -26,6 +27,10 @@ LOG_MODULE_DECLARE(app_lwm2m, CONFIG_APP_LOG_LEVEL);
 #elif defined(CONFIG_BOARD_NRF9161DK_NRF9161_NS) && defined(CONFIG_UI_LED_USE_PWM)
 #define APP_TYPE	"PWM LED controller"
 #elif defined(CONFIG_BOARD_NRF9161DK_NRF9161_NS)
+#define APP_TYPE	"GPIO LED controller"
+#elif defined(CONFIG_BOARD_NRF9151DK_NRF9151_NS) && defined(CONFIG_UI_LED_USE_PWM)
+#define APP_TYPE	"PWM LED controller"
+#elif defined(CONFIG_BOARD_NRF9151DK_NRF9151_NS)
 #define APP_TYPE	"GPIO LED controller"
 #endif
 
@@ -196,7 +201,7 @@ static int lc_dimmer_cb(uint16_t obj_inst_id, uint16_t res_id, uint16_t res_inst
 	return 0;
 }
 
-int lwm2m_init_light_control(void)
+static int lwm2m_init_light_control(void)
 {
 	int ret = 0;
 	uint8_t intensity;
@@ -258,3 +263,5 @@ int lwm2m_init_light_control(void)
 
 	return ret;
 }
+
+LWM2M_APP_INIT(lwm2m_init_light_control);

@@ -52,13 +52,13 @@ const struct wifi_scan_params tests[] = {
 #ifdef CONFIG_WIFI_SCAN_PROFILE_ACTIVE
 	{
 	.scan_type = WIFI_SCAN_TYPE_ACTIVE,
-	.dwell_time_active = CONFIG_WIFI_MGMT_SCAN_DWELL_TIME_ACTIVE
+	.dwell_time_active = CONFIG_WIFI_SCAN_DWELL_TIME_ACTIVE
 	},
 #endif
 #ifdef CONFIG_WIFI_SCAN_PROFILE_PASSIVE
 	{
 	.scan_type = WIFI_SCAN_TYPE_PASSIVE,
-	.dwell_time_passive = CONFIG_WIFI_MGMT_SCAN_DWELL_TIME_PASSIVE
+	.dwell_time_passive = CONFIG_WIFI_SCAN_DWELL_TIME_PASSIVE
 	},
 #endif
 #ifdef CONFIG_WIFI_SCAN_PROFILE_2_4GHz_ACTIVE
@@ -109,11 +109,20 @@ static struct net_mgmt_event_callback wifi_shell_mgmt_cb;
 
 K_SEM_DEFINE(scan_sem, 0, 1);
 
+#if defined CONFIG_WIFI_NRF700X_SKIP_LOCAL_ADMIN_MAC
+static bool local_mac_check(const uint8_t *const mac)
+{
+return ((mac[0] & 0x02) ||
+((mac[0] == 0x00) && (mac[1] == 0x00) && (mac[2] == 0x5E)));
+}
+#endif /* CONFIG_WIFI_NRF700X_SKIP_LOCAL_ADMIN_MAC */
+
 static void handle_wifi_scan_result(struct net_mgmt_event_callback *cb)
 {
 	const struct wifi_scan_result *entry =
 		(const struct wifi_scan_result *)cb->info;
 	uint8_t mac_string_buf[sizeof("xx:xx:xx:xx:xx:xx")];
+	uint8_t ssid_print[WIFI_SSID_MAX_LEN + 1];
 
 	scan_result++;
 
@@ -122,10 +131,17 @@ static void handle_wifi_scan_result(struct net_mgmt_event_callback *cb)
 		       "Num", "SSID", "(len)", "Chan", "RSSI", "Security", "BSSID");
 	}
 
+	strncpy(ssid_print, entry->ssid, sizeof(ssid_print) - 1);
+	ssid_print[sizeof(ssid_print) - 1] = '\0';
+
+#if defined CONFIG_WIFI_NRF700X_SKIP_LOCAL_ADMIN_MAC
+	__ASSERT(!local_mac_check(entry->mac), "Locally administered MAC found: %s\n", ssid_print);
+#endif /* CONFIG_WIFI_NRF700X_SKIP_LOCAL_ADMIN_MAC */
+
 	printk("%-4d | %-32s %-5u | %-4u | %-4d | %-5s | %s\n",
-	       scan_result, entry->ssid, entry->ssid_length,
+	       scan_result, ssid_print, entry->ssid_length,
 	       entry->channel, entry->rssi,
-	       (entry->security == WIFI_SECURITY_TYPE_PSK ? "WPA/WPA2" : "Open    "),
+	       wifi_security_txt(entry->security),
 	       ((entry->mac_length) ?
 			net_sprint_ll_addr_buf(entry->mac, WIFI_MAC_ADDR_LEN, mac_string_buf,
 						sizeof(mac_string_buf)) : ""));
@@ -267,7 +283,7 @@ static int wifi_scan(void)
 
 	if (sizeof(CONFIG_WIFI_SCAN_CHAN_LIST) - 1) {
 		if (wifi_utils_parse_scan_chan(CONFIG_WIFI_SCAN_CHAN_LIST,
-						params.chan)) {
+						params.band_chan, ARRAY_SIZE(params.band_chan))) {
 			LOG_ERR("Incorrect value(s) in CONFIG_WIFI_SCAN_CHAN_LIST: %s",
 					CONFIG_WIFI_SCAN_CHAN_LIST);
 			return -ENOEXEC;
@@ -311,11 +327,6 @@ int main(void)
 
 	net_mgmt_add_event_callback(&wifi_shell_mgmt_cb);
 
-#if defined(CLOCK_FEATURE_HFCLK_DIVIDE_PRESENT) || NRF_CLOCK_HAS_HFCLK192M
-	/* For now hardcode to 128MHz */
-	nrfx_clock_divider_set(NRF_CLOCK_DOMAIN_HFCLK,
-			       NRF_CLOCK_HFCLK_DIV_1);
-#endif
 	k_sleep(K_SECONDS(1));
 	printk("Starting %s with CPU frequency: %d MHz\n", CONFIG_BOARD, SystemCoreClock / MHZ(1));
 
@@ -325,9 +336,9 @@ int main(void)
 		struct ethernet_req_params params;
 
 		/* Set a local MAC address with Nordic OUI */
-		if (net_if_is_up(iface)) {
+		if (net_if_is_admin_up(iface)) {
 			ret = net_if_down(iface);
-			if (ret) {
+			if (ret < 0 && ret != -EALREADY) {
 				LOG_ERR("Cannot bring down iface (%d)", ret);
 				return ret;
 			}
@@ -345,7 +356,7 @@ int main(void)
 			 &params, sizeof(params));
 
 		ret = net_if_up(iface);
-		if (ret) {
+		if (ret < 0 && ret != -EALREADY) {
 			LOG_ERR("Cannot bring up iface (%d)", ret);
 			return ret;
 		}

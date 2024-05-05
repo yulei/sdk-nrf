@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2023 Nordic Semiconductor
+# Copyright (c) 2024 Nordic Semiconductor
 #
 # SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
 #
@@ -25,7 +25,7 @@ ZEPHYR_BASE = utils.get_projdir("zephyr")
 project = "Trusted Firmware-M"
 copyright = "2017-2021, ARM CE-OSS"
 author = "ARM CE-OSS"
-version = "1.7.0"
+version = "2.0.0"
 
 sys.path.insert(0, str(ZEPHYR_BASE / "doc" / "_extensions"))
 sys.path.insert(0, str(NRF_BASE / "doc" / "_extensions"))

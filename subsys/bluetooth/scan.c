@@ -931,7 +931,7 @@ static bool find_appearance(const uint8_t *data,
 		return false;
 	}
 
-	uint16_t decoded_appearance = sys_get_be16(data);
+	uint16_t decoded_appearance = sys_get_le16(data);
 
 	if (decoded_appearance == *appearance) {
 		return true;
@@ -1630,3 +1630,10 @@ void bt_scan_conn_attempts_filter_clear(void)
 	k_mutex_unlock(&scan_mutex);
 }
 #endif /* CONFIG_BT_SCAN_CONN_ATTEMPTS_FILTER */
+
+#if CONFIG_BT_CENTRAL
+void bt_scan_update_connect_if_match(bool connect_if_match)
+{
+	bt_scan.connect_if_match = connect_if_match;
+}
+#endif /* CONFIG_BT_CENTRAL */

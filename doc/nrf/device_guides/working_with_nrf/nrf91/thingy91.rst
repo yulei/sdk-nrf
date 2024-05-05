@@ -93,7 +93,7 @@ LTE Band Lock
 *************
 
 The modem within Thingy:91 can be configured to use specific LTE bands by using the band lock AT command.
-See :ref:`nrf9160_ug_band_lock` and the `band lock section in the AT Commands reference document`_ for additional information.
+See :ref:`nrf91_ug_band_lock` and the `band lock section in the nRF9160 AT Commands Reference Guide`_ for additional information.
 The preprogrammed firmware configures the modem to use the bands currently certified on the Thingy:91 hardware.
 When building the firmware, you can configure which bands must be enabled.
 
@@ -122,34 +122,36 @@ When developing with your Thingy:91, it is recommended to use an external debug 
    The external debug probe must support Arm Cortex-M33, such as the nRF9160 DK.
    You need a 10-pin 2x5 socket-socket 1.27 mm IDC (:term:`Serial Wire Debug (SWD)`) JTAG cable to connect to the external debug probe.
 
-Download and extract the latest application and modem firmware from the `Thingy:91 Downloads <Thingy:91 product website (downloads)_>`_ page.
+Download and extract the latest application and modem firmware from the `Thingy:91 Downloads`_ page.
 
 The downloaded ZIP archive contains the following firmware:
 
 Application firmware
   The :file:`img_app_bl` folder contains full firmware images for different applications.
-  The guides in this section use the images for the :ref:`connectivity_bridge` and :ref:`asset_tracker_v2` applications.
-  Connectivity bridge provides bridge functionality for the hardware, and Asset Tracker v2 simulates sensor data and transmits it to Nordic Semiconductor's cloud solution, `nRF Cloud`_.
-
-  The data is transmitted using either LTE-M or NB-IoT.
-  Asset Tracker v2 first attempts to use LTE-M, then NB-IoT.
-  Check with your SIM card provider for the mode they support at your location.
-  For the iBasis SIM card provided with the nRF9160 DK, see `iBasis IoT network coverage`_.
+  The guides for programming through an external debug probe in this section use the images in this folder.
 
 Application firmware for Device Firmware Update (DFU)
   The images in the :file:`img_fota_dfu_bin` and :file:`img_fota_dfu_hex` folders contain firmware images for DFU.
-  These images are not used in the guides in this section.
+  The guides for programming through USB in this section use the images in the :file:`img_fota_dfu_hex` folder.
 
 Modem firmware
   The modem firmware is in a ZIP archive instead of a folder.
   The archive is named :file:`mfw_nrf9160_` followed by the firmware version number.
   Do not unzip this file.
 
+The :file:`CONTENTS.txt` file in the extracted folder contains the location and names of the different firmware images.
+
+The instructions in this section show you how to program the :ref:`connectivity_bridge` and :ref:`asset_tracker_v2` applications, as well as the modem firmware.
+Connectivity bridge provides bridge functionality for the hardware, and Asset Tracker v2 simulates sensor data and transmits it to Nordic Semiconductor's cloud solution, `nRF Cloud`_.
+
+The data is transmitted using either LTE-M or NB-IoT.
+Asset Tracker v2 first attempts to use LTE-M, then NB-IoT.
+Check with your SIM card provider for the mode they support at your location.
+For the iBasis SIM card provided with the Thingy:91, see `iBasis IoT network coverage`_.
+
 .. tip::
    For a more compact nRF Cloud firmware application, you can build and install the :ref:`nrf_cloud_multi_service` sample.
    See the :ref:`building_pgming` section for more information.
-
-The :file:`CONTENTS.txt` file in the extracted folder contains the location and names of the different firmware images.
 
 .. note::
    To update the Thingy:91 through USB, the nRF9160 SiP and nRF52840 SoC bootloaders must be factory-compatible.
@@ -263,7 +265,7 @@ Updating the firmware in the nRF52840 SoC
 
             In the Programmer navigation bar, :guilabel:`No devices available` changes to :guilabel:`SELECT DEVICE`.
 
-            .. figure:: ../nrf52/images/programmer_select_device1.png
+            .. figure:: images/programmer_select_device1.png
                :alt: Programmer - Select device
 
                Programmer - SELECT DEVICE
@@ -523,17 +525,17 @@ The build targets of interest for Thingy:91 in |NCS| are as follows:
 +---------------+---------------------------------------------------+
 |Component      |  Build target                                     |
 +===============+===================================================+
-|nRF9160 SiP    |``thingy91_nrf9160_ns``                            |
+|nRF9160 SiP    |``thingy91/nrf9160/ns``                            |
 +---------------+---------------------------------------------------+
-|nRF52840 SoC   |``thingy91_nrf52840``                              |
+|nRF52840 SoC   |``thingy91/nrf52840``                              |
 +---------------+---------------------------------------------------+
 
-You must use the build target ``thingy91_nrf9160_ns`` when building the application code for the nRF9160 SiP and the build target ``thingy91_nrf52840`` when building the application code for the onboard nRF52840 SoC.
+You must use the build target ``thingy91/nrf9160/ns`` when building the application code for the nRF9160 SiP and the build target ``thingy91/nrf52840`` when building the application code for the onboard nRF52840 SoC.
 
 .. note::
 
    * In |NCS| releases before v1.3.0, these build targets were named ``nrf9160_pca20035``, ``nrf9160_pca20035ns``, and ``nrf52840_pca20035``.
-   * In |NCS| releases ranging from v1.3.0 to v1.6.1, the build target ``thingy91_nrf9160_ns`` was named ``thingy91_nrf9160ns``.
+   * In |NCS| releases ranging from v1.3.0 to v1.6.1, the build target ``thingy91/nrf9160/ns`` was named ``thingy91_nrf9160ns``.
 
 .. note::
 
@@ -579,7 +581,7 @@ Complete the following steps to build and program using the |nRFVSC|:
 
 .. |sample_path_vsc| replace:: :file:`ncs/nrf/applications/asset_tracker_v2`
 
-.. |vsc_sample_board_target_line| replace:: you must use the build target ``thingy91_nrf9160_ns`` when building the application code for the nRF9160 SiP and the build target ``thingy91_nrf52840`` when building the application code for the onboard nRF52840 SoC
+.. |vsc_sample_board_target_line| replace:: you must use the build target ``thingy91/nrf9160/ns`` when building the application code for the nRF9160 SiP and the build target ``thingy91/nrf52840`` when building the application code for the onboard nRF52840 SoC
 
 .. include:: ../../../includes/vsc_build_and_run.txt
 
@@ -614,7 +616,7 @@ Building and programming on the command line
 
 .. |cmd_folder_path| replace:: on the nRF9160 SiP component and ``ncs/nrf/applications/connectivity_bridge`` when building the source code for the :ref:`connectivity_bridge` application on the nRF52840 SoC component
 
-.. |cmd_build_target| replace:: ``thingy91_nrf9160_ns`` if building for the nRF9160 SiP component and ``thingy91_nrf52840`` if building for the nRF52840 SoC component
+.. |cmd_build_target| replace:: ``thingy91/nrf9160/ns`` if building for the nRF9160 SiP component and ``thingy91/nrf52840`` if building for the nRF52840 SoC component
 
 .. include:: ../../../includes/cmd_build_and_run.txt
 
@@ -632,3 +634,28 @@ Building and programming on the command line
           west flash
 
       The device resets and runs the programmed sample or application.
+
+.. _thingy91_partition_layout:
+
+Partition layout
+================
+
+When building firmware on the Thingy:91 board, a static partition layout matching the factory layout is used.
+This ensures that programming firmware through USB works.
+In this case, the MCUboot bootloader will not be updated.
+So, to maintain compatibility, it is important that the image partitions do not get moved.
+When programming the Thingy:91 through an external debug probe, all partitions, including MCUboot, are programmed.
+This enables the possibility of using an updated bootloader or defining an application-specific partition layout.
+
+Configure the partition layout using one of the following configuration options:
+
+* :kconfig:option:`CONFIG_THINGY91_STATIC_PARTITIONS_FACTORY` - This option is the default Thingy:91 partition layout used in the factory firmware.
+  This ensures firmware updates are compatible with Thingy:91 when programming firmware through USB.
+* :kconfig:option:`CONFIG_THINGY91_STATIC_PARTITIONS_SECURE_BOOT` - This option is similar to the factory partition layout, but also has space for the immutable bootloader and two MCUboot slots.
+  A debugger is needed to program Thingy:91 for the first time.
+  This is an :ref:`experimental <software_maturity>` feature.
+* :kconfig:option:`CONFIG_THINGY91_STATIC_PARTITIONS_LWM2M_CARRIER` - This option uses a partition layout, including a storage partition needed for the :ref:`liblwm2m_carrier_readme` library.
+* :kconfig:option:`CONFIG_THINGY91_NO_PREDEFINED_LAYOUT` - Enabling this option disables Thingy:91 pre-defined static partitions.
+  This allows the application to use a dynamic layout or define a custom static partition layout for the application.
+  A debugger is needed to program Thingy:91 for the first time.
+  This is an :ref:`experimental <software_maturity>` feature.

@@ -8,7 +8,9 @@
 #include <zephyr/settings/settings.h>
 
 #include "fp_storage_ak.h"
+#include "fp_storage.h"
 #include "fp_storage_ak_priv.h"
+#include "fp_storage_manager_priv.h"
 
 #include "storage_mock.h"
 #include "common_utils.h"
@@ -35,7 +37,8 @@ static void store_key(uint8_t key_id)
 	zassert_true(('0' + account_key_id_to_idx(key_id)) <= '9', "Key index out of range");
 	settings_key[ARRAY_SIZE(settings_key) - 2] = ('0' + account_key_id_to_idx(key_id));
 
-	data.account_key_id = key_id;
+	data.account_key_metadata = 0;
+	ACCOUNT_KEY_METADATA_FIELD_SET(data.account_key_metadata, ID, key_id);
 	cu_generate_account_key(key_id, &data.account_key);
 
 	err = settings_save_one(settings_key, &data, sizeof(data));
@@ -45,8 +48,9 @@ static void store_key(uint8_t key_id)
 static void self_test_after(void)
 {
 	fp_storage_ak_ram_clear();
+	fp_storage_manager_ram_clear();
 	storage_mock_clear();
-	cu_account_keys_validate_unloaded();
+	cu_account_keys_validate_uninitialized();
 }
 
 static void self_test(void)
@@ -68,6 +72,9 @@ static void self_test(void)
 
 	err = settings_load();
 	zassert_ok(err, "Unexpected error in settings load");
+
+	err = fp_storage_init();
+	zassert_ok(err, "Unexpected error in modules init");
 
 	cu_account_keys_validate_loaded(ACCOUNT_KEY_MIN_ID, key_cnt);
 }
@@ -94,6 +101,9 @@ static void self_test_rollover(void)
 	err = settings_load();
 	zassert_ok(err, "Unexpected error in settings load");
 
+	err = fp_storage_init();
+	zassert_ok(err, "Unexpected error in modules init");
+
 	cu_account_keys_validate_loaded(ACCOUNT_KEY_MIN_ID, key_cnt);
 }
 
@@ -116,7 +126,7 @@ static void before_fn(void *f)
 	 */
 	ARG_UNUSED(f);
 
-	cu_account_keys_validate_unloaded();
+	cu_account_keys_validate_uninitialized();
 }
 
 static void after_fn(void *f)
@@ -124,15 +134,20 @@ static void after_fn(void *f)
 	ARG_UNUSED(f);
 
 	fp_storage_ak_ram_clear();
+	fp_storage_manager_ram_clear();
 	storage_mock_clear();
 }
 
-static void settings_load_error_validate(void)
+static void initialization_error_validate(void)
 {
-	int err = settings_load();
+	int err;
 
-	zassert_not_equal(err, 0, "Expected error in settings load");
-	cu_account_keys_validate_unloaded();
+	err = settings_load();
+	zassert_ok(err, "Unexpected error in settings load");
+
+	err = fp_storage_init();
+	zassert_not_equal(err, 0, "Expected error during initialization");
+	cu_account_keys_validate_uninitialized();
 }
 
 ZTEST(suite_fast_pair_storage_corrupted, test_wrong_settings_key)
@@ -142,14 +157,15 @@ ZTEST(suite_fast_pair_storage_corrupted, test_wrong_settings_key)
 	int err;
 	struct account_key_data data;
 
-	data.account_key_id = key_id;
+	data.account_key_metadata = 0;
+	ACCOUNT_KEY_METADATA_FIELD_SET(data.account_key_metadata, ID, key_id);
 	cu_generate_account_key(key_id, &data.account_key);
 
 	err = settings_save_one(SETTINGS_AK_SUBTREE_NAME SETTINGS_NAME_SEPARATOR_STR
 				"not_account_key", &data, sizeof(data));
 	zassert_ok(err, "Unexpected error in settings save");
 
-	settings_load_error_validate();
+	initialization_error_validate();
 }
 
 ZTEST(suite_fast_pair_storage_corrupted, test_wrong_data_len)
@@ -163,13 +179,14 @@ ZTEST(suite_fast_pair_storage_corrupted, test_wrong_data_len)
 	zassert_true(('0' + account_key_id_to_idx(key_id)) <= '9', "Key index out of range");
 	settings_key[ARRAY_SIZE(settings_key) - 2] = ('0' + account_key_id_to_idx(key_id));
 
-	data.account_key_id = key_id;
+	data.account_key_metadata = 0;
+	ACCOUNT_KEY_METADATA_FIELD_SET(data.account_key_metadata, ID, key_id);
 	cu_generate_account_key(key_id, &data.account_key);
 
 	err = settings_save_one(settings_key, &data, sizeof(data) - 1);
 	zassert_ok(err, "Unexpected error in settings save");
 
-	settings_load_error_validate();
+	initialization_error_validate();
 }
 
 ZTEST(suite_fast_pair_storage_corrupted, test_inconsistent_key_id)
@@ -183,20 +200,21 @@ ZTEST(suite_fast_pair_storage_corrupted, test_inconsistent_key_id)
 	zassert_true(('0' + account_key_id_to_idx(key_id)) <= '9', "Key index out of range");
 	settings_key[ARRAY_SIZE(settings_key) - 2] = ('0' + account_key_id_to_idx(key_id));
 
-	data.account_key_id = next_account_key_id(key_id);
+	data.account_key_metadata = 0;
+	ACCOUNT_KEY_METADATA_FIELD_SET(data.account_key_metadata, ID, next_account_key_id(key_id));
 	cu_generate_account_key(key_id, &data.account_key);
 
 	err = settings_save_one(settings_key, &data, sizeof(data));
 	zassert_ok(err, "Unexpected error in settings save");
 
-	settings_load_error_validate();
+	initialization_error_validate();
 }
 
 ZTEST(suite_fast_pair_storage_corrupted, test_drop_first_key)
 {
 	store_key(next_account_key_id(ACCOUNT_KEY_MIN_ID));
 
-	settings_load_error_validate();
+	initialization_error_validate();
 }
 
 ZTEST(suite_fast_pair_storage_corrupted, test_drop_key)
@@ -212,7 +230,7 @@ ZTEST(suite_fast_pair_storage_corrupted, test_drop_key)
 	key_id = next_account_key_id(key_id);
 	store_key(key_id);
 
-	settings_load_error_validate();
+	initialization_error_validate();
 }
 
 ZTEST(suite_fast_pair_storage_corrupted, test_drop_keys)
@@ -229,7 +247,7 @@ ZTEST(suite_fast_pair_storage_corrupted, test_drop_keys)
 		      "Test should write key exactly after rollover");
 	store_key(key_id);
 
-	settings_load_error_validate();
+	initialization_error_validate();
 }
 
 ZTEST_SUITE(suite_fast_pair_storage_corrupted, NULL, setup_fn, before_fn, after_fn, NULL);

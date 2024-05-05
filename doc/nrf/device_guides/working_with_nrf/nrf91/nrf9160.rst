@@ -20,13 +20,14 @@ Board controller
 
 The nRF9160 DK contains an nRF52840 SoC that is used to route some of the nRF9160 SiP pins to different components on the DK, such as LEDs and buttons, and to specific pins of the nRF52840 SoC itself.
 For a complete list of all the routing options available, see the `nRF9160 DK board control section in the nRF9160 DK User Guide`_.
+Make sure to select the correct controller before you program the application to your development kit.
 
 The nRF52840 SoC on the DK comes preprogrammed with a firmware.
 If you need to restore the original firmware at some point, download the nRF9160 DK board controller firmware from the `nRF9160 DK downloads`_ page.
 To program the HEX file, use nrfjprog (which is part of the `nRF Command Line Tools`_).
 
 If you want to route some pins differently from what is done in the preprogrammed firmware, program the :ref:`zephyr:hello_world` sample instead of the preprogrammed firmware.
-Build the sample (located under ``ncs/zephyr/samples/hello_world``) for the nrf9160dk_nrf52840 board.
+Build the sample (located under ``ncs/zephyr/samples/hello_world``) for the nrf9160dk/nrf52840 board.
 To change the routing options, enable or disable the corresponding devicetree nodes for that board as needed.
 See :ref:`zephyr:nrf9160dk_board_controller_firmware` for detailed information.
 
@@ -35,31 +36,50 @@ See :ref:`zephyr:nrf9160dk_board_controller_firmware` for detailed information.
 Updating the nRF Cloud certificate
 **********************************
 
+.. |DK| replace:: nRF9160 DK
+
+.. dk_update_cloud_cer_start
+
 When you wish to use nRF Cloud's REST Application Programming Interface (API), the DK requires a valid security certificate.
 This means that you need to update the certificate stored on the DK.
 To do so, you need to download a new certificate and then provision it to your DK.
 
-.. _downloading_cloud_certificate:
+.. dk_update_cloud_cer_end
 
-Downloading the nRF Cloud certificate
-=====================================
+.. _downloading_cloud_certificate_nRF9160:
 
-Complete the following steps to download the nRF Cloud certificate for your nRF9160 DK:
+Downloading the nRF Cloud certificate for the |DK|
+==================================================
 
-1. Go to `nRF Cloud`_ and sign in.
-#. Click :guilabel:`Device Management` in the left pane and select :guilabel:`Provision Devices`.
+.. dk_cloud_cer_download_start
 
-   .. figure:: images/nrfcloud_provisiondevices.png
-      :alt: nRF Cloud - Provision Devices
+To download the nRF Cloud certificate for your |DK|, complete the following steps.
+Make sure you are logged in to the `nRF Cloud`_ portal.
 
-      nRF Cloud - Provision Devices
+1. Click :guilabel:`Devices` under :guilabel:`Device Management` in the navigation pane on the left.
 
-#. In the  page that opens up, click the gear icon near the upper right corner and select :guilabel:`Create JITP Certificates`.
+   .. figure:: /gsg_guides/images/nrfcloud_devices.png
+      :alt: nRF Cloud - Devices
 
-   .. figure:: images/nrfcloud_provisiondevices_gearicon.png
-      :alt: nRF Cloud - Gear icon in Provision Devices
+      nRF Cloud - Devices
 
-      nRF Cloud - Gear icon in Provision Devices
+#. Click :guilabel:`Add Devices`.
+
+   .. figure:: /gsg_guides/images/nrfcloud_add_devices.png
+      :alt: nRF Cloud - Add Devices
+
+      nRF Cloud - Add Devices
+
+   The **Select Device Type** pop-up opens.
+
+#. Click :guilabel:`LTE Device` in the **Select Device Type** pop-up.
+
+   .. figure:: /gsg_guides/images/nrfcloud_selectdevicetype.png
+      :alt: nRF Cloud - Select Device Type
+
+      nRF Cloud - Select Device Type
+
+#. Click **Create JITP Certificates** at the bottom of the page.
 
    The **Create JITP Certificates** dialog box opens.
 
@@ -70,9 +90,9 @@ Complete the following steps to download the nRF Cloud certificate for your nRF9
 
 #. Enter the following information:
 
-   * **Device ID:** the device ID is composed of *nrf-* and the 15-digit :term:`International Mobile (Station) Equipment Identity (IMEI)` number that is printed on the label of your nRF9160 DK.
+   * **Device ID:** the device ID is composed of *nrf-* and the 15-digit :term:`International Mobile (Station) Equipment Identity (IMEI)` number that is printed on the label of your |DK|.
      For example, *nrf-123456789012345*.
-   * **Ownership code:** the ownership code is the PIN or the hardware ID of your DK, and it is found on the label of your nRF9160 DK.
+   * **Ownership code:** the ownership code is the PIN or the hardware ID of your DK, and it is found on the label of your |DK|.
 
      If the label contains a PIN in addition to the IMEI number, enter this pin.
      If it does not contain a PIN, enter the Hardware ID (HWID) HEX code, with or without colons.
@@ -80,15 +100,19 @@ Complete the following steps to download the nRF Cloud certificate for your nRF9
 
      .. note::
 
-        The ownership code serves as a password and proves that you own the specific nRF9160 DK.
+        The ownership code serves as a password and proves that you own the specific |DK|.
         Therefore, do not share it with anyone.
 
 #. Click :guilabel:`Download Certificate` and save the :file:`.cert.json` file to a folder of your choice.
 
    .. note::
 
-      The certificate contains all the information that is needed to connect your nRF9160 DK to nRF Cloud.
+      The certificate contains all the information that is needed to connect your |DK| to nRF Cloud.
       Therefore, do not share it with anyone.
+
+#. Close the **Create JITP Certificates** dialog box.
+
+.. dk_cloud_cer_download_end
 
 .. _provisioning_cloud_certificate:
 
@@ -100,12 +124,12 @@ After downloading the certificate, you must provision it to your nRF9160 DK.
 .. note::
 
    The application firmware on the nRF9160 DK must support long AT commands up to 3 kB to provision the certificate.
-   If you have updated the application firmware using the instructions in either the :ref:`Getting started <nrf9160_gs_updating_fw>` documentation or the :ref:`build_pgm_nrf9160` section, this requirement is fulfilled.
+   If you have updated the application firmware using the instructions in either the :ref:`nrf9160_gs_updating_fw` documentation or the :ref:`nrf9160_ug_updating_fw_programmer` or :ref:`build_pgm_nrf9160` sections, this requirement is fulfilled.
 
 Complete the following steps to provision the certificate:
 
-1. Open the `Cellular Monitor`_ app from nRF Connect for Desktop.
-#. Make sure that the DK is programmed as mentioned in the :ref:`nrf9160_gs_updating_fw` section.
+1. Start nRF Connect for Desktop and install the `Cellular Monitor`_ app.
+#. Open the Cellular Monitor app.
 #. Connect the DK to the computer with a micro-USB cable, and turn it on.
 #. Click :guilabel:`Select device` and select the DK from the drop-down list.
 
@@ -166,8 +190,8 @@ Make sure to select a suitable build target when building your application.
 
 In Zephyr, the firmware for the application core of :ref:`zephyr:nrf9160dk_nrf9160` is divided into two different build targets:
 
-* ``nrf9160dk_nrf9160`` for build targets that have Cortex-M Security Extensions (CMSE) disabled.
-* ``nrf9160dk_nrf9160_ns`` for build targets that have CMSE enabled and have the Secure Processing Environment (SPE) firmware alongside the Non-Secure Processing Environment (NSPE) firmware.
+* ``nrf9160dk/nrf9160`` for build targets that have Cortex-M Security Extensions (CMSE) disabled.
+* ``nrf9160dk/nrf9160/ns`` for build targets that have CMSE enabled and have the Secure Processing Environment (SPE) firmware alongside the Non-Secure Processing Environment (NSPE) firmware.
 
 For information about CMSE and the difference between the two environments, see :ref:`app_boards_spe_nspe`.
 
@@ -176,7 +200,13 @@ For information about CMSE and the difference between the two environments, see 
 Updating the DK firmware using Programmer
 *****************************************
 
+.. |sim_card| replace:: For the iBasis SIM card provided with the nRF9160 DK, see `iBasis IoT network coverage`_.
+
+.. |firmware_filename| replace:: :file:`mfw_nrf9160_`
+
 Download and extract the latest application and modem firmware from the `nRF9160 DK Downloads`_ page.
+
+.. dk_update_firware_start
 
 The downloaded ZIP archive contains the following firmware:
 
@@ -188,7 +218,7 @@ Application firmware
   The data is transmitted using either LTE-M or NB-IoT.
   Asset Tracker v2 first attempts to use LTE-M, then NB-IoT.
   Check with your SIM card provider for the mode they support at your location.
-  For the iBasis SIM card provided with the nRF9160 DK, see `iBasis IoT network coverage`_.
+  |sim_card|
 
 Application firmware for Device Firmware Update (DFU)
   The images in the :file:`img_fota_dfu_bin` and :file:`img_fota_dfu_hex` folders contain firmware images for DFU.
@@ -196,16 +226,18 @@ Application firmware for Device Firmware Update (DFU)
 
 Modem firmware
   The modem firmware is in a ZIP archive instead of a folder.
-  The archive is named :file:`mfw_nrf9160_` followed by the firmware version number.
+  The archive is named |firmware_filename| followed by the firmware version number.
   Do not unzip this file.
 
 .. tip::
    For a more compact nRF Cloud firmware application, you can build and install the :ref:`nrf_cloud_multi_service` sample.
-   See :ref:`gs_programming` for details on building a firmware sample application.
+   See :ref:`building` for details on building a firmware sample application.
 
 The :file:`CONTENTS.txt` file in the extracted folder contains the location and names of the different firmware images.
 
 Complete the following steps to program applications using the Programmer app from `nRF Connect for Desktop`_.
+
+.. dk_update_firware_end
 
 .. _nrf9160_updating_fw_modem:
 .. _nrf9160_gs_updating_fw_modem:
@@ -231,7 +263,7 @@ If you experience any problems during the process, press ``Ctrl+R`` (``command+R
 
    The drop-down text changes to the type of the selected device, with its SEGGER ID below the name.
    The **Device memory layout** section also changes its name to the device name, and indicates that the device is connected.
-   If the :guilabel:`Auto read memory` option is selected in the **DEVICE** section of the side panel, the memory layout will update.
+   If the :guilabel:`Auto read memory` option is selected in the **JLINK SETTINGS** section of the side panel, the memory layout will update.
    If it is not selected and you wish to see the memory layout, click :guilabel:`Read` in the **DEVICE** section of the side panel.
 
 #. Click :guilabel:`Add file` in the **FILE** section, and select :guilabel:`Browse`.
@@ -293,7 +325,7 @@ If you experience any problems during the process, press ``Ctrl+R`` (``command+R
 
    The drop-down text changes to the type of the selected device, with its SEGGER ID below the name.
    The **Device memory layout** section also changes its name to the device name, and indicates that the device is connected.
-   If the :guilabel:`Auto read memory` option is selected in the **DEVICE** section, the memory layout will update.
+   If the :guilabel:`Auto read memory` option is selected in the **JLINK SETTINGS** section, the memory layout will update.
    If it is not selected and you wish to see the memory layout, click :guilabel:`Read` in the **DEVICE** section.
 
 #. Click :guilabel:`Add file` in the **FILE** section, and select :guilabel:`Browse`.
@@ -327,7 +359,7 @@ Building and programming
 You can program applications and samples on the nRF9160 DK after obtaining the corresponding firmware images.
 
 .. note::
-   When you update the application firmware on an nRF9160 DK, make sure the modem firmware and application firmware are compatible versions.
+   When you update the application firmware on an nRF9160 DK, make sure that the modem firmware and application firmware are compatible versions.
 
 To program applications using the Programmer app from `nRF Connect for Desktop`_, follow the instructions in :ref:`nrf9160_updating_fw_application`.
 
@@ -340,7 +372,7 @@ Complete the following steps to build and program using the |nRFVSC|:
 
 .. |sample_path_vsc| replace:: :file:`ncs/nrf/applications/asset_tracker_v2`
 
-.. |vsc_sample_board_target_line| replace:: you must use the build target ``nrf9160dk_nrf9160_ns`` when building the application code for the nRF9160 DK
+.. |vsc_sample_board_target_line| replace:: you must use the build target ``nrf9160dk/nrf9160/ns`` when building the application code for the nRF9160 DK
 
 .. include:: ../../../includes/vsc_build_and_run.txt
 
@@ -370,7 +402,7 @@ Building and programming on the command line
 
 .. |cmd_folder_path| replace:: on the nRF9160 DK
 
-.. |cmd_build_target| replace:: ``nrf9160dk_nrf9160_ns`` when building the application code for the nRF9160 DK
+.. |cmd_build_target| replace:: ``nrf9160dk/nrf9160/ns`` when building the application code for the nRF9160 DK
 
 
 .. include:: ../../../includes/cmd_build_and_run.txt
@@ -395,54 +427,27 @@ Building and programming on the command line
 
       The device resets and runs the programmed sample or application.
 
-.. _nrf91_modem_trace_uart_snippet:
-
-nRF91 modem tracing with UART backend using snippets
-====================================================
-
-:ref:`snippets` are tailored for tracing on the nRF91 Series devices but can work with other boards as well.
-It enables the :kconfig:option:`CONFIG_NRF_MODEM_LIB_TRACE` Kconfig option and chooses the Zephyr UART driver for the backend, with the necessary Kconfig options.
-The snippet also enables the UART1 peripheral with a baud rate of 1 Mbd and hardware flow control enabled.
-If this configuration does not match your requirements, you can add a snippet or Kconfig and devicetree overlays to your application with the desired setup.
-To enable modem tracing with the UART trace backend on a nRF91 device, add the ``nrf91-modem-trace-uart`` snippet to the build configuration.
-This can be done in one of the following ways:
-
-With west
----------
-
-To add the modem trace UART snippet when building an application with west, use the following command:
-
-.. code-block:: console
-
-   west build --board <your_board> -S nrf91-modem-trace-uart
-
-With CMake
-----------
-
-To add the modem trace UART snippet when building an application with CMake, add the following command to the CMake arguments:
-
-.. code-block:: console
-
-   -DSNIPPET="nrf91-modem-trace-uart" [...]
-
-To build with the |nRFVSC|, specify ``-DSNIPPET="nrf91-modem-trace-uart" [...]`` in the **Extra CMake arguments** field.
-
-See :ref:`cmake_options` for more details.
-
 .. _nrf9160_gs_testing_cellular:
 
 Testing the cellular connection with the AT Client sample
 *********************************************************
 
-The :ref:`at_client_sample` sample enables you to send AT commands to the modem of your nRF9160 DK to test and monitor the cellular connection.
+.. |firmware_update| replace:: :ref:`nrf9160_gs_updating_fw_application`
+
+.. |firmware_file| replace:: :file:`nrf9160dk_at_client_<version-number>.hex`
+
+.. at_client_test_start
+
+The :ref:`at_client_sample` sample enables you to send AT commands to the modem of your |DK| to test and monitor the cellular connection.
 You can use it to troubleshoot and debug any connection problems.
 
 Complete the following steps to test the cellular connection using the AT Client sample:
 
-1. Follow the steps in :ref:`nrf9160_gs_updating_fw_application` to program the sample to the DK.
-   When selecting the HEX file, select :file:`nrf9160dk_at_client_<version-number>.hex` instead of the one for Asset Tracker v2.
+1. Follow the steps in |firmware_update| to program the sample to the DK.
+   When selecting the HEX file, select |firmware_file| instead of the one for Asset Tracker v2.
 #. Test the AT Client sample as described in the Testing section of the :ref:`at_client_sample` documentation.
 
+.. at_client_test_end
 
 .. _nrf9160_board_revisions:
 
@@ -461,7 +466,7 @@ To build without these features, specify the board revision when building your a
 
 To specify the board revision, append it to the board argument when building.
 The board revision is printed on the label of your DK, just below the PCA number.
-For example, when building a non-secure application for nRF9160 DK v0.9.0, use ``nrf9160dk_nrf9106_ns@0.9.0`` as build target.
+For example, when building a non-secure application for nRF9160 DK v0.9.0, use ``nrf9160dk@0.9.0/nrf9160/ns`` as build target.
 
 See :ref:`zephyr:application_board_version` and :ref:`zephyr:nrf9160dk_additional_hardware` for more information.
 
@@ -503,7 +508,7 @@ Enable the following Kconfig options by setting it to ``y`` in your project conf
 * :kconfig:option:`CONFIG_SPI_NOR_SFDP_DEVICETREE`
 * :kconfig:option:`CONFIG_PM_OVERRIDE_EXTERNAL_DRIVER_CHECK`
 
-To automatically include the devicetree overlay with the external flash, specify the board revision parameter when :ref:`gs_programming`.
+To automatically include the devicetree overlay with the external flash, specify the board revision parameter when :ref:`building`.
 The board revision is printed on the label of your DK, just below the PCA number.
 
 Then add the following relevant devicetree blocks to the application`s devicetree overlay file, depending on your application`s needs:
@@ -536,7 +541,7 @@ If your application was built using the |NCS|, you must define partitions using 
 The built-in partition definitions can be found in the :file:`nrf/subsys/partition_manager` folder, and the file names start with ``pm.yml``.
 The files which have ``external_flash`` as their region will have support for storing partitions in the external flash.
 You can also find the configuration option required to place the partition in the external flash region in those files.
-For example, the :file:`pm.yml.pgps` file has an option (:kconfig:option:`CONFIG_PM_PARTITION_REGION_PGPS_EXTERNAL`) to place the PGPS partition in external flash:
+For example, the :file:`pm.yml.pgps` file has an option (:kconfig:option:`CONFIG_PM_PARTITION_REGION_PGPS_EXTERNAL`) to place the P-GPS partition in external flash:
 
 .. code-block:: c
 
@@ -548,8 +553,6 @@ For example, the :file:`pm.yml.pgps` file has an option (:kconfig:option:`CONFIG
      size: CONFIG_NRF_CLOUD_PGPS_PARTITION_SIZE
 
 It is also possible to change the size of the partition with :kconfig:option:`CONFIG_NRF_CLOUD_PGPS_PARTITION_SIZE`.
-
-.. _nrf9160_ug_drivs_libs_samples:
 
 Available drivers, libraries, and samples
 *****************************************

@@ -94,6 +94,7 @@ kconfig_check_and_set_base(MBEDTLS_MD_C)
 kconfig_check_and_set_base(MBEDTLS_PK_C)
 kconfig_check_and_set_base(MBEDTLS_PKCS5_C)
 kconfig_check_and_set_base(MBEDTLS_PK_PARSE_C)
+kconfig_check_and_set_base(MBEDTLS_PK_PARSE_EC_EXTENDED)
 kconfig_check_and_set_base(MBEDTLS_PK_WRITE_C)
 kconfig_check_and_set_base(MBEDTLS_DEBUG_C)
 kconfig_check_and_set_base(MBEDTLS_MEMORY_DEBUG)
@@ -168,6 +169,7 @@ kconfig_check_and_set_base(MBEDTLS_KEY_EXCHANGE_ECDHE_ECDSA_ENABLED)
 kconfig_check_and_set_base(MBEDTLS_KEY_EXCHANGE_ECDH_ECDSA_ENABLED)
 kconfig_check_and_set_base(MBEDTLS_KEY_EXCHANGE_ECDH_RSA_ENABLED)
 kconfig_check_and_set_base(MBEDTLS_KEY_EXCHANGE_ECJPAKE_ENABLED)
+kconfig_check_and_set_base(MBEDTLS_PK_PARSE_EC_EXTENDED)
 
 #
 # CC3XX flags for threading and platform zeroize
@@ -205,7 +207,7 @@ kconfig_check_and_set_base_depends(MBEDTLS_SHA512_C
 )
 
 kconfig_check_and_set_base_depends(MBEDTLS_ECP_C
-  PSA_HAS_ECC_SUPPORT
+  PSA_WANT_ALG_ECDH
 )
 
 kconfig_check_and_set_base_depends(MBEDTLS_ECDH_C
@@ -216,13 +218,13 @@ Kconfig_check_and_set_base_depends(MBEDTLS_ECDSA_C
   PSA_WANT_ALG_ECDSA
 )
 
-kconfig_check_and_set_base_depends(MBEDTLS_ECDSA_DETERMINISTIC
-  PSA_WANT_ALG_DETERMINISTIC_ECDSA
-  PSA_WANT_HMAC_DRBG_C
+kconfig_check_and_set_base_depends(MBEDTLS_ECP_C
+  PSA_WANT_ALG_ECDSA
 )
 
-kconfig_check_and_set_base_depends(MBEDTLS_HMAC_DRBG_C
-  PSA_WANT_HMAC_DRBG_C
+kconfig_check_and_set_base_depends(MBEDTLS_ECDSA_DETERMINISTIC
+  PSA_WANT_ALG_DETERMINISTIC_ECDSA
+  PSA_WANT_ALG_HMAC_DRBG
 )
 
 Kconfig_check_and_set_base_depends(MBEDTLS_ECP_DP_SECP192R1_ENABLED
@@ -289,8 +291,9 @@ if(CONFIG_GENERATE_MBEDTLS_CFG_FILE)
     ${generated_include_path}/${CONFIG_MBEDTLS_CFG_FILE}
   )
 
-  # Copy an empty user-config to help with legacy build
+  # Copy an empty PSA user-config, as it is not needed for legacy builds
+  # Generate an empty file to prevent build issues
   configure_file(${NRF_SECURITY_ROOT}/configs/nrf-config-user-empty.h
-    ${generated_include_path}/${CONFIG_MBEDTLS_USER_CONFIG_FILE}
+    ${generated_include_path}/${CONFIG_MBEDTLS_PSA_CRYPTO_USER_CONFIG_FILE}
   )
 endif()

@@ -14,7 +14,9 @@
 #include "slm_at_host.h"
 #include "slm_at_httpc.h"
 #include "slm_util.h"
+#if defined(CONFIG_SLM_NATIVE_TLS)
 #include "slm_native_tls.h"
+#endif
 
 LOG_MODULE_REGISTER(slm_httpc, CONFIG_SLM_LOG_LEVEL);
 
@@ -48,6 +50,8 @@ static struct slm_httpc_ctx {
 	int fd;				/* HTTPC socket */
 	int family;			/* Socket address family */
 	uint32_t sec_tag;		/* security tag to be used */
+	int peer_verify;		/* Peer verification level for TLS connection. */
+	bool hostname_verify;		/* Verify hostname against the certificate. */
 	char host[SLM_MAX_URL];		/* HTTP server address */
 	uint16_t port;			/* HTTP server port */
 	char *method_str;		/* request method */
@@ -220,16 +224,7 @@ static int do_http_connect(void)
 	if (httpc.sec_tag == INVALID_SEC_TAG) {
 		ret = socket(httpc.family, SOCK_STREAM, IPPROTO_TCP);
 	} else {
-#if defined(CONFIG_SLM_NATIVE_TLS)
-		ret = slm_tls_loadcrdl(httpc.sec_tag);
-		if (ret < 0) {
-			LOG_ERR("Fail to load credential: %d", ret);
-			return -EAGAIN;
-		}
-		ret = socket(httpc.family, SOCK_STREAM | SOCK_NATIVE_TLS, IPPROTO_TLS_1_2);
-#else
 		ret = socket(httpc.family, SOCK_STREAM, IPPROTO_TLS_1_2);
-#endif
 	}
 	if (ret < 0) {
 		LOG_ERR("socket() failed: %d", -errno);
@@ -238,22 +233,23 @@ static int do_http_connect(void)
 	httpc.fd = ret;
 
 	/* Set socket options */
-	LOG_DBG("Configuring socket timeout (%lld s)", timeo.tv_sec);
-	ret = setsockopt(httpc.fd, SOL_SOCKET, SO_SNDTIMEO, &timeo, sizeof(timeo));
-	if (ret) {
-		LOG_ERR("setsockopt(SO_SNDTIMEO) error: %d", -errno);
-		ret = -errno;
-		goto exit_cli;
-	}
-	ret = setsockopt(httpc.fd, SOL_SOCKET, SO_RCVTIMEO, &timeo, sizeof(timeo));
-	if (ret) {
-		LOG_ERR("setsockopt(SO_SNDTIMEO) error: %d", -errno);
-		ret = -errno;
-		goto exit_cli;
-	}
 	if (httpc.sec_tag != INVALID_SEC_TAG) {
+#if defined(CONFIG_SLM_NATIVE_TLS)
+		ret = slm_native_tls_load_credentials(httpc.sec_tag);
+		if (ret < 0) {
+			LOG_ERR("Failed to load sec tag: %d (%d)", httpc.sec_tag, ret);
+			goto exit_cli;
+		}
+		int tls_native = 1;
+
+		/* Must be the first socket option to set. */
+		ret = setsockopt(httpc.fd, SOL_TLS, TLS_NATIVE, &tls_native, sizeof(tls_native));
+		if (ret) {
+			ret = errno;
+			goto exit_cli;
+		}
+#endif
 		sec_tag_t sec_tag_list[] = { httpc.sec_tag };
-		int peer_verify = TLS_PEER_VERIFY_REQUIRED;
 
 		ret = setsockopt(httpc.fd, SOL_TLS, TLS_SEC_TAG_LIST, sec_tag_list,
 				 sizeof(sec_tag_t));
@@ -262,15 +258,19 @@ static int do_http_connect(void)
 			ret = -errno;
 			goto exit_cli;
 		}
-		ret = setsockopt(httpc.fd, SOL_TLS, TLS_PEER_VERIFY, &peer_verify,
-				 sizeof(peer_verify));
+		ret = setsockopt(httpc.fd, SOL_TLS, TLS_PEER_VERIFY, &httpc.peer_verify,
+				 sizeof(httpc.peer_verify));
 		if (ret) {
 			LOG_ERR("setsockopt(TLS_PEER_VERIFY) error: %d", -errno);
 			ret = -errno;
 			goto exit_cli;
 		}
-		ret = setsockopt(httpc.fd, SOL_TLS, TLS_HOSTNAME, httpc.host,
-				 strlen(httpc.host));
+		if (httpc.hostname_verify) {
+			ret = setsockopt(httpc.fd, SOL_TLS, TLS_HOSTNAME, httpc.host,
+					 strlen(httpc.host));
+		} else {
+			ret = setsockopt(httpc.fd, SOL_TLS, TLS_HOSTNAME, NULL, 0);
+		}
 		if (ret) {
 			LOG_ERR("setsockopt(TLS_HOSTNAME) error: %d", -errno);
 			ret = -errno;
@@ -289,9 +289,22 @@ static int do_http_connect(void)
 #endif
 	}
 
+	LOG_DBG("Configuring socket timeout (%lld s)", timeo.tv_sec);
+	ret = setsockopt(httpc.fd, SOL_SOCKET, SO_SNDTIMEO, &timeo, sizeof(timeo));
+	if (ret) {
+		LOG_ERR("setsockopt(SO_SNDTIMEO) error: %d", -errno);
+		ret = -errno;
+		goto exit_cli;
+	}
+	ret = setsockopt(httpc.fd, SOL_SOCKET, SO_RCVTIMEO, &timeo, sizeof(timeo));
+	if (ret) {
+		LOG_ERR("setsockopt(SO_SNDTIMEO) error: %d", -errno);
+		ret = -errno;
+		goto exit_cli;
+	}
+
 	/* Connect to HTTP server */
-	ret = util_resolve_host(0, httpc.host, httpc.port, httpc.family,
-		Z_LOG_OBJECT_PTR(slm_httpc), &sa);
+	ret = util_resolve_host(0, httpc.host, httpc.port, httpc.family, &sa);
 	if (ret) {
 		goto exit_cli;
 	}
@@ -311,12 +324,6 @@ static int do_http_connect(void)
 	return 0;
 
 exit_cli:
-#if defined(CONFIG_SLM_NATIVE_TLS)
-	if (httpc.sec_tag != INVALID_SEC_TAG) {
-		(void)slm_tls_unloadcrdl(httpc.sec_tag);
-		httpc.sec_tag = INVALID_SEC_TAG;
-	}
-#endif
 	close(httpc.fd);
 	httpc.fd = INVALID_SOCKET;
 	rsp_send("\r\n#XHTTPCCON: 0\r\n");
@@ -327,21 +334,19 @@ exit_cli:
 static int do_http_disconnect(void)
 {
 	/* Close socket if it is connected. */
-	if (httpc.fd != INVALID_SOCKET) {
-#if defined(CONFIG_SLM_NATIVE_TLS)
-		if (httpc.sec_tag != INVALID_SEC_TAG) {
-			(void)slm_tls_unloadcrdl(httpc.sec_tag);
-			httpc.sec_tag = INVALID_SEC_TAG;
-		}
-#endif
-		close(httpc.fd);
-		httpc.fd = INVALID_SOCKET;
-	} else {
-		return -ENOTCONN;
+	if (httpc.fd == INVALID_SOCKET) {
+		return 0;
 	}
-	rsp_send("\r\n#XHTTPCCON: 0\r\n");
+	int ret = close(httpc.fd);
 
-	return 0;
+	if (ret) {
+		LOG_WRN("close() failed: %d", -errno);
+		ret = -errno;
+	}
+	httpc.fd = INVALID_SOCKET;
+	rsp_send("\r\n#XHTTPCCON: %d\r\n", ret);
+
+	return ret;
 }
 
 static int http_method_str_enum(uint8_t *method_str)
@@ -412,8 +417,9 @@ static int do_http_request(void)
 	return err;
 }
 
-/* Handles AT#XHTTPCCON commands. */
-int handle_at_httpc_connect(enum at_cmd_type cmd_type)
+SLM_AT_CMD_CUSTOM(xhttpccon, "AT#XHTTPCCON", handle_at_httpc_connect);
+static int handle_at_httpc_connect(enum at_cmd_type cmd_type,
+				   const struct at_param_list *param_list, uint32_t param_count)
 {
 	int err = -EINVAL;
 	uint16_t op;
@@ -421,26 +427,43 @@ int handle_at_httpc_connect(enum at_cmd_type cmd_type)
 
 	switch (cmd_type) {
 	case AT_CMD_TYPE_SET_COMMAND:
-		err = at_params_unsigned_short_get(&slm_at_param_list, 1, &op);
+		err = at_params_unsigned_short_get(param_list, 1, &op);
 		if (err) {
 			return err;
 		}
 		if (op == HTTPC_CONNECT || op == HTTPC_CONNECT6) {
-			err = util_string_get(&slm_at_param_list, 2, httpc.host, &host_sz);
+			err = util_string_get(param_list, 2, httpc.host, &host_sz);
 			if (err) {
 				return err;
 			}
-			err = at_params_unsigned_short_get(&slm_at_param_list, 3, &httpc.port);
-			if (err) {
-				return err;
+			if (at_params_unsigned_short_get(param_list, 3, &httpc.port)) {
+				return -EINVAL;
 			}
+
 			httpc.sec_tag = INVALID_SEC_TAG;
-			if (at_params_valid_count_get(&slm_at_param_list) > 4) {
-				err = at_params_unsigned_int_get(&slm_at_param_list, 4,
-							&httpc.sec_tag);
-				if (err) {
-					return err;
+			if (param_count > 4) {
+				if (at_params_unsigned_int_get(param_list, 4, &httpc.sec_tag)) {
+					return -EINVAL;
 				}
+			}
+			httpc.peer_verify = TLS_PEER_VERIFY_REQUIRED;
+			if (param_count > 5) {
+				if (at_params_unsigned_int_get(param_list, 5, &httpc.peer_verify) ||
+				    (httpc.peer_verify != TLS_PEER_VERIFY_NONE &&
+				     httpc.peer_verify != TLS_PEER_VERIFY_OPTIONAL &&
+				     httpc.peer_verify != TLS_PEER_VERIFY_REQUIRED)) {
+					return -EINVAL;
+				}
+			}
+			httpc.hostname_verify = true;
+			if (param_count > 6) {
+				uint16_t hostname_verify;
+
+				if (at_params_unsigned_short_get(param_list, 6, &hostname_verify) ||
+				    (hostname_verify != 0 && hostname_verify != 1)) {
+					return -EINVAL;
+				}
+				httpc.hostname_verify = (bool)hostname_verify;
 			}
 			httpc.family = (op == HTTPC_CONNECT) ? AF_INET : AF_INET6;
 			err = do_http_connect();
@@ -449,7 +472,8 @@ int handle_at_httpc_connect(enum at_cmd_type cmd_type)
 			err = do_http_disconnect();
 		} else {
 			err = -EINVAL;
-		} break;
+		}
+		break;
 
 	case AT_CMD_TYPE_READ_COMMAND:
 		if (httpc.sec_tag != INVALID_SEC_TAG) {
@@ -465,8 +489,9 @@ int handle_at_httpc_connect(enum at_cmd_type cmd_type)
 		break;
 
 	case AT_CMD_TYPE_TEST_COMMAND:
-		rsp_send("\r\n#XHTTPCCON: (%d,%d,%d),<host>,<port>,<sec_tag>\r\n",
-			HTTPC_DISCONNECT, HTTPC_CONNECT, HTTPC_CONNECT6);
+		rsp_send("\r\n#XHTTPCCON: (%d,%d,%d),<host>,<port>,"
+			 "<sec_tag>,<peer_verify>,<hostname_verify>\r\n",
+			 HTTPC_DISCONNECT, HTTPC_CONNECT, HTTPC_CONNECT6);
 		err = 0;
 		break;
 
@@ -541,11 +566,11 @@ static int http_headers_preprocess(size_t size)
 	return 0;
 }
 
-/* Handles AT#XHTTPCREQ commands. */
-int handle_at_httpc_request(enum at_cmd_type cmd_type)
+SLM_AT_CMD_CUSTOM(xhttpcreq, "AT#XHTTPCREQ", handle_at_httpc_request);
+static int handle_at_httpc_request(enum at_cmd_type cmd_type,
+				   const struct at_param_list *param_list, uint32_t param_count)
 {
 	int err = -EINVAL;
-	int param_count;
 	int size;
 	size_t offset;
 
@@ -559,7 +584,7 @@ int handle_at_httpc_request(enum at_cmd_type cmd_type)
 		memset(slm_data_buf, 0, sizeof(slm_data_buf));
 		/* Get method string */
 		size = HTTPC_METHOD_LEN;
-		err = util_string_get(&slm_at_param_list, 1, slm_data_buf, &size);
+		err = util_string_get(param_list, 1, slm_data_buf, &size);
 		if (err < 0) {
 			LOG_ERR("Fail to get method string: %d", err);
 			return err;
@@ -568,19 +593,18 @@ int handle_at_httpc_request(enum at_cmd_type cmd_type)
 		offset = size + 1;
 		/* Get resource path string */
 		size = HTTPC_RES_LEN;
-		err = util_string_get(&slm_at_param_list, 2, slm_data_buf + offset, &size);
+		err = util_string_get(param_list, 2, slm_data_buf + offset, &size);
 		if (err < 0) {
 			LOG_ERR("Fail to get resource string: %d", err);
 			return err;
 		}
 		httpc.resource = (char *)(slm_data_buf + offset);
-		param_count = at_params_valid_count_get(&slm_at_param_list);
 		httpc.headers = NULL;
 		if (param_count >= 4) {
 			/* Get headers string */
 			offset += size + 1;
 			size = HTTPC_HEADERS_LEN;
-			err = util_string_get(&slm_at_param_list, 3, slm_data_buf + offset, &size);
+			err = util_string_get(param_list, 3, slm_data_buf + offset, &size);
 			if (err == 0 && size > 0) {
 				httpc.headers = (char *)(slm_data_buf + offset);
 				err = http_headers_preprocess(size);
@@ -596,13 +620,12 @@ int handle_at_httpc_request(enum at_cmd_type cmd_type)
 			/* Get content type string */
 			offset += size + 1;
 			size = HTTPC_CONTEN_TYPE_LEN;
-			err = util_string_get(&slm_at_param_list, 4, slm_data_buf + offset, &size);
+			err = util_string_get(param_list, 4, slm_data_buf + offset, &size);
 			if (err == 0 && size > 0) {
 				httpc.content_type = (char *)(slm_data_buf + offset);
 			}
 			/* Get content length */
-			err = at_params_unsigned_int_get(
-				&slm_at_param_list, 5, &httpc.content_length);
+			err = at_params_unsigned_int_get(param_list, 5, &httpc.content_length);
 			if (err != 0) {
 				return err;
 			}
@@ -610,7 +633,7 @@ int handle_at_httpc_request(enum at_cmd_type cmd_type)
 				uint16_t tmp;
 
 				/* Get chunked transfer flag */
-				err = at_params_unsigned_short_get(&slm_at_param_list, 6, &tmp);
+				err = at_params_unsigned_short_get(param_list, 6, &tmp);
 				if (err != 0) {
 					return err;
 				}

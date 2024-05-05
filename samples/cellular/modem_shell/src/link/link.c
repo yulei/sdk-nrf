@@ -29,7 +29,7 @@
 #include "link_api.h"
 #include "link.h"
 
-#include "uart/uart_shell.h"
+#include "uart_shell.h"
 #include "mosh_print.h"
 #include "mosh_defines.h"
 
@@ -95,7 +95,8 @@ static struct ncellmeas_data ncellmeas_param_data = {
 
 static void link_ncellmeas_worker(struct k_work *work_item)
 {
-	struct ncellmeas_data *data = CONTAINER_OF(work_item, struct ncellmeas_data, work);
+	struct k_work_delayable *delayable_work = k_work_delayable_from_work(work_item);
+	struct ncellmeas_data *data = CONTAINER_OF(delayable_work, struct ncellmeas_data, work);
 
 	if (data->mode == LINK_NCELLMEAS_MODE_CONTINUOUS) {
 		link_ncellmeas_start(true,
@@ -442,7 +443,7 @@ void link_ind_handler(const struct lte_lc_evt *const evt)
 		len = snprintf(
 			log_buf, sizeof(log_buf),
 			"eDRX parameter update: eDRX: %f, PTW: %f",
-			evt->edrx_cfg.edrx, evt->edrx_cfg.ptw);
+			(double)evt->edrx_cfg.edrx, (double)evt->edrx_cfg.ptw);
 		if (len > 0) {
 			mosh_print("%s", log_buf);
 		}
@@ -638,16 +639,18 @@ void link_modem_tau_notifications_unsubscribe(void)
 
 int link_func_mode_set(enum lte_lc_func_mode fun, bool rel14_used)
 {
-	int return_value = 0;
+	int ret = 0;
 	int sysmode;
+	enum lte_lc_system_mode curr_sysmode;
 	int lte_pref;
+	enum lte_lc_system_mode_preference curr_lte_pref;
 
 	switch (fun) {
 	case LTE_LC_FUNC_MODE_POWER_OFF:
-		return_value = lte_lc_power_off();
+		ret = lte_lc_power_off();
 		break;
 	case LTE_LC_FUNC_MODE_OFFLINE:
-		return_value = lte_lc_offline();
+		ret = lte_lc_offline();
 		break;
 	case LTE_LC_FUNC_MODE_NORMAL:
 		/* Enable/disable Rel14 features before going to normal mode */
@@ -667,13 +670,21 @@ int link_func_mode_set(enum lte_lc_func_mode fun, bool rel14_used)
 		sysmode = link_sett_sysmode_get();
 		lte_pref = link_sett_sysmode_lte_preference_get();
 		if (sysmode != LINK_SYSMODE_NONE) {
-			return_value = lte_lc_system_mode_set(sysmode, lte_pref);
-			if (return_value < 0) {
-				mosh_warn("lte_lc_system_mode_set returned error %d", return_value);
+			/* System mode configuration is set, check if modem system mode needs to
+			 * be updated.
+			 */
+			if (lte_lc_system_mode_get(&curr_sysmode, &curr_lte_pref) != 0 ||
+			    curr_sysmode != sysmode ||
+			    curr_lte_pref != lte_pref) {
+				/* System mode needs to be updated. */
+				ret = lte_lc_system_mode_set(sysmode, lte_pref);
+				if (ret < 0) {
+					mosh_warn("lte_lc_system_mode_set returned error %d", ret);
+				}
 			}
 		}
 
-		return_value = lte_lc_normal();
+		ret = lte_lc_normal();
 		break;
 	case LTE_LC_FUNC_MODE_DEACTIVATE_LTE:
 	case LTE_LC_FUNC_MODE_ACTIVATE_LTE:
@@ -683,14 +694,14 @@ int link_func_mode_set(enum lte_lc_func_mode fun, bool rel14_used)
 	case LTE_LC_FUNC_MODE_ACTIVATE_UICC:
 	case LTE_LC_FUNC_MODE_OFFLINE_UICC_ON:
 	default:
-		return_value = lte_lc_func_mode_set(fun);
-		if (return_value) {
-			mosh_error("lte_lc_func_mode_set returned, error %d", return_value);
+		ret = lte_lc_func_mode_set(fun);
+		if (ret) {
+			mosh_error("lte_lc_func_mode_set returned, error %d", ret);
 		}
 		break;
 	}
 
-	return return_value;
+	return ret;
 }
 
 void link_rai_read(void)
@@ -760,6 +771,49 @@ int link_setdnsaddr(const char *ip_address)
 	} else {
 		(void)nrf_setdnsaddr(family, NULL, 0);
 	}
+
+	return 0;
+}
+
+int link_getifaddrs(void)
+{
+	struct nrf_ifaddrs *ifaddrs;
+	char addr_str[INET6_ADDRSTRLEN];
+	int err;
+
+	err = nrf_getifaddrs(&ifaddrs);
+	if (err) {
+		mosh_error("Error getting interface addresses: %d", errno);
+		return -errno;
+	}
+
+	mosh_print("Interface addresses:");
+
+	for (struct nrf_ifaddrs *ifa = ifaddrs; ifa; ifa = ifa->ifa_next) {
+		switch (ifa->ifa_addr->sa_family) {
+		case NRF_AF_INET:
+			nrf_inet_ntop(ifa->ifa_addr->sa_family,
+				      &((struct nrf_sockaddr_in *)(ifa->ifa_addr))->sin_addr,
+				      addr_str, sizeof(addr_str));
+			break;
+		case NRF_AF_INET6:
+			nrf_inet_ntop(ifa->ifa_addr->sa_family,
+				      &((struct nrf_sockaddr_in6 *)(ifa->ifa_addr))->sin6_addr,
+				      addr_str, sizeof(addr_str));
+			break;
+		default:
+			snprintf(addr_str, sizeof(addr_str),
+				 "Unknown family %d", ifa->ifa_addr->sa_family);
+			break;
+		}
+
+		/* Netmask, broadaddr and dstaddr are not supported by the modem
+		 * and will always be zero.
+		 */
+		mosh_print("  %s: %s", ifa->ifa_name, addr_str);
+	}
+
+	nrf_freeifaddrs(ifaddrs);
 
 	return 0;
 }

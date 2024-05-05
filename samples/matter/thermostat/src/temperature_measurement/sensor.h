@@ -3,39 +3,33 @@
  *
  * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
-#include "binding_handler.h"
-#include <platform/CHIPDeviceLayer.h>
-#include <stdint.h>
-
-#include <atomic>
-
 #pragma once
 
-class MockedSensor {
+#include "binding/binding_handler.h"
+
+#include <platform/CHIPDeviceLayer.h>
+
+using namespace ::Nrf::Matter;
+class TemperatureSensor {
 public:
-	static MockedSensor &Instance()
+	TemperatureSensor();
+
+	static TemperatureSensor &Instance()
 	{
-		static MockedSensor sSensor;
+		static TemperatureSensor sSensor;
 		return sSensor;
 	};
 
-	void TemperatureMeasurement();
+	void FullMeasurement();
+	void ExternalMeasurement();
+	void InternalMeasurement();
 
 private:
+	static void ExternalTemperatureMeasurementReadHandler(const EmberBindingTableEntry &binding,
+							      chip::OperationalDeviceProxy *deviceProxy,
+							      BindingHandler::BindingData &bindingData);
+
 	int16_t mPreviousTemperature;
 	uint8_t mMockTempIndex;
 	uint8_t mCycleCounter;
-};
-
-class RealSensor {
-public:
-	RealSensor();
-
-	static RealSensor &Instance()
-	{
-		static RealSensor sSensor;
-		return sSensor;
-	};
-
-	void TemperatureMeasurement();
 };

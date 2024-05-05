@@ -11,9 +11,21 @@
 #include "matter_bridged_device.h"
 #include <lib/support/CHIPMem.h>
 
+#if defined(CONFIG_BRIDGE_ONOFF_LIGHT_BRIDGED_DEVICE) && (defined(CONFIG_BRIDGE_GENERIC_SWITCH_BRIDGED_DEVICE) || defined(CONFIG_BRIDGE_ONOFF_LIGHT_SWITCH_BRIDGED_DEVICE))
+#include "ble_lbs_data_provider.h"
+
 #ifdef CONFIG_BRIDGE_ONOFF_LIGHT_BRIDGED_DEVICE
-#include "ble_onoff_light_data_provider.h"
 #include "onoff_light.h"
+#endif
+
+#ifdef CONFIG_BRIDGE_GENERIC_SWITCH_BRIDGED_DEVICE
+#include "generic_switch.h"
+#endif
+
+#ifdef CONFIG_BRIDGE_ONOFF_LIGHT_SWITCH_BRIDGED_DEVICE
+#include "onoff_light_switch.h"
+#endif
+
 #endif
 
 #ifdef CONFIG_BRIDGE_HUMIDITY_SENSOR_BRIDGED_DEVICE
@@ -34,10 +46,11 @@ namespace BleBridgedDeviceFactory
 /* The values were assigned based on BT_UUID_16(uuid)->val of a BT services. */
 enum ServiceUuid : uint16_t { LedButtonService = 0xbcd1, EnvironmentalSensorService = 0x181a };
 
-using UpdateAttributeCallback = BridgedDeviceDataProvider::UpdateAttributeCallback;
-using DeviceType = MatterBridgedDevice::DeviceType;
-using BridgedDeviceFactory = DeviceFactory<MatterBridgedDevice, DeviceType, const char *>;
-using BleDataProviderFactory = DeviceFactory<BridgedDeviceDataProvider, ServiceUuid, UpdateAttributeCallback>;
+using UpdateAttributeCallback = Nrf::BridgedDeviceDataProvider::UpdateAttributeCallback;
+using InvokeCommandCallback = Nrf::BridgedDeviceDataProvider::InvokeCommandCallback;
+using DeviceType = uint16_t;
+using BridgedDeviceFactory = Nrf::DeviceFactory<Nrf::MatterBridgedDevice, DeviceType, const char *>;
+using BleDataProviderFactory = Nrf::DeviceFactory<Nrf::BridgedDeviceDataProvider, ServiceUuid, UpdateAttributeCallback, InvokeCommandCallback>;
 
 BridgedDeviceFactory &GetBridgedDeviceFactory();
 BleDataProviderFactory &GetDataProviderFactory();
@@ -63,10 +76,12 @@ CHIP_ERROR CreateDevice(int deviceType, bt_addr_le_t btAddress, const char *node
  * @param uuid the Bluetooth LE service UUID of a bridged device provider that will be paired with bridged device
  * @param btAddress the Bluetooth LE address of a device to be bridged with created Matter device
  * @param nodeLabel node label of a Matter device to be created
+ * @param request address of connection request object for handling additional security information requiered by the connection.
+ *				  Can be nullptr, if connection does not use security.
  * @return CHIP_NO_ERROR on success
  * @return other error code on failure
  */
-CHIP_ERROR CreateDevice(uint16_t uuid, bt_addr_le_t btAddress, const char *nodeLabel);
+CHIP_ERROR CreateDevice(uint16_t uuid, bt_addr_le_t btAddress, const char *nodeLabel, Nrf::BLEConnectivityManager::ConnectionSecurityRequest * request = nullptr);
 
 /**
  * @brief Remove bridged device.

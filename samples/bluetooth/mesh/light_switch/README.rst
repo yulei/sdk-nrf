@@ -1,6 +1,6 @@
 .. _bluetooth_mesh_light_switch:
 
-Bluetooth mesh: Light switch
+Bluetooth Mesh: Light switch
 ############################
 
 .. contents::
@@ -8,9 +8,9 @@ Bluetooth mesh: Light switch
    :depth: 2
 
 The :ref:`ug_bt_mesh` light switch sample can be used to change the state of light sources on other devices within the same mesh network.
-It also demonstrates how to use Bluetooth® mesh models by using the Generic OnOff Client model in an application.
+It also demonstrates how to use Bluetooth® Mesh models by using the Generic OnOff Client model in an application.
 
-Use the light switch sample with the :ref:`bluetooth_mesh_light` sample to demonstrate its function in a Bluetooth mesh network.
+Use the light switch sample with the :ref:`bluetooth_mesh_light` sample to demonstrate its function in a Bluetooth Mesh network.
 
 This sample also provides the `Low Power node support`_.
 
@@ -41,23 +41,23 @@ Low Power node requirements
 
 The configuration overlay :file:`overlay-lpn.conf` is optimized for the following boards:
 
-* nrf52dk_nrf52832
+* nrf52dk/nrf52832
 
-* nrf52840dk_nrf52840
+* nrf52840dk/nrf52840
 
-* nrf52833dk_nrf52833
+* nrf52833dk/nrf52833
 
-However, the same configuration can be applied to other platforms that support the Bluetooth mesh Light Switch sample, as long as the device supports at least four buttons.
+However, the same configuration can be applied to other platforms that support the Bluetooth Mesh Light Switch sample, as long as the device supports at least four buttons.
 
 Overview
 ********
 
-The Bluetooth mesh light switch sample demonstrates how to set up a mesh client model application, and control LEDs with the Bluetooth mesh using the :ref:`bt_mesh_onoff_readme`.
+The Bluetooth Mesh light switch sample demonstrates how to set up a mesh client model application, and control LEDs with the Bluetooth Mesh using the :ref:`bt_mesh_onoff_readme`.
 To display any functionality, the sample must be paired with a device with the :ref:`bluetooth_mesh_light` sample running in the same mesh network.
 
 In both samples, devices are nodes with a provisionee role in a mesh network.
 Provisioning is performed using the `nRF Mesh mobile app`_.
-This mobile application is also used to configure key bindings, and publication and subscription settings of the Bluetooth mesh model instances in the sample to enable them to communicate with the servers.
+This mobile application is also used to configure key bindings, and publication and subscription settings of the Bluetooth Mesh model instances in the sample to enable them to communicate with the servers.
 
 The Generic OnOff Client model is used for manipulating the Generic OnOff state associated with the Generic OnOff Server model.
 The light switch sample implements the Generic OnOff Client model.
@@ -137,9 +137,9 @@ The following table shows a list of the supported boards for the LPN configurati
    ===================  ========================  ====================
    Board                Avg. consumption non-LPN  Avg. consumption LPN
    ===================  ========================  ====================
-   nrf52dk_nrf52832     7.14 mA                    13.69 µA
-   nrf52840dk_nrf52840  6.71 mA                    14.63 µA
-   nrf52833dk_nrf52833  6.10 mA                    14.43 µA
+   nrf52dk/nrf52832     7.14 mA                    13.69 µA
+   nrf52840dk/nrf52840  6.71 mA                    14.63 µA
+   nrf52833dk/nrf52833  6.10 mA                    14.43 µA
    ===================  ========================  ====================
 
 The following applies to the LPN measurements presented in this table:
@@ -206,12 +206,12 @@ The light switch sample is split into the following source files:
 LPN configuration
 =================
 
-To make the light switch run as an LPN, set :makevar:`OVERLAY_CONFIG` to :file:`overlay-lpn.conf` when building the sample.
+To make the light switch run as an LPN, set :makevar:`EXTRA_CONF_FILE` to :file:`overlay-lpn.conf` when building the sample.
 For example, when building from the command line, use the following command:
 
   .. code-block:: console
 
-     west build -b <BOARD> -p -- -DOVERLAY_CONFIG="overlay-lpn.conf"
+     west build -b <BOARD> -p -- -DEXTRA_CONF_FILE="overlay-lpn.conf"
 
 The configuration overlay :file:`overlay-lpn.conf` enables the LPN feature, and alters certain configuration options to further lower the power consumption.
 To review the specific alterations, open and inspect the :file:`overlay-lpn.conf` file.
@@ -225,8 +225,8 @@ FEM support
 Building and running
 ********************
 
-Make sure to enable the Bluetooth mesh in |NCS| before building and testing this sample.
-See :ref:`Bluetooth mesh user guide <ug_bt_mesh>` for more information.
+Make sure to enable the Bluetooth Mesh in |NCS| before building and testing this sample.
+See :ref:`Bluetooth Mesh user guide <ug_bt_mesh>` for more information.
 
 .. |sample path| replace:: :file:`samples/bluetooth/mesh/light_switch`
 

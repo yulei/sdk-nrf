@@ -20,15 +20,17 @@ enum sock_recv_print_format {
 	SOCK_RECV_PRINT_FORMAT_HEX,
 };
 
+int sock_getaddrinfo(int family, int type, char *hostname, int pdn_cid);
+
 int sock_open_and_connect(
 	int family, int type, char *address, int port,
-	int bind_port, int pdn_cid, bool secure, int sec_tag,
-	bool session_cache, int peer_verify,
+	int bind_port, int pdn_cid, bool secure, uint32_t sec_tag,
+	bool session_cache, bool keep_open, int peer_verify,
 	char *peer_hostname);
 
 int sock_send_data(
 	int socket_id, char *data, int data_length, int interval, bool packet_number_prefix,
-	bool blocking, int buffer_size, bool data_format_hex);
+	bool blocking, int flags, int buffer_size, bool data_format_hex);
 
 int sock_recv(
 	int socket_id, bool receive_start, int data_length, bool blocking,

@@ -84,13 +84,13 @@ static void attention_blink(struct k_work *work)
 	}
 }
 
-static void attention_on(struct bt_mesh_model *mod)
+static void attention_on(const struct bt_mesh_model *mod)
 {
 	attention = true;
 	k_work_reschedule(&attention_blink_work, K_NO_WAIT);
 }
 
-static void attention_off(struct bt_mesh_model *mod)
+static void attention_off(const struct bt_mesh_model *mod)
 {
 	/* Will stop rescheduling blink timer */
 	attention = false;
@@ -125,8 +125,9 @@ static void start_new_light_trans(const struct bt_mesh_lightness_set *set,
 
 static void periodic_led_work(struct k_work *work)
 {
+	uint16_t clamped_lvl;
 	struct lightness_ctx *l_ctx =
-		CONTAINER_OF(work, struct lightness_ctx, per_work);
+		CONTAINER_OF(work, struct lightness_ctx, per_work.work);
 	l_ctx->rem_time -= l_ctx->time_per;
 
 	if ((l_ctx->rem_time <= l_ctx->time_per) ||
@@ -150,8 +151,7 @@ static void periodic_led_work(struct k_work *work)
 
 	k_work_reschedule(&l_ctx->per_work, K_MSEC(l_ctx->time_per));
 apply_and_print:
-	uint16_t clamped_lvl = bt_mesh_lightness_clamp(&l_ctx->lightness_srv,
-						       l_ctx->current_lvl);
+	clamped_lvl = bt_mesh_lightness_clamp(&l_ctx->lightness_srv, l_ctx->current_lvl);
 	lc_pwm_led_set(clamped_lvl);
 	printk("Current light lvl: %u/65535\n", clamped_lvl);
 }
@@ -197,15 +197,14 @@ static int dummy_energy_use;
 static int energy_use_get(struct bt_mesh_sensor_srv *srv,
 			 struct bt_mesh_sensor *sensor,
 			 struct bt_mesh_msg_ctx *ctx,
-			 struct sensor_value *rsp)
+			 struct bt_mesh_sensor_value *rsp)
 {
 	/* Report energy usage as dummy value, and increase it by one every time
 	 * a get callback is triggered. The logic and hardware for mesuring
 	 * the actual energy usage of the device should be implemented here.
 	 */
-	rsp[0].val1 = dummy_energy_use;
-	rsp[0].val2 = 0;
-
+	bt_mesh_sensor_value_from_micro(sensor->type->channels[0].format,
+					dummy_energy_use * 1000000LL, rsp);
 	dummy_energy_use++;
 
 	return 0;
@@ -213,12 +212,8 @@ static int energy_use_get(struct bt_mesh_sensor_srv *srv,
 
 static const struct bt_mesh_sensor_descriptor energy_use_desc = {
 	.tolerance = {
-		.negative = {
-			.val1 = 0,
-		},
-		.positive = {
-			.val1 = 0,
-		}
+		.negative = 0,
+		.positive = 0,
 	},
 	.sampling_type = BT_MESH_SENSOR_SAMPLING_UNSPECIFIED,
 	.period = 0,
@@ -279,7 +274,7 @@ void model_handler_start(void)
 
 #if IS_ENABLED(CONFIG_BT_MESH_NLC_PERF_CONF)
 	if (bt_mesh_comp2_register(&comp_p2)) {
-		printf("Failed to register comp2\n");
+		printk("Failed to register comp2\n");
 	}
 #endif
 

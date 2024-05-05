@@ -5,6 +5,9 @@
  */
 
 #include <zephyr/kernel.h>
+#include <zephyr/dfu/mcuboot.h>
+#include <zephyr/settings/settings.h>
+#include <zephyr/logging/log.h>
 #include <stdbool.h>
 #if defined(CONFIG_NRF_MODEM)
 #include <nrf_modem.h>
@@ -12,14 +15,13 @@
 #if defined(CONFIG_NRF_MODEM_LIB)
 #include <modem/nrf_modem_lib.h>
 #endif
-#include <zephyr/dfu/mcuboot.h>
 #include <dfu/dfu_target_full_modem.h>
 #include <dfu/fmfu_fdev.h>
 #if defined(CONFIG_FOTA_DOWNLOAD)
 #include <net/fota_download.h>
 #endif
-#include <zephyr/logging/log.h>
 #include <net/nrf_cloud.h>
+#include "nrf_cloud_fota.h"
 
 #if defined(CONFIG_NRF_MODEM_LIB)
 static int dfu_result;
@@ -33,6 +35,146 @@ NRF_MODEM_LIB_ON_DFU_RES(nrf_cloud_fota_dfu_hook, on_modem_lib_dfu, NULL);
 #endif /* CONFIG_NRF_MODEM_LIB*/
 
 LOG_MODULE_REGISTER(nrf_cloud_fota_common, CONFIG_NRF_CLOUD_LOG_LEVEL);
+
+/* Use the settings library to store FOTA job information to flash so
+ * that the job status can be updated after a reboot
+ */
+#if defined(CONFIG_FOTA_USE_NRF_CLOUD_SETTINGS_AREA)
+#define FOTA_SETTINGS_NAME		NRF_CLOUD_SETTINGS_FULL_FOTA
+#define FOTA_SETTINGS_KEY_PENDING_JOB	NRF_CLOUD_SETTINGS_FOTA_JOB
+#define FOTA_SETTINGS_FULL		NRF_CLOUD_SETTINGS_FULL_FOTA_JOB
+#else
+#define FOTA_SETTINGS_NAME		CONFIG_FOTA_SETTINGS_NAME
+#define FOTA_SETTINGS_KEY_PENDING_JOB	CONFIG_FOTA_SETTINGS_KEY_PENDING_JOB
+#define FOTA_SETTINGS_FULL		FOTA_SETTINGS_NAME "/" FOTA_SETTINGS_KEY_PENDING_JOB
+#endif
+
+/* Pending job info used with the settings library */
+static struct nrf_cloud_settings_fota_job *pending_job;
+static K_MUTEX_DEFINE(pending_job_mutex);
+
+static int fota_settings_set(const char *key, size_t len_rd,
+			    settings_read_cb read_cb, void *cb_arg);
+
+SETTINGS_STATIC_HANDLER_DEFINE(fota, FOTA_SETTINGS_NAME, NULL, fota_settings_set, NULL, NULL);
+
+static int settings_init(void)
+{
+	static bool initd;
+	int ret = 0;
+
+	if (!initd) {
+		ret = settings_subsys_init();
+		if (ret) {
+			LOG_ERR("Settings init failed: %d", ret);
+			return ret;
+		}
+		initd = true;
+	}
+
+	return 0;
+}
+
+int nrf_cloud_fota_settings_load(struct nrf_cloud_settings_fota_job *job)
+{
+	__ASSERT_NO_MSG(job != NULL);
+
+	int ret = settings_init();
+
+	if (ret) {
+		return ret;
+	}
+
+	/* Set the job pointer, which will be used in the settings callback
+	 * to receive the stored data
+	 */
+	k_mutex_lock(&pending_job_mutex, K_FOREVER);
+	pending_job = job;
+
+	/* Clear the job info and set to invalid type */
+	memset(pending_job, 0, sizeof(*pending_job));
+	pending_job->type = NRF_CLOUD_FOTA_TYPE__INVALID;
+
+	/* Load FOTA settings */
+	ret = settings_load_subtree(settings_handler_fota.name);
+
+	/* Done with the pointer */
+	pending_job = NULL;
+	k_mutex_unlock(&pending_job_mutex);
+
+	if (ret) {
+		LOG_ERR("Cannot load settings: %d", ret);
+	}
+
+	return ret;
+}
+
+static int fota_settings_set(const char *key, size_t len_rd, settings_read_cb read_cb,
+				  void *cb_arg)
+{
+	/* Ignore if the pending job has not been set. This can occur when the
+	 * base nRF Cloud settings are loaded.
+	 */
+	if (!pending_job) {
+		return 0;
+	}
+
+	ssize_t sz;
+
+	if (!key) {
+		LOG_DBG("Key is NULL");
+		return -EINVAL;
+	}
+
+	LOG_DBG("Settings key: %s, size: %d", key, len_rd);
+
+	if (strncmp(key, FOTA_SETTINGS_KEY_PENDING_JOB, strlen(FOTA_SETTINGS_KEY_PENDING_JOB))) {
+		return -ENOMSG;
+	}
+
+	if (len_rd > sizeof(*pending_job)) {
+		LOG_INF("FOTA settings size larger than expected");
+		len_rd = sizeof(*pending_job);
+	}
+
+	sz = read_cb(cb_arg, (void *)pending_job, len_rd);
+	if (sz == 0) {
+		LOG_DBG("FOTA settings key-value pair has been deleted");
+		return -EIDRM;
+	} else if (sz < 0) {
+		LOG_ERR("FOTA settings read error: %d", sz);
+		return -EIO;
+	}
+
+	if (sz == sizeof(*pending_job)) {
+		LOG_INF("Saved job: %s, type: %d, validate: %d, bl: 0x%X",
+			pending_job->id, pending_job->type,
+			pending_job->validate, pending_job->bl_flags);
+	} else {
+		LOG_INF("FOTA settings size smaller than current, likely outdated");
+	}
+
+	return 0;
+}
+
+int nrf_cloud_fota_settings_save(struct nrf_cloud_settings_fota_job *job)
+{
+	__ASSERT_NO_MSG(job != NULL);
+
+	int ret = settings_init();
+
+	if (ret) {
+		return ret;
+	}
+
+	ret = settings_save_one(FOTA_SETTINGS_FULL, job, sizeof(*job));
+
+	if (ret) {
+		LOG_ERR("Failed to save FOTA job to settings, error: %d", ret);
+	}
+
+	return ret;
+}
 
 #if defined(CONFIG_NRF_CLOUD_FOTA_FULL_MODEM_UPDATE)
 /* Buffer for loading/applying the full modem update */
@@ -328,25 +470,17 @@ int nrf_cloud_pending_fota_job_process(struct nrf_cloud_settings_fota_job * cons
 
 bool nrf_cloud_fota_is_type_enabled(const enum nrf_cloud_fota_type type)
 {
-	if (!IS_ENABLED(CONFIG_NRF_CLOUD_FOTA) &&
-	    !IS_ENABLED(CONFIG_NRF_CLOUD_REST) &&
-	    !IS_ENABLED(CONFIG_NRF_CLOUD_COAP)) {
-		return false;
-	}
-
 	switch (type) {
 	case NRF_CLOUD_FOTA_APPLICATION:
-		return IS_ENABLED(CONFIG_BOOTLOADER_MCUBOOT);
+		return IS_ENABLED(CONFIG_NRF_CLOUD_FOTA_TYPE_APP_SUPPORTED);
 	case NRF_CLOUD_FOTA_BOOTLOADER:
-		return IS_ENABLED(CONFIG_BOOTLOADER_MCUBOOT) &&
-		       IS_ENABLED(CONFIG_BUILD_S1_VARIANT) &&
-		       IS_ENABLED(CONFIG_SECURE_BOOT);
+		return IS_ENABLED(CONFIG_NRF_CLOUD_FOTA_TYPE_BOOT_SUPPORTED);
 	case NRF_CLOUD_FOTA_MODEM_DELTA:
-		return IS_ENABLED(CONFIG_NRF_MODEM);
+		return IS_ENABLED(CONFIG_NRF_CLOUD_FOTA_TYPE_MODEM_DELTA_SUPPORTED);
 	case NRF_CLOUD_FOTA_MODEM_FULL:
-		return IS_ENABLED(CONFIG_NRF_CLOUD_FOTA_FULL_MODEM_UPDATE) &&
-		       IS_ENABLED(CONFIG_NRF_MODEM);
+		return IS_ENABLED(CONFIG_NRF_CLOUD_FOTA_TYPE_MODEM_FULL_SUPPORTED);
 	default:
+		LOG_WRN("Unhandled FOTA type: %d", type);
 		return false;
 	}
 }

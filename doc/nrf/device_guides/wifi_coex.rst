@@ -59,7 +59,7 @@ The following are the common requirements to use coexistence based on the MPSL C
 4. Ensure that the configuration of the ``nrf_radio_coex`` node appropriate for the selected implementation is present in the devicetree.
    When using one of the supported implementations, you must use the ``nrf_radio_coex`` name for the node.
    However, if you add a custom user implementation, you can also use a different name.
-   Some boards supported by the |NCS| (like :ref:`nrf7002dk_nrf5340 <nrf7002dk_nrf5340>`) provide this node by default.
+   Some boards supported by the |NCS| (like :ref:`nrf7002dk <nrf7002dk_nrf5340>`) provide this node by default.
    You can provide the node using either the devicetree source file of the target board or an overlay file.
    See :ref:`zephyr:dt-guide` for more information about the DTS data structure, and :ref:`zephyr:dt_vs_kconfig` for information about differences between DTS and Kconfig.
 5. On the nRF5340 SoC, the GPIO pins required for the communication with the PTA must be handed over to the network core.
@@ -157,7 +157,7 @@ To enable Wi-Fi coexistence on the nRF70 Series device, complete the following s
 
    *  ``multiprotocol_rpmsg`` for multiprotocol applications having support for both 802.15.4 and Bluetooth.
    *  ``802154_rpmsg`` for applications having support for 802.15.4, but not for Bluetooth.
-   *  ``hci_rpmsg`` for application having support for Bluetooth, but not for 802.15.4.
+   *  ``hci_ipc`` for application having support for Bluetooth, but not for 802.15.4.
 
 #. Enable the following Kconfig options:
 
@@ -235,7 +235,7 @@ To enable the generic three-wire coexistence, do the following:
 
    * ``multiprotocol_rpmsg`` for multiprotocol applications having support for both 802.15.4 and Bluetooth.
    * ``802154_rpmsg`` for applications having support for 802.15.4, but not for Bluetooth.
-   * ``hci_rpmsg`` for application having support for Bluetooth, but not for 802.15.4.
+   * ``hci_ipc`` for application having support for Bluetooth, but not for 802.15.4.
 
 #. Enable the following Kconfig options:
 
@@ -275,7 +275,7 @@ Bluetooth-only 1-wire coexistence
 Refer to :ref:`ug_radio_coex_bluetooth_only_based` for the general requirements of this implementation.
 
 The Bluetooth-only 1-wire coexistence feature allows the :ref:`SoftDevice Controller <nrfxlib:softdevice_controller>` to coexist alongside an LTE device on a separate chip.
-It is specifically designed for the coex interface of the nRF9160.
+It is specifically designed for the coex interface of the nRF91 Series SiP.
 The implementation is based on :ref:`nrfxlib:mpsl_bluetooth_coex_1wire`, which is provided into the :ref:`nrfxlib:mpsl` (MPSL) library.
 
 

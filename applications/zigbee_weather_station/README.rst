@@ -62,11 +62,11 @@ LED (LD1):
    Shows the overall state of the device and its connectivity.
    The following states are possible:
 
-   * ``release`` build type
+   * ``release`` configuration
 
      * Even flashing (red color, 500 ms on/500 ms off) - The device is in the Identify mode (after network commissioning).
 
-   * ``debug`` build type
+   * ``debug`` configuration
 
      * Constant light (blue) - The device is connected to a Zigbee network.
      * Even flashing (red color, 500 ms on/500 ms off) - The device is in the Identify mode (after network commissioning).
@@ -91,7 +91,7 @@ Button (SW3):
 
 USB port:
    Used for getting logs from the device.
-   It is enabled only for the ``debug`` build type of the application.
+   It is enabled only for the ``debug`` configuration of the application.
    See the :ref:`zigbee_weather_station_app_select_build_type` section to learn how to select the debug configuration.
 
 Configuration
@@ -131,37 +131,38 @@ CONFIG_WEATHER_CHECK_PERIOD_SECONDS - How often sensor data is read
 
 .. _zigbee_weather_station_app_build_types:
 
-Zigbee weather station build types
-==================================
+Zigbee weather station configurations
+=====================================
 
 The Zigbee weather station application does not use a single :file:`prj.conf` file.
-Configuration files are provided for different build types, and they are located in the :file:`configuration/thingy53_nrf5340_cpuapp` directory.
+The application includes different configurations, with files for each configuration located in the :file:`configuration/thingy53_nrf5340_cpuapp` directory.
+Before you start testing, you can select one of the configurations using the :makevar:`FILE_SUFFIX` variable.
 
-The :file:`prj.conf` file represents a ``debug`` build type.
-Other build types are covered by dedicated files with the build type added as a suffix to the ``prj`` part, as per the following list.
-For example, the ``release`` build type file name is :file:`prj_release.conf`.
-If a board has other configuration files, for example associated with partition layout or child image configuration, these follow the same pattern.
+See :ref:`app_build_file_suffixes` and :ref:`cmake_options` for more information.
 
-.. include:: /config_and_build/modifying.rst
-   :start-after: build_types_overview_start
-   :end-before: build_types_overview_end
+The application supports the following configurations:
 
-Before you start testing the application, you can select one of the build types supported by the Zigbee weather station application, depending on the building method.
-This application supports the following build types:
+.. list-table:: Zigbee weather station configurations
+   :widths: auto
+   :header-rows: 1
 
-* ``debug`` - Debug version of the application.
-  Use this version to enable additional features for verifying the application behavior, such as logs.
-* ``release`` - Release version of the application.
-  Use this version to enable only the necessary application functionalities to optimize its performance.
+   * - Configuration
+     - File name
+     - Supported board
+     - Description
+   * - Debug (default)
+     - :file:`prj.conf`
+     - All from `Requirements`_
+     - Debug version of the application; can be used to enable additional features for verifying the application behavior, such as logs.
+   * - Release
+     - :file:`prj_release.conf`
+     - All from `Requirements`_
+     - Release version of the application; can be used to enable only the necessary application functionalities to optimize its performance.
 
-.. note::
-   :ref:`zigbee_weather_station_app_select_build_type` is optional.
-   The ``debug`` build type is used by default if no build type is explicitly selected.
+Logging in the debug configuration
+----------------------------------
 
-Logging in the ``debug`` build type
-===================================
-
-In the ``debug`` build type, the application also uses serial console over USB for logging.
+In the debug configuration, the application also uses serial console over USB for logging.
 Besides initialization logs, the following sets of measurement-related data are logged after a measurements update:
 
 * Values measured by sensor.
@@ -187,41 +188,11 @@ Building and running
 
 .. _zigbee_weather_station_app_select_build_type:
 
-Selecting a build type
-======================
+Selecting application configuration
+===================================
 
-Before you start testing the application, you can select one of the :ref:`zigbee_weather_station_app_build_types`, depending on your building method.
-
-Selecting a build type in |VSC|
--------------------------------
-
-.. include:: /config_and_build/modifying.rst
-   :start-after: build_types_selection_vsc_start
-   :end-before: build_types_selection_vsc_end
-
-Selecting a build type from command line
-----------------------------------------
-
-.. include:: /config_and_build/modifying.rst
-   :start-after: build_types_selection_cmd_start
-   :end-before: For example, you can replace the
-
-For example, you can replace the *selected_build_type* variable to build the ``release`` firmware for ``thingy53_nrf5340_cpuapp`` by running the following command in the project directory:
-
-.. parsed-literal::
-   :class: highlight
-
-   west build -b thingy53_nrf5340_cpuapp -d build_thingy53_nrf5340_cpuapp -- -DCONF_FILE=prj_release.conf
-
-The ``build_thingy53_nrf5340_cpuapp`` parameter specifies the output directory for the build files.
-
-.. note::
-   If the selected board does not support the selected build type, the build is interrupted.
-   For example, if the ``shell`` build type is not supported by the selected board, the following notification appears:
-
-   .. code-block:: console
-
-      File not found: ./ncs/nrf/applications/zigbee_weather_station/configuration/thingy53_nrf5340_cpuapp/prj_shell.conf
+Before you start testing the application, you can select one of the :ref:`zigbee_weather_station_app_build_types`.
+See :ref:`cmake_options` for information about how to select a suffixed configuration.
 
 .. _zigbee_weather_station_app_testing:
 
@@ -229,9 +200,9 @@ Testing
 =======
 
 .. Note::
-   * Part of the testing procedure assumes you are using the ``debug`` :ref:`build type <zigbee_weather_station_app_build_types>`, as it provides more feedback with **LED (LD1)** and logs through the USB console.
+   * Part of the testing procedure assumes you are using the ``debug`` :ref:`configuration <zigbee_weather_station_app_build_types>`, as it provides more feedback with **LED (LD1)** and logs through the USB console.
 
-     These steps related to the ``debug`` build type mention the ``debug`` build type and are not required if you are using the ``release`` build type.
+     These steps related to the ``debug`` configuration mention the ``debug`` configuration and are not required if you are using the ``release`` configuration.
    * The provided measurement data values depend on the Thingy:53 device's surrounding conditions.
    * If you want to capture packets with Wireshark, install `nRF Sniffer for 802.15.4`_ and `configure Wireshark for use with Zigbee <Configuring Wireshark for Zigbee_>`_.
 
@@ -239,7 +210,7 @@ Testing
 
 After programming the application to your device, complete the following steps to test it:
 
-1. ``debug`` build type: |connect_generic|
+1. ``debug`` configuration: |connect_generic|
    The connection is needed for gathering logs from the Zigbee weather station application.
 #. Turn on the :ref:`Zigbee shell <zigbee_shell_sample>` sample programmed as the network coordinator to one of the compatible development kits.
    See the :ref:`zigbee_shell_sample_testing` section of the sample to learn how to set it up as a coordinator.
@@ -274,7 +245,7 @@ After programming the application to your device, complete the following steps t
 
 #. When the device joins the network, **LED (LD1)** lights up with a constant blue color.
 
-   Additionally, with the ``debug`` build type and console used for logging, output similar to the following appears:
+   Additionally, with the ``debug`` configuration and console used for logging, output similar to the following appears:
 
    .. code-block:: console
 

@@ -25,12 +25,7 @@ Experimental
    The feature can be used for development, but it is not recommended for production.
    This means that the feature is incomplete in functionality or verification and can be expected to change in future releases.
    The feature is made available in its current state, but the design and interfaces can change between release tags.
-   The feature is also labeled as ``EXPERIMENTAL`` in Kconfig files to indicate this status.
-
-   .. note::
-      By default, the build system generates build warnings to indicate when features labeled ``EXPERIMENTAL`` are included in builds.
-      To disable these warnings, disable the :kconfig:option:`CONFIG_WARN_EXPERIMENTAL` Kconfig option.
-      See :ref:`app_build_additions` for details.
+   The feature is also labeled as :ref:`experimental in Kconfig files <app_build_additions_experimental>` and a build warning is generated to indicate this status.
 
 See the following table for more details:
 
@@ -77,6 +72,8 @@ See the following table for more details:
      - Incomplete verification
      - Not applicable.
 
+For the certification status of different features in a specific SoC, see its Compatibility Matrix in the `Nordic Semiconductor TechDocs`_.
+
 .. _api_deprecation:
 
 API deprecation
@@ -102,7 +99,7 @@ The following subsections indicate the software maturity levels of the support f
 nRF5340 Audio
 =============
 
-The following table indicates the software maturity levels of the support for the :ref:`nrf53_audio_app` application.
+The following table indicates the software maturity levels of the support for the :ref:`nrf53_audio_app`.
 
 .. toggle::
 
@@ -113,12 +110,12 @@ The following table indicates the software maturity levels of the support for th
       :align: center
       :widths: auto
 
-      * - Feature
+      * - Application
         - Description
         - Limitations
         - Maturity level
-      * - **Broadcast source**
-        - Transmitting broadcast audio using Broadcast Isochronous Stream (BIS) and Broadcast Isochronous Group (BIG).
+      * - :ref:`Broadcast source <nrf53_audio_broadcast_source_app>`
+        - Broadcasting audio using Broadcast Isochronous Stream (BIS) and Broadcast Isochronous Group (BIG).
 
           Play and pause emulated by disabling and enabling stream, respectively.
         - The following limitations apply:
@@ -128,7 +125,7 @@ The following table indicates the software maturity levels of the support for th
           * Configuration: 16 bit, several bit rates ranging from 32 kbps to 124 kbps.
 
         - Experimental
-      * - **Broadcast sink**
+      * - :ref:`Broadcast sink <nrf53_audio_broadcast_sink_app>`
         - Receiving broadcast audio using BIS and BIG.
 
           Synchronizes and unsynchronizes with the stream.
@@ -139,7 +136,7 @@ The following table indicates the software maturity levels of the support for th
           * Configuration: 16 bit, several bit rates ranging from 32 kbps to 124 kbps.
 
         - Experimental
-      * - **Unicast client**
+      * - :ref:`Unicast client <nrf53_audio_unicast_client_app>`
         - One Connected Isochronous Group (CIG) with two Connected Isochronous Streams (CIS).
 
           Transmitting unidirectional or transceiving bidirectional audio using CIG and CIS.
@@ -151,8 +148,8 @@ The following table indicates the software maturity levels of the support for th
           * Configuration: 16 bit, several bit rates ranging from 32 kbps to 124 kbps.
 
         - Experimental
-      * - **Unicast server**
-        - One CIG with two CIS streams.
+      * - :ref:`Unicast server <nrf53_audio_unicast_server_app>`
+        - One CIG with one CIS stream.
 
           Receiving unidirectional or transceiving bidirectional audio using CIG and CIS.
 
@@ -174,6 +171,7 @@ Protocol support
 The following table indicates the software maturity levels of the support for each :ref:`protocol <protocols>`:
 
 .. sml-table:: top_level
+   :insert-values: [("Bluetooth","nRF54L15","Experimental"), ("Bluetooth Mesh","nRF54L15","-"), ("Matter","nRF54L15","Experimental"), ("Sidewalk","nRF54L15","Experimental"), ("Thread","nRF54L15","Experimental")]
 
 Amazon Sidewalk features support
 ********************************
@@ -192,15 +190,6 @@ The following table indicates the software maturity levels of the support for ea
 .. toggle::
 
   .. sml-table:: bluetooth
-
-HomeKit features support
-************************
-
-The following table indicates the software maturity levels of the support for each HomeKit feature:
-
-.. toggle::
-
-  .. sml-table:: homekit
 
 Thread features support
 ***********************
@@ -249,6 +238,7 @@ The following sections contain the tables indicating the software maturity level
 * PSA Crypto
 * |NSIB|
 * Hardware Unique Key
+* Trusted storage
 
 Trusted Firmware-M support
 ==========================
@@ -277,3 +267,19 @@ Hardware Unique Key
 .. toggle::
 
   .. sml-table:: hw_unique_key
+
+Trusted storage
+===============
+
+.. toggle::
+
+  .. sml-table:: trusted_storage
+
+Power management device support
+*******************************
+
+The following table indicates the software maturity levels of the support for each power management device:
+
+.. toggle::
+
+  .. sml-table:: power_management

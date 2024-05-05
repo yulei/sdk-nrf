@@ -42,15 +42,16 @@ config HEAP_MEM_POOL_SIZE
 	default 512
 
 config NFC_RING_SIZE
-	int "Size of ring buffer in bytes."
+	int "Size of ring buffer in bytes"
 	default 2048
 	help
 	  Size of the ring buffer.
 	  The specified size is expressed as n bytes.
 
 config NFC_LIB_CTX_MAX_SIZE
-	int "Maximum size of NFC library context in bytes."
+	int "Maximum size of NFC library context in bytes"
 	default 16
+	range 16 255
 	help
 	  Maximum size of the NFC library context in bytes.
 	  The specified size should be divisible by 4.
@@ -82,7 +83,10 @@ endif# NFC_OWN_THREAD
 
 config NFC_LOW_LATENCY_IRQ
 	bool "Use low latency IRQ for NFC"
-	default y
+	# NFC low latency interrupt requires software interrupt being supported.
+	default y if $(dt_has_compat,$(DT_COMPAT_NORDIC_NRF_EGU)) || \
+		     $(dt_has_compat,$(DT_COMPAT_NORDIC_NRF_SWI))
+	select ZERO_LATENCY_IRQS
 	help
 	  Using this option ensures fast NFC interrupt
 	  execution on the cost of using additional interrupt (SWI).
@@ -100,31 +104,31 @@ config NFC_SWI_NUMBER
 
 choice NFC_SWI
 	default NFC_SWI1
-	prompt "Software interrupt to use for NFC callback request."
+	prompt "Software interrupt to use for NFC callback request"
 	help
 	  Software interrupt instantion to use for NFC callback request.
 
 config NFC_SWI0
 	bool "SWI0"
-	depends on HAS_HW_NRF_EGU0 || HAS_HW_NRF_SWI0
+	depends on HAS_HW_NRF_EGU0 || HAS_HW_NRF_SWI0 || SOC_SERIES_NRF54LX
 	help
 	  Use SWI0 for NFC.
 
 config NFC_SWI1
 	bool "SWI1"
-	depends on HAS_HW_NRF_EGU1 || HAS_HW_NRF_SWI1
+	depends on HAS_HW_NRF_EGU1 || HAS_HW_NRF_SWI1 || SOC_SERIES_NRF54LX
 	help
 	  Use SWI1 for NFC.
 
 config NFC_SWI2
 	bool "SWI2"
-	depends on HAS_HW_NRF_EGU2 || HAS_HW_NRF_SWI2
+	depends on HAS_HW_NRF_EGU2 || HAS_HW_NRF_SWI2 || SOC_SERIES_NRF54LX
 	help
 	  Use SWI2 for NFC.
 
 config NFC_SWI3
 	bool "SWI3"
-	depends on HAS_HW_NRF_EGU3 || HAS_HW_NRF_SWI3
+	depends on HAS_HW_NRF_EGU3 || HAS_HW_NRF_SWI3 || SOC_SERIES_NRF54LX
 	help
 	  Use SWI3 for NFC.
 

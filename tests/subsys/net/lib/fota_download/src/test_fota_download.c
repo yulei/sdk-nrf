@@ -20,7 +20,7 @@
 static char buf[1024];
 
 #define BASE_DOMAIN "something.com"
-#define NO_TLS -1
+#define NO_TLS NULL
 #define ARBITRARY_IMAGE_OFFSET 512
 
 /* Stubs and mocks */
@@ -145,14 +145,6 @@ int z_impl_zsock_inet_pton(sa_family_t family, const char *src, void *dst)
 
 
 #ifdef CONFIG_TRUSTED_EXECUTION_NONSECURE
-
-#include "tfm_platform_api.h"
-enum tfm_platform_err_t tfm_platform_ioctl(tfm_platform_ioctl_req_t request,
-					   psa_invec *input,
-					   psa_outvec *output)
-{
-	return PSA_SUCCESS;
-}
 
 int spm_s0_active(uint32_t s0_address, uint32_t s1_address, bool *s0_active)
 {
@@ -285,7 +277,7 @@ static void init(void)
  * @param expected_selection - The resource locator that fota_download_start is expected to select
  * @param s0_active - If true, pretend that s0 is active. Otherwise, pretend that s1 is active.
  */
-static void test_fota_download_start_generic(const char * const resource_locator,
+static void test_fota_download_any_generic(const char * const resource_locator,
 					     const char * const expected_selection, bool s0_active)
 {
 	int err;
@@ -297,7 +289,7 @@ static void test_fota_download_start_generic(const char * const resource_locator
 
 	/* Start the download, check that it succeeds */
 	strcpy(buf, resource_locator);
-	err = fota_download_start(BASE_DOMAIN, buf, NO_TLS, 0, 0);
+	err = fota_download_any(BASE_DOMAIN, buf, NO_TLS, 0, 0, 0);
 	zassert_equal(err, 0, NULL);
 
 	/* Verify that the correct resource was selected */
@@ -323,17 +315,17 @@ ZTEST(fota_download_tests, test_fota_download_cancel_before_init)
 
 ZTEST(fota_download_tests, test_download_single)
 {
-	test_fota_download_start_generic(S0_A, S0_A, S1_ACTIVE);
+	test_fota_download_any_generic(S0_A, S0_A, S1_ACTIVE);
 }
 
 ZTEST(fota_download_tests, test_download_dual_s0_active)
 {
-	test_fota_download_start_generic(S0_B " " S1_B, S1_B, S0_ACTIVE);
+	test_fota_download_any_generic(S0_B " " S1_B, S1_B, S0_ACTIVE);
 }
 
 ZTEST(fota_download_tests, test_download_dual_s1_active)
 {
-	test_fota_download_start_generic(S0_C " " S1_C, S0_C, S1_ACTIVE);
+	test_fota_download_any_generic(S0_C " " S1_C, S0_C, S1_ACTIVE);
 }
 
 ZTEST(fota_download_tests, test_download_with_offset)
@@ -359,7 +351,7 @@ ZTEST(fota_download_tests, test_download_with_offset)
 	/* Check that application is being notified when
 	 * download_with_offset fails to get fw image offset
 	 */
-	err = fota_download_start(BASE_DOMAIN, buf, NO_TLS, 0, 0);
+	err = fota_download_any(BASE_DOMAIN, buf, NO_TLS, 0, 0, 0);
 	zassert_ok(err, NULL);
 
 	err = download_client_event_handler(&evt);
@@ -378,7 +370,7 @@ ZTEST(fota_download_tests, test_download_with_offset)
 	/* Check that application is being notified when
 	 * download_with_offset fails to connect
 	 */
-	err = fota_download_start(BASE_DOMAIN, buf, NO_TLS, 0, 0);
+	err = fota_download_any(BASE_DOMAIN, buf, NO_TLS, 0, 0, 0);
 	zassert_ok(err, NULL);
 
 	err = download_client_event_handler(&evt);
@@ -396,7 +388,7 @@ ZTEST(fota_download_tests, test_download_with_offset)
 	/* Check that application is being notified when
 	 * download_with_offset fails to start download
 	 */
-	err = fota_download_start(BASE_DOMAIN, buf, NO_TLS, 0, 0);
+	err = fota_download_any(BASE_DOMAIN, buf, NO_TLS, 0, 0, 0);
 	zassert_ok(err, NULL);
 
 	err = download_client_event_handler(&evt);
@@ -412,7 +404,7 @@ ZTEST(fota_download_tests, test_download_with_offset)
 
 
 	/* Successfully restart download with offset */
-	err = fota_download_start(BASE_DOMAIN, buf, NO_TLS, 0, 0);
+	err = fota_download_any(BASE_DOMAIN, buf, NO_TLS, 0, 0, 0);
 	zassert_ok(err, NULL);
 
 	err = download_client_event_handler(&evt);

@@ -8,7 +8,8 @@ config BME68X_IAQ
 	bool "Use Bosch BSEC library"
 	depends on !BME680
 	depends on SETTINGS && !SETTINGS_NONE
-	depends on I2C
+	select I2C if $(dt_compat_on_bus,$(DT_COMPAT_BOSCH_BME680),i2c)
+	select SPI if $(dt_compat_on_bus,$(DT_COMPAT_BOSCH_BME680),spi)
 	help
 	  Enable the use of Bosch BSEC library.
 	  This configuration depends on the BME680 Zephyr driver being disabled.
@@ -64,6 +65,11 @@ config BME68X_IAQ_SAMPLE_RATE_CONTINUOUS
 	  Sample data from BSEC every second.
 	  This is a particularly power-hungry sample mode that should only be considered for
 	  testing purposes.
+
+config BME68X_IAQ_SAMPLE_RATE_QUICK_ULTRA_LOW_POWER
+	bool "BSEC quick ultra low power mode"
+	help
+	  Sample Gas data every 300 seconds and Temperature, Pressure and Humidity every 3 seconds.
 
 endchoice # BME68X_IAQ_SAMPLE_RATE
 

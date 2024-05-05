@@ -6,8 +6,8 @@
 
 #pragma once
 
-#include "led_widget.h"
-#include "pwm_device.h"
+#include "pwm/pwm_device.h"
+#include "board/board.h"
 
 #include <app/clusters/window-covering-server/window-covering-server.h>
 
@@ -31,8 +31,8 @@ public:
 		return sInstance;
 	}
 
-	PWMDevice &GetLiftIndicator() { return mLiftIndicator; }
-	PWMDevice &GetTiltIndicator() { return mTiltIndicator; }
+	Nrf::PWMDevice &GetLiftIndicator() { return mLiftIndicator; }
+	Nrf::PWMDevice &GetTiltIndicator() { return mTiltIndicator; }
 
 	void StartMove(MoveType aMoveType);
 	void SetSingleStepTarget(OperationalState aDirection);
@@ -58,10 +58,8 @@ private:
 	static void DoPostAttributeChange(intptr_t aArg);
 
 	MoveType mCurrentUIMoveType;
-	LEDWidget mLiftLED;
-	LEDWidget mTiltLED;
-	PWMDevice mLiftIndicator;
-	PWMDevice mTiltIndicator;
+	Nrf::PWMDevice mLiftIndicator;
+	Nrf::PWMDevice mTiltIndicator;
 	bool mInLiftMove{ false };
 	bool mInTiltMove{ false };
 };

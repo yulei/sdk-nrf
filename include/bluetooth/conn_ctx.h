@@ -4,15 +4,15 @@
  * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
+#ifndef BT_CONN_CTX_H_
+#define BT_CONN_CTX_H_
+
 /**
  * @file
  * @defgroup bt_conn_ctx Bluetooth connection context library API
  * @{
  * @brief API for the Bluetooth connection context library.
  */
-
-#ifndef BT_CONN_CTX_H_
-#define BT_CONN_CTX_H_
 
 #include <zephyr/kernel.h>
 #include <zephyr/sys/__assert.h>
@@ -34,9 +34,9 @@ extern "C" {
 			  (_max_clients),                                      \
 			  CONFIG_BT_CONN_CTX_MEM_BUF_ALIGN);                   \
 	K_MUTEX_DEFINE(_name##_mutex);                                         \
-	static struct bt_conn_ctx_lib CONCAT(_name, _ctx_lib) =                \
+	static struct bt_conn_ctx_lib _CONCAT(_name, _ctx_lib) =                \
 	{                                                                      \
-		.mem_slab = &CONCAT(_name, _mem_slab),                         \
+		.mem_slab = &_CONCAT(_name, _mem_slab),                         \
 		.mutex = &_name##_mutex                                        \
 	}
 
@@ -71,7 +71,7 @@ struct bt_conn_ctx_lib {
  */
 static inline size_t bt_conn_ctx_block_size_get(struct bt_conn_ctx_lib *ctx_lib)
 {
-	return ctx_lib->mem_slab->block_size;
+	return ctx_lib->mem_slab->info.block_size;
 }
 
 /**

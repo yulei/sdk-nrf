@@ -64,20 +64,21 @@ See `Testing diagnostic module`_ section for an example.
 .. note::
     If you disable the :kconfig:option:`CONFIG_OPENTHREAD_NORDIC_LIBRARY_MASTER` feature set, you can enable the diagnostic module with the :kconfig:option:`CONFIG_OPENTHREAD_DIAG` Kconfig option.
 
-For the ``nrf52840dongle_nrf52840`` build target, diagnostic GPIO commands can also be used.
-They are enabled in the ``openthread_config`` node in the :file:`boards/nrf52840dongle_nrf52840.overlay` file, with the node configured for the **P0.19** pin, which is connected to the **RESET** pin on the nRF52840 Dongle.
-The pin is set in output mode with a low state so that the **RESET** pin is pulled to **GND**, which results in the device rebooting without skipping the bootloader.
+.. _ot_cli_sample_bootloader:
+
+Rebooting to bootloader
+=======================
+
+For the ``nrf52840dongle_nrf52840`` build target, the device can reboot to bootloader by triggering a GPIO pin.
+To enable this behavior, enable the :kconfig:option:`CONFIG_OPENTHREAD_PLATFORM_BOOTLOADER_MODE_GPIO` Kconfig option and configure the Devicetree overlay in the :file:`boards/nrf52840dongle_nrf52840.overlay` file.
+For this sample, the ``bootloader-gpios`` property in the ``openthread_config`` node is pre-configured for the **P0.19** pin, which is connected to the **RESET** pin on the nRF52840 Dongle.
 This functionality is not enabled by other commands, such as ``factoryreset``, as they can only trigger a software reset, skipping the bootloader.
 
-To reboot to the bootloader, run the following commands on the device:
+To reboot to the bootloader, run the following command on the device:
 
 .. code-block:: console
 
-   uart:~$ ot diag start
-   start diagnostics mode
-   status 0x00
-   Done
-   uart:~$ ot diag gpio mode 0 out
+   uart:~$ ot reset bootloader
 
 Configuration
 *************
@@ -86,28 +87,25 @@ Configuration
 
 .. _ot_cli_sample_activating_variants:
 
-Configuration files
-===================
+Snippets
+========
 
-The sample provides predefined configuration files for typical use cases, and to activate sample extensions.
-You can find the configuration files in the root directory of the sample.
+.. include:: /includes/sample_snippets.txt
 
-Specify the corresponding file names in the :makevar:`OVERLAY_CONFIG` option when building.
-See :ref:`cmake_options` for instructions on how to add this option.
-For more information about using configuration overlay files, see :ref:`zephyr:important-build-vars` in the Zephyr documentation.
+The following snippets are available:
 
-The following configuration files are available:
-
-* :file:`overlay-usb.conf` - Enables USB transport support.
-  Additionally, you need to set :makevar:`DTC_OVERLAY_FILE` to :file:`usb.overlay`.
-* :file:`overlay-logging.conf` - Enables logging using RTT.
+* ``usb`` - Enables USB transport support.
+* ``logging`` - Enables logging using RTT.
   For additional options, refer to :ref:`RTT logging <ug_logging_backends_rtt>`.
-* :file:`overlay-debug.conf` - Enables debugging the Thread sample with GDB thread awareness.
-* :file:`overlay-ci.conf` - Disables boot banner and shell prompt.
-* :file:`overlay-multiprotocol.conf` - Enables Bluetooth LE support in this sample.
-* :file:`overlay-tcp.conf` - Enables experimental TCP support in this sample.
-* :file:`overlay-low_power.conf` - Enables low power consumption mode in this sample.
-  Additionally, you need to set :makevar:`DTC_OVERLAY_FILE` to :file:`low_power.overlay`.
+* ``debug`` - Enables debugging the Thread sample with GDB thread awareness.
+* ``ci`` - Disables boot banner and shell prompt.
+* ``multiprotocol`` - Enables Bluetooth LE support in this sample.
+  Not compatible with the ``tcat`` snippet.
+* ``tcat`` - Enables support for Thread commissioning over authenticated TLS.
+  Not compatible with the ``multiprotocol`` snippet.
+  For using TCAT, refer to the :ref:`thread_tcat` page.
+* ``tcp`` - Enables experimental TCP support in this sample.
+* ``low_power`` - Enables low power consumption mode in this sample.
 
 FEM support
 ===========
@@ -126,7 +124,7 @@ Serial transport
 
 The Thread CLI sample supports UART and USB CDC ACM as serial transports.
 By default, it uses USB CDC ACM transport for ``nrf52840dongle_nrf52840``, and UART transport for other build targets.
-To switch to USB transport on targets that use UART by default, :ref:`activate the USB overlay extension <ot_cli_sample_activating_variants>`.
+To switch to USB transport on targets that use UART by default, :ref:`activate the USB snippet <ot_cli_sample_activating_variants>`.
 
 Building and running
 ********************
@@ -468,7 +466,7 @@ To test the Thread 1.2 and Thread 1.3 features, complete the following steps:
 
       .. code-block:: console
 
-         uart:~$ ot csl period 3125
+         uart:~$ ot csl period 500000
          Done
 
    #. Send an ICMPv6 Echo Request from the leader kit to the link-local address of the router kit:
@@ -542,7 +540,7 @@ Power consumption measurements
 
 You can use the Thread CLI sample to perform power consumption measurements for Sleepy End Devices.
 
-After building and flashing with :file:`overlay-low_power.conf` and :file:`low_power.overlay`, the device will start regular operation with the UART console enabled.
+After building and flashing with the ``low_power`` snippet, the device will start regular operation with the UART console enabled.
 This allows for easy configuration of the device, specifically the Sleepy End Device polling period or the Synchronized Sleepy End Device (SSED) CSL period and other relevant parameters.
 
 When the device becomes attached to a Thread Router it will automatically suspend UART operation and power down unused RAM.

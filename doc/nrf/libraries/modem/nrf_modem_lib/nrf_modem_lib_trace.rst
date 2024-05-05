@@ -31,11 +31,11 @@ Complete the following steps to configure the modem trace level at compile time:
    * :kconfig:option:`CONFIG_NRF_MODEM_LIB_TRACE_LEVEL_COREDUMP_ONLY`
 
 The application can use the :c:func:`nrf_modem_lib_trace_level_set` function to set the desired trace level.
-Passing ``NRF_MODEM_LIB_TRACE_LEVEL_OFF`` to the :c:func:`nrf_modem_lib_trace_level_set` function disables trace output.
+Passing :c:enumerator:`NRF_MODEM_LIB_TRACE_LEVEL_OFF` to the :c:func:`nrf_modem_lib_trace_level_set` function disables trace output.
 
 .. note::
    The modem stores the current trace level on passing the ``AT+CFUN=0`` command.
-   If the trace level stored in the modem is ``NRF_MODEM_LIB_TRACE_LEVEL_OFF``, the application must enable traces in the modem using the :c:func:`nrf_modem_lib_trace_level_set` function or by enabling any of the :ref:`aforementioned Kconfig options <trace_level_options>`.
+   If the trace level stored in the modem is :c:enumerator:`NRF_MODEM_LIB_TRACE_LEVEL_OFF`, the application must enable traces in the modem using the :c:func:`nrf_modem_lib_trace_level_set` function or by enabling any of the :ref:`aforementioned Kconfig options <trace_level_options>`.
 
 During tracing, the integration layer ensures that modem traces are always flushed before the Modem library is re-initialized (including when the modem has crashed).
 The application can synchronize with the flushing of modem traces by calling the :c:func:`nrf_modem_lib_trace_processing_done_wait` function.
@@ -48,18 +48,18 @@ However, it is expected that the modem will drop traces when the backend becomes
 
 To enable the measurement of the modem trace backend bitrate, enable the :kconfig:option:`CONFIG_NRF_MODEM_LIB_TRACE_BACKEND_BITRATE` Kconfig in your project configuration.
 After enabling this Kconfig option, the application can use the :c:func:`nrf_modem_lib_trace_backend_bitrate_get` function to retrieve the rolling average bitrate of the modem trace backend, measured over the period defined by the :kconfig:option:`CONFIG_NRF_MODEM_LIB_TRACE_BACKEND_BITRATE_PERIOD_MS` Kconfig option.
-To enable logging of the modem trace backend bitrate, enable the :kconfig:option:`CONFIG_NRF_MODEM_LIB_TRACE_BACKEND_BITRATE_LOG` Kconfig.
+To enable logging of the modem trace backend bitrate, enable the :kconfig:option:`CONFIG_NRF_MODEM_LIB_TRACE_BACKEND_BITRATE_LOG` Kconfig option.
 The logging happens at an interval set by the :kconfig:option:`CONFIG_NRF_MODEM_LIB_TRACE_BACKEND_BITRATE_LOG_PERIOD_MS` Kconfig option.
-If the difference in the values of the :kconfig:option:`CONFIG_NRF_MODEM_LIB_TRACE_BACKEND_BITRATE_PERIOD_MS` Kconfig option and the :kconfig:option:`CONFIG_NRF_MODEM_LIB_TRACE_BACKEND_BITRATE_LOG_PERIOD_MS` Kconfig option is very high, you can sometimes observe high variation in measurements due to the short period over which the rolling average is calculated.
+If the difference in the values of the :kconfig:option:`CONFIG_NRF_MODEM_LIB_TRACE_BACKEND_BITRATE_PERIOD_MS` and :kconfig:option:`CONFIG_NRF_MODEM_LIB_TRACE_BACKEND_BITRATE_LOG_PERIOD_MS` Kconfig options is very high, you can sometimes observe high variation in measurements due to the short period over which the rolling average is calculated.
 
-To enable logging of the modem trace bitrate, enable the :kconfig:option:`CONFIG_NRF_MODEM_LIB_TRACE_BITRATE_LOG` Kconfig.
+To enable logging of the modem trace bitrate, use the :kconfig:option:`CONFIG_NRF_MODEM_LIB_TRACE_BITRATE_LOG` Kconfig option.
 
 .. _modem_trace_flash_backend:
 
 Modem trace flash backend
 *************************
 
-The flash backend stores :ref:`modem traces <modem_trace_module>` to the external flash storage on the nRF9160 DK.
+The flash backend stores :ref:`modem traces <modem_trace_module>` to the external flash storage on the nRF91 Series DK.
 
 First, set up the :ref:`external flash <nrf9160_external_flash>` for your application.
 You can then set the following configuration options for the application to decide how to handle when the flash is full:
@@ -78,9 +78,11 @@ You can also increase heap and stack sizes when using the modem trace flash back
 
 The modem trace flash backend has some additional configuration options:
 
-* :kconfig:option:`CONFIG_FCB` - required for the flash circular buffer used in the backend.
-* :kconfig:option:`CONFIG_NRF_MODEM_LIB_TRACE_BACKEND_FLASH_PARTITION_SIZE` -  defines the space to be used for the modem trace partition.
-  The external flash size on the nRF9160 DK is 8 MB (equal to ``0x800000`` in HEX).
+* :kconfig:option:`CONFIG_FCB` - Required for the flash circular buffer used in the backend.
+* :kconfig:option:`CONFIG_NRF_MODEM_LIB_TRACE_BACKEND_FLASH_PARTITION_SIZE` - Defines the space to be used for the modem trace partition.
+  In order to improve the modem trace write performance, this partition is erased during system boot.
+  This might lead to a significant increase in the boot time on the nRF9160 DK.
+  The external flash size on the nRF9160 DK is 8 MB (equal to ``0x800000`` in HEX) and 32 MB on the nRF9161 DK (equal to ``0x2000000`` in HEX).
 
 It is also recommended to enable high drive mode and high-performance mode in devicetree.
 High drive is to ensure that the communication with the flash device is reliable at high speed.
@@ -89,7 +91,7 @@ See the :ref:`external flash <nrf9160_external_flash>` documentation for more de
 The trace backend needs to handle trace data at ~1 Mbps to avoid filling up the buffer in the modem.
 If the modem buffer is full, the modem drops modem traces until the buffer has space available again.
 
-.. _modem_trace_backend_uart_nrf9160dk:
+.. _modem_trace_backend_uart_nrf91dk:
 
 .. modem_lib_sending_traces_UART_start
 
@@ -100,6 +102,9 @@ To send modem traces over UART on an nRF91 Series DK, configuration must be adde
 This is done by adding the :ref:`modem trace UART snippet <nrf91_modem_trace_uart_snippet>` when building and programming.
 
 Use the `Cellular Monitor`_ app for capturing and analyzing modem traces.
+
+TF-M logging must use the same UART as the application.
+For more details, see :ref:`shared TF-M logging <tfm_enable_share_uart>`.
 
 .. modem_lib_sending_traces_UART_end
 
@@ -170,7 +175,7 @@ To enable modem traces with RTT, enable the :kconfig:option:`CONFIG_NRF_MODEM_LI
 
 The traces can be captured using the J-Link RTT logger software.
 This produces a RAW binary trace file with a ``.log`` extension.
-The RAW binary trace file can be converted to PCAP with the :guilabel:`Convert RAW trace to PCAP` option in the Trace Collector V2 preview application of `nRF Connect for Desktop`_.
+The RAW binary trace file can be converted to PCAP with the :guilabel:`Open trace file in Wireshark` option in the `Cellular Monitor`_ app of `nRF Connect for Desktop`_.
 By default, files with the ``.log`` extension are not shown.
 
 .. _adding_custom_modem_trace_backends:
@@ -181,14 +186,14 @@ Adding custom trace backends
 You can add custom trace backends if the existing trace backends are not sufficient.
 At any time, only one trace backend can be compiled with the application.
 The value of the :kconfig:option:`CONFIG_NRF_MODEM_LIB_TRACE_BACKEND` Kconfig option determines which trace backend is compiled.
-The :ref:`modem_trace_backend_sample` sample demonstrates how a custom trace backend can be added to an application.
+The :ref:`modem_trace_backend_sample` sample demonstrates how you can add a custom trace backend to an application.
 
 Complete the following steps to add a custom trace backend:
 
 1. Place the files that have the custom trace backend implementation in a library or an application you create.
    For example, the implementation of the UART trace backend (default) can be found in the :file:`nrf/lib/nrf_modem_lib/trace_backends/uart/uart.c` file.
 
-#. Add a C file implementing the interface in :file:`nrf/include/modem/trace_backend.h` header file.
+#. Add a C file implementing the interface in the :file:`nrf/include/modem/trace_backend.h` header file.
 
    .. code-block:: c
 
@@ -271,7 +276,7 @@ Complete the following steps to add a custom trace backend:
          .resume = trace_backend_resume, /* Set to NULL if not applicable. */
       };
 
-#. Create or modify a :file:`Kconfig` file to extend the choice :kconfig:option:`NRF_MODEM_LIB_TRACE_BACKEND` with another option.
+#. Create or modify a :file:`Kconfig` file to extend the choice :kconfig:option:`CONFIG_NRF_MODEM_LIB_TRACE_BACKEND` with another option.
 
    .. code-block:: Kconfig
 
@@ -313,3 +318,45 @@ Complete the following steps to add a custom trace backend:
 
       CONFIG_NRF_MODEM_LIB_TRACE=y
       CONFIG_NRF_MODEM_LIB_TRACE_BACKEND_MY_TRACE_BACKEND=y
+
+.. _modem_trace_shell_command:
+
+Modem trace shell command
+*************************
+
+Shell command: ``modem_trace``
+
+You can use the modem trace commands to control the trace functionality in the modem when the :kconfig:option:`CONFIG_NRF_MODEM_LIB_SHELL_TRACE` Kconfig option is enabled.
+A trace backend that can store modem traces is required to send modem traces to the cloud.
+The ``modem_trace dump_uart`` command is a simple demonstration of how trace data can be read out from storage using the :c:func:`nrf_modem_lib_trace_read` function.
+
+Be aware that the default trace level is :kconfig:option:`CONFIG_NRF_MODEM_LIB_TRACE_LEVEL_FULL` and starts modem traces during system boot automatically.
+In case you want to start modem tracing using shell commands instead, set the :kconfig:option:`CONFIG_NRF_MODEM_LIB_TRACE_LEVEL_OFF` Kconfig option to ``y``.
+
+Following are some examples of modem tracing:
+
+* To trace everything (LTE, IP, and GNSS):
+
+  .. code-block:: console
+
+     modem_trace start full
+     <use the modem by triggering functionality in the app or use at-commands>
+     modem_trace stop
+
+* To read out the size of stored modem traces:
+
+  .. code-block:: console
+
+     modem_trace size
+
+* To read out stored traces and send over UART:
+
+  .. code-block:: console
+
+      modem_trace dump_uart
+
+* To delete all stored modem traces:
+
+  .. code-block:: console
+
+     modem_trace clear

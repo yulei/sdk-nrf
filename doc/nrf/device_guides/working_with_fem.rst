@@ -40,7 +40,7 @@ The MPSL library provides the following GPIO interface implementations:
 
 * :ref:`ug_radio_fem_nrf21540_spi_gpio` - For the nRF21540 GPIO+SPI implementation that uses a 3-pin interface and an SPI interface with the nRF21540.
 * :ref:`ug_radio_fem_nrf21540_gpio` - For the nRF21540 GPIO implementation that uses a 3-pin interface with the nRF21540.
-* :ref:`ug_radio_fem_skyworks` - For the Simple GPIO implementation that uses a 2-pin interface with the SKY66112-11 device.
+* :ref:`ug_radio_fem_skyworks` - For the implementation that uses a 2-pin interface with the SKY66112-11 device and other compatible front-end modules.
 
 To use these implementations, your application must use a protocol driver that enables the FEM feature.
 
@@ -304,7 +304,7 @@ To use nRF21540 in GPIO mode, complete the following steps:
 
    *  ``multiprotocol_rpmsg`` for multiprotocol applications having support for both 802.15.4 and Bluetooth.
    *  ``802154_rpmsg`` for applications having support for 802.15.4, but not for Bluetooth.
-   *  ``hci_rpmsg`` for application having support for Bluetooth, but not for 802.15.4.
+   *  ``hci_ipc`` for application having support for Bluetooth, but not for 802.15.4.
 
    .. note::
        This step is not needed when testing with :ref:`direct_test_mode` and :ref:`radio_test` on the nRF53 Series devices.
@@ -437,8 +437,8 @@ The following properties are optional and you can add them to the devicetree nod
 
 .. _ug_radio_fem_skyworks:
 
-Adding support for Skyworks front-end module
-============================================
+Adding support for front-end modules using Simple GPIO interface
+================================================================
 
 You can use the Skyworks range extenders with nRF52 and nRF53 Series devices.
 SKY66112-11 is one of many FEM devices that support the 2-pin PA/LNA interface.
@@ -556,7 +556,7 @@ Shields are add-ons that you can attach to the development kit to extend its fea
 nRF21540 EK
 -----------
 
-The nRF21540 EK (Evaluation Kit) is an RF front-end module (FEM) for Bluetooth Low Energy, Bluetooth mesh, 2.4 GHz proprietary, Thread, and Zigbee range extension.
+The nRF21540 EK (Evaluation Kit) is an RF front-end module (FEM) for Bluetooth Low Energy, Bluetooth Mesh, 2.4 GHz proprietary, Thread, and Zigbee range extension.
 When combined with an nRF52 or nRF53 Series SoC, the nRF21540 RF FEM’s +21 dBm TX output power and 13 dB RX gain ensure a superior link budget for up to 16x range extension.
 
 Overview
@@ -628,14 +628,14 @@ For example:
 .. parsed-literal::
    :class: highlight
 
-   west build -b nrf5340dk_nrf5340_cpuapp -- -DSHIELD=nrf21540ek_fwd -Dmultiprotocol_rpmsg_SHIELD=nrf21540ek
+   west build -b nrf5340dk/nrf5340/cpuapp -- -DSHIELD=nrf21540ek_fwd -Dmultiprotocol_rpmsg_SHIELD=nrf21540ek
 
 In this command, the *childImageName_* parameter has the ``multiprotocol_rpmsg_`` value and builds a multiprotocol application with support for 802.15.4 and Bluetooth.
 The *childImageName_* parameter can take the following values:
 
 *  ``multiprotocol_rpmsg_`` for multiprotocol applications with support for 802.15.4 and Bluetooth
 *  ``802154_rpmsg_`` for applications with support for 802.15.4, but without support for Bluetooth
-*  ``hci_rpmsg_`` for application with support for Bluetooth, but without support for 802.15.4
+*  ``hci_ipc_`` for application with support for Bluetooth, but without support for 802.15.4
 
 References
 ^^^^^^^^^^

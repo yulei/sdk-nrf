@@ -7,6 +7,7 @@
 #include "nrf_cloud_transport.h"
 #include "nrf_cloud_mem.h"
 #include "nrf_cloud_client_id.h"
+#include "nrf_cloud_credentials.h"
 #if defined(CONFIG_NRF_CLOUD_FOTA)
 #include "nrf_cloud_fota.h"
 #endif
@@ -29,13 +30,6 @@
 
 LOG_MODULE_REGISTER(nrf_cloud_transport, CONFIG_NRF_CLOUD_LOG_LEVEL);
 
-#if defined(CONFIG_NRF_CLOUD_PROVISION_CERTIFICATES)
-#include CONFIG_NRF_CLOUD_CERTIFICATES_FILE
-#if defined(CONFIG_MODEM_KEY_MGMT)
-#include <modem/modem_key_mgmt.h>
-#endif
-#endif /* defined(CONFIG_NRF_CLOUD_PROVISION_CERTIFICATES) */
-
 #if defined(CONFIG_NRF_CLOUD_CLIENT_ID_SRC_COMPILE_TIME)
 BUILD_ASSERT((sizeof(CONFIG_NRF_CLOUD_CLIENT_ID) - 1) <= NRF_CLOUD_CLIENT_ID_MAX_LEN,
 	"CONFIG_NRF_CLOUD_CLIENT_ID must not exceed NRF_CLOUD_CLIENT_ID_MAX_LEN");
@@ -56,7 +50,7 @@ BUILD_ASSERT((sizeof(CONFIG_NRF_CLOUD_CLIENT_ID) - 1) <= NRF_CLOUD_CLIENT_ID_MAX
  * topic ("$aws/things/<deviceId>/shadow/get/accepted").
  * Messages on the AWS topic contain the entire shadow, including metadata and
  * they can become too large for the modem to handle.
- * Messages on the topic below are published by nRF Connect for Cloud and
+ * Messages on the topic below are published by nRF Cloud and
  * contain only a part of the original message so it can be received by the
  * device.
  */
@@ -119,15 +113,19 @@ static struct nct {
 } nct;
 
 #define CC_RX_LIST_CNT 3
+static uint32_t const nct_cc_rx_opcode_map[CC_RX_LIST_CNT] = {
+	NCT_CC_OPCODE_UPDATE_ACCEPTED,
+	NCT_CC_OPCODE_UPDATE_REJECTED,
+	NCT_CC_OPCODE_UPDATE_DELTA
+};
 static struct mqtt_topic nct_cc_rx_list[CC_RX_LIST_CNT];
+
+BUILD_ASSERT(ARRAY_SIZE(nct_cc_rx_opcode_map) == ARRAY_SIZE(nct_cc_rx_list),
+	"nct_cc_rx_opcode_map should be the same size as nct_cc_rx_list");
+
 #define CC_TX_LIST_CNT 2
 static struct mqtt_topic nct_cc_tx_list[CC_TX_LIST_CNT];
 
-static uint32_t const nct_cc_rx_opcode_map[] = {
-	NCT_CC_OPCODE_UPDATE_REQ,
-	NCT_CC_OPCODE_UPDATE_REJECT_RSP,
-	NCT_CC_OPCODE_UPDATE_ACCEPT_RSP
-};
 
 /* Internal routine to reset data endpoint information. */
 static void dc_endpoint_reset(void)
@@ -179,7 +177,6 @@ static uint16_t get_message_id(const uint16_t requested_id)
  */
 static void dc_endpoint_free(void)
 {
-
 	nrf_cloud_free((void *)nct.dc_rx_endp.utf8);
 	nrf_cloud_free((void *)nct.dc_tx_endp.utf8);
 	nrf_cloud_free((void *)nct.dc_m_endp.utf8);
@@ -232,32 +229,25 @@ static bool strings_compare(const char *s1, const char *s2, uint32_t s1_len,
 	return (strncmp(s1, s2, MIN(s1_len, s2_len))) ? false : true;
 }
 
-/* Verify if the topic is a control channel topic or not. */
-static bool control_channel_topic_match(uint32_t list_id,
-					const struct mqtt_topic *topic,
-					enum nct_cc_opcode *opcode)
+/* Verify if the RX topic is a control channel topic or not. */
+static bool nrf_cloud_cc_rx_topic_decode(const struct mqtt_topic *topic, enum nct_cc_opcode *opcode)
 {
-	struct mqtt_topic *topic_list;
-	uint32_t list_size;
+	const uint32_t list_size = ARRAY_SIZE(nct_cc_rx_list);
+	const char *const topic_str = topic->topic.utf8;
+	const uint32_t topic_sz = topic->topic.size;
 
-	if (list_id == NCT_RX_LIST) {
-		topic_list = (struct mqtt_topic *)nct_cc_rx_list;
-		list_size = ARRAY_SIZE(nct_cc_rx_list);
-	} else if (list_id == NCT_TX_LIST) {
-		topic_list = (struct mqtt_topic *)nct_cc_tx_list;
-		list_size = ARRAY_SIZE(nct_cc_tx_list);
-	} else {
-		return false;
-	}
+	for (uint32_t index = 0; index < list_size; ++index) {
+		const char *list_topic = (const char *)nct_cc_rx_list[index].topic.utf8;
+		uint32_t list_topic_sz = nct_cc_rx_list[index].topic.size;
 
-	for (uint32_t index = 0; index < list_size; index++) {
-		if (strings_compare(
-			    topic->topic.utf8, topic_list[index].topic.utf8,
-			    topic->topic.size, topic_list[index].topic.size)) {
+		/* Compare incoming topic with the entry in the RX topic list */
+		if (strings_compare(topic_str, list_topic, topic_sz, list_topic_sz)) {
 			*opcode = nct_cc_rx_opcode_map[index];
 			return true;
 		}
 	}
+
+	/* Not a control channel topic */
 	return false;
 }
 
@@ -423,18 +413,31 @@ static void nct_reset_topics(void)
 
 static void nct_topic_lists_populate(void)
 {
-	/* Add RX topics */
-	nct_cc_rx_list[0].qos = MQTT_QOS_1_AT_LEAST_ONCE;
-	nct_cc_rx_list[0].topic.utf8 = accepted_topic;
-	nct_cc_rx_list[0].topic.size = strlen(accepted_topic);
+	/* Add RX topics, aligning with opcode list */
+	for (int idx = 0; idx < CC_RX_LIST_CNT; ++idx) {
+		if (nct_cc_rx_opcode_map[idx] == NCT_CC_OPCODE_UPDATE_ACCEPTED) {
+			nct_cc_rx_list[idx].qos = MQTT_QOS_1_AT_LEAST_ONCE;
+			nct_cc_rx_list[idx].topic.utf8 = accepted_topic;
+			nct_cc_rx_list[idx].topic.size = strlen(accepted_topic);
+			continue;
+		}
 
-	nct_cc_rx_list[1].qos = MQTT_QOS_1_AT_LEAST_ONCE;
-	nct_cc_rx_list[1].topic.utf8 = rejected_topic;
-	nct_cc_rx_list[1].topic.size = strlen(rejected_topic);
+		if (nct_cc_rx_opcode_map[idx] == NCT_CC_OPCODE_UPDATE_REJECTED) {
+			nct_cc_rx_list[idx].qos = MQTT_QOS_1_AT_LEAST_ONCE;
+			nct_cc_rx_list[idx].topic.utf8 = rejected_topic;
+			nct_cc_rx_list[idx].topic.size = strlen(rejected_topic);
+			continue;
+		}
 
-	nct_cc_rx_list[2].qos = MQTT_QOS_1_AT_LEAST_ONCE;
-	nct_cc_rx_list[2].topic.utf8 = update_delta_topic;
-	nct_cc_rx_list[2].topic.size = strlen(update_delta_topic);
+		if (nct_cc_rx_opcode_map[idx] == NCT_CC_OPCODE_UPDATE_DELTA) {
+			nct_cc_rx_list[idx].qos = MQTT_QOS_1_AT_LEAST_ONCE;
+			nct_cc_rx_list[idx].topic.utf8 = update_delta_topic;
+			nct_cc_rx_list[idx].topic.size = strlen(update_delta_topic);
+			continue;
+		}
+
+		__ASSERT(false, "Op code not added to RX list");
+	}
 
 	/* Add TX topics */
 	nct_cc_tx_list[0].qos = MQTT_QOS_1_AT_LEAST_ONCE;
@@ -498,6 +501,7 @@ err_cleanup:
 static int nct_provision(void)
 {
 	static sec_tag_t sec_tag_list[] = { CONFIG_NRF_CLOUD_SEC_TAG };
+	int err = 0;
 
 	nct.tls_config.peer_verify = 2;
 	nct.tls_config.cipher_count = 0;
@@ -507,91 +511,14 @@ static int nct_provision(void)
 	nct.tls_config.hostname = NRF_CLOUD_HOSTNAME;
 
 #if defined(CONFIG_NRF_CLOUD_PROVISION_CERTIFICATES)
-	LOG_WRN("CONFIG_NRF_CLOUD_PROVISION_CERTIFICATES is not secure and should be used only for "
-		"testing purposes");
+		err = nrf_cloud_credentials_provision();
 
-#if defined(CONFIG_NRF_MODEM_LIB)
-	{
-		int err;
-
-		/* Delete certificates */
-		nrf_sec_tag_t sec_tag = CONFIG_NRF_CLOUD_SEC_TAG;
-
-		for (enum modem_key_mgmt_cred_type type = 0; type < 5;
-		     type++) {
-			err = modem_key_mgmt_delete(sec_tag, type);
-			LOG_DBG("modem_key_mgmt_delete(%u, %d) => result = %d",
-				sec_tag, type, err);
-		}
-
-		/* Provision CA Certificate. */
-		err = modem_key_mgmt_write(CONFIG_NRF_CLOUD_SEC_TAG,
-					   MODEM_KEY_MGMT_CRED_TYPE_CA_CHAIN,
-					   ca_certificate,
-					   strlen(ca_certificate));
 		if (err) {
-			LOG_ERR("ca_certificate err: %d", err);
 			return err;
 		}
+#endif
 
-		/* Provision Private Certificate. */
-		err = modem_key_mgmt_write(
-			CONFIG_NRF_CLOUD_SEC_TAG,
-			MODEM_KEY_MGMT_CRED_TYPE_PRIVATE_CERT,
-			private_key,
-			strlen(private_key));
-		if (err) {
-			LOG_ERR("private_key err: %d", err);
-			return err;
-		}
-
-		/* Provision Public Certificate. */
-		err = modem_key_mgmt_write(
-			CONFIG_NRF_CLOUD_SEC_TAG,
-			MODEM_KEY_MGMT_CRED_TYPE_PUBLIC_CERT,
-			device_certificate,
-			strlen(device_certificate));
-		if (err) {
-			LOG_ERR("device_certificate err: %d",
-				err);
-			return err;
-		}
-	}
-#else
-	{
-		int err;
-
-		err = tls_credential_add(CONFIG_NRF_CLOUD_SEC_TAG,
-					 TLS_CREDENTIAL_CA_CERTIFICATE,
-					 ca_certificate,
-					 sizeof(ca_certificate));
-		if (err < 0) {
-			LOG_ERR("Failed to register ca certificate: %d", err);
-			return err;
-		}
-		err = tls_credential_add(CONFIG_NRF_CLOUD_SEC_TAG,
-					 TLS_CREDENTIAL_PRIVATE_KEY,
-					 private_key,
-					 sizeof(private_key));
-		if (err < 0) {
-			LOG_ERR("Failed to register private key: %d", err);
-			return err;
-		}
-		err = tls_credential_add(
-			CONFIG_NRF_CLOUD_SEC_TAG,
-			TLS_CREDENTIAL_SERVER_CERTIFICATE,
-			device_certificate,
-			sizeof(device_certificate));
-		if (err < 0) {
-			LOG_ERR("Failed to register public certificate: %d",
-				err);
-			return err;
-		}
-	}
-#endif /* defined(CONFIG_NRF_MODEM_LIB) */
-#endif /* defined(CONFIG_NRF_CLOUD_PROVISION_CERTIFICATES) */
-
-	return 0;
+	return err;
 }
 
 static int nct_settings_set(const char *key, size_t len_rd,
@@ -703,6 +630,10 @@ static void nrf_cloud_fota_cb_handler(const struct nrf_cloud_fota_evt
 	}
 	case NRF_CLOUD_FOTA_EVT_ERASE_PENDING: {
 		LOG_DBG("NRF_CLOUD_FOTA_EVT_ERASE_PENDING");
+		break;
+	}
+	case NRF_CLOUD_FOTA_EVT_ERASE_TIMEOUT: {
+		LOG_DBG("NRF_CLOUD_FOTA_EVT_ERASE_TIMEOUT");
 		break;
 	}
 	case NRF_CLOUD_FOTA_EVT_ERASE_DONE: {
@@ -910,11 +841,8 @@ static void nct_mqtt_evt_handler(struct mqtt_client *const mqtt_client,
 			break;
 		}
 
-		/* If the data arrives on one of the subscribed control channel
-		 * topic. Then we notify the same.
-		 */
-		if (control_channel_topic_match(NCT_RX_LIST, &p->message.topic,
-						&cc.opcode)) {
+		/* Determine if this is a control channel or data channel topic event */
+		if (nrf_cloud_cc_rx_topic_decode(&p->message.topic, &cc.opcode)) {
 			cc.message_id = p->message_id;
 			cc.data.ptr = nct.payload_buf;
 			cc.data.len = p->message.payload.len;
@@ -1021,7 +949,7 @@ static void nct_mqtt_evt_handler(struct mqtt_client *const mqtt_client,
 	}
 }
 
-int nct_init(const char * const client_id)
+int nct_initialize(const char * const client_id)
 {
 	int err;
 

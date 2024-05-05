@@ -20,11 +20,10 @@
 #include "icmp_ping_shell.h"
 
 static const char icmp_ping_shell_cmd_usage_str[] =
-	"Usage: ping [optional options] -d destination\n"
+	"Usage: ping [options] -d destination\n"
 	"\n"
-	"mandatory options:\n"
 	"  -d, --destination, [str] Name or IP address\n"
-	"optional options:\n"
+	"Options:\n"
 	"  -t, --timeout, [int]     Ping timeout in milliseconds\n"
 	"  -c, --count, [int]       The number of times to send the ping request\n"
 	"  -i, --interval, [int]    Interval between successive packet transmissions\n"
@@ -35,9 +34,9 @@ static const char icmp_ping_shell_cmd_usage_str[] =
 	"  -6, --ipv6,              Force IPv6 usage with the dual stack interfaces\n"
 	"  -r, --rai                Set RAI options for ping socket. In order to use RAI,\n"
 	"                           it must be enabled with 'link rai' command.\n"
-	"  -h, --help,              Shows this help information\n";
+	"  -h, --help,              Shows this help information";
 
-/* Specifying the expected options (both long and short): */
+/* Specifying the expected options (both long and short) */
 static struct option long_options[] = {
 	{ "destination", required_argument, 0, 'd' },
 	{ "timeout", required_argument, 0, 't' },
@@ -56,9 +55,7 @@ static void icmp_ping_shell_usage_print(void)
 	mosh_print_no_format(icmp_ping_shell_cmd_usage_str);
 }
 
-/*****************************************************************************/
-
-int icmp_ping_shell(const struct shell *shell, size_t argc, char **argv)
+static int icmp_ping_shell(const struct shell *shell, size_t argc, char **argv)
 {
 	return icmp_ping_shell_th(shell, argc, argv, NULL, 0, NULL);
 }
@@ -67,7 +64,11 @@ int icmp_ping_shell_th(const struct shell *shell, size_t argc, char **argv,
 	char *print_buf, int print_buf_len, struct k_poll_signal *kill_signal)
 {
 	struct icmp_ping_shell_cmd_argv ping_args;
-	int flag, dest_len;
+	int dest_len;
+
+	if (argc < 2) {
+		goto show_usage;
+	}
 
 	icmp_ping_cmd_defaults_set(&ping_args);
 
@@ -79,19 +80,17 @@ int icmp_ping_shell_th(const struct shell *shell, size_t argc, char **argv,
 		ping_args.kill_signal = kill_signal;
 	}
 #endif
-	if (argc < 3) {
-		goto show_usage;
-	}
 
-	/* Start from the 1st argument */
+	optreset = 1;
 	optind = 1;
+	int opt;
 
-	while ((flag = getopt_long(argc, argv, "d:t:c:i:I:l:h6r", long_options, NULL)) != -1) {
+	while ((opt = getopt_long(argc, argv, "d:t:c:i:I:l:h6r", long_options, NULL)) != -1) {
 
-		switch (flag) {
+		switch (opt) {
 		case 'd': /* destination */
 			dest_len = strlen(optarg);
-			if (dest_len > ICMP_MAX_URL) {
+			if (dest_len > ICMP_MAX_ADDR) {
 				ping_error(&ping_args, "too long destination name");
 				goto show_usage;
 			}
@@ -165,13 +164,22 @@ int icmp_ping_shell_th(const struct shell *shell, size_t argc, char **argv,
 			}
 			break;
 			}
-		case 'h': /* help */
+
+		case 'h':
+			goto show_usage;
+		case '?':
 		default:
+			mosh_error("Unknown option (%s). See usage:", argv[optind - 1]);
 			goto show_usage;
 		}
 	}
 
-	/* Check that all mandatory args were given: */
+	if (optind < argc) {
+		mosh_error("Arguments without '-' not supported: %s", argv[argc - 1]);
+		goto show_usage;
+	}
+
+	/* Check that all mandatory args were given */
 	if (strlen(ping_args.target_name) == 0) {
 		ping_error(&ping_args, "-d destination, MUST be given. See usage:");
 		goto show_usage;
@@ -183,3 +191,5 @@ show_usage:
 	icmp_ping_shell_usage_print();
 	return -1;
 }
+
+SHELL_CMD_REGISTER(ping, NULL, "For ping usage, just type \"ping\"", icmp_ping_shell);

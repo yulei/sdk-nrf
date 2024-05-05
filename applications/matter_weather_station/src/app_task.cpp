@@ -8,45 +8,33 @@
 
 #include "battery.h"
 #include "buzzer.h"
-#include "fabric_table_delegate.h"
-#include "led_widget.h"
-#include <platform/CHIPDeviceLayer.h>
 
-#include <DeviceInfoProviderImpl.h>
+#include "app/matter_init.h"
+#include "app/task_executor.h"
+#include "board/board.h"
+#include "board/led_widget.h"
+
+#ifdef CONFIG_CHIP_OTA_REQUESTOR
+#include "dfu/ota/ota_util.h"
+#endif
+
+#ifdef CONFIG_MCUMGR_TRANSPORT_BT
+#include "dfu/smp/dfu_over_smp.h"
+#endif
 
 #include <app-common/zap-generated/attributes/Accessors.h>
 #include <app-common/zap-generated/cluster-objects.h>
-#include <app/clusters/ota-requestor/OTATestEventTriggerDelegate.h>
 #include <app/server/OnboardingCodesUtil.h>
 #include <app/server/Server.h>
-#include <app/util/attribute-storage.h>
-#include <credentials/DeviceAttestationCredsProvider.h>
-#include <credentials/examples/DeviceAttestationCredsExample.h>
 
-#ifdef CONFIG_CHIP_WIFI
-#include <app/clusters/network-commissioning/network-commissioning.h>
-#include <platform/nrfconnect/wifi/NrfWiFiDriver.h>
-#endif
-
-#ifdef CONFIG_CHIP_OTA_REQUESTOR
-#include "ota_util.h"
-#endif
-
-#ifdef CONFIG_CHIP_ICD_SUBSCRIPTION_HANDLING
-#include <app/InteractionModelEngine.h>
-#endif
-
-#include <dk_buttons_and_leds.h>
 #include <zephyr/drivers/sensor.h>
-#include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 
+LOG_MODULE_DECLARE(app);
+
 using namespace ::chip;
-using namespace ::chip::Credentials;
 using namespace ::chip::DeviceLayer;
 using namespace ::chip::app;
-
-LOG_MODULE_DECLARE(app);
 
 namespace
 {
@@ -57,9 +45,6 @@ enum class LedState { kAlive, kAdvertisingBle, kConnectedBle, kProvisioned };
 #error Invalid CONFIG_AVERAGE_CURRENT_CONSUMPTION value set
 #endif
 
-constexpr size_t kAppEventQueueSize = 10;
-constexpr size_t kFactoryResetTriggerTimeoutMs = 3000;
-constexpr size_t kFactoryResetCompleteTimeoutMs = 3000;
 constexpr size_t kMeasurementsIntervalMs = 3000;
 constexpr uint8_t kTemperatureMeasurementEndpointId = 1;
 constexpr int16_t kTemperatureMeasurementAttributeMaxValue = 0x7fff;
@@ -90,327 +75,30 @@ constexpr uint32_t kFullBatteryOperationTime = kBatteryCapacityUaH / kDeviceAver
 /* It is recommended to toggle the signalled state with 0.5 s interval. */
 constexpr size_t kIdentifyTimerIntervalMs = 500;
 
-K_MSGQ_DEFINE(sAppEventQueue, sizeof(AppEvent), kAppEventQueueSize, alignof(AppEvent));
-k_timer sFunctionTimer;
 k_timer sMeasurementsTimer;
 k_timer sIdentifyTimer;
-FunctionTimerMode sFunctionTimerMode = FunctionTimerMode::kDisabled;
 
-LEDWidget sRedLED;
-LEDWidget sGreenLED;
-LEDWidget sBlueLED;
-
-bool sIsNetworkProvisioned;
-bool sIsNetworkEnabled;
-bool sIsBleAdvertisingEnabled;
-bool sHaveBLEConnections;
-
-/* NOTE! This key is for test/certification only and should not be available in production devices!
- * If CONFIG_CHIP_FACTORY_DATA is enabled, this value is read from the factory data.
- */
-uint8_t sTestEventTriggerEnableKey[TestEventTriggerDelegate::kEnableKeyLength] = { 0x00, 0x11, 0x22, 0x33, 0x44, 0x55,
-										   0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb,
-										   0xcc, 0xdd, 0xee, 0xff };
-chip::DeviceLayer::DeviceInfoProviderImpl gExampleDeviceInfoProvider;
-LedState sLedState = LedState::kAlive;
+const device *sBme688SensorDev = DEVICE_DT_GET_ONE(bosch_bme680);
 
 /* Add identify for all endpoints */
 Identify sIdentifyTemperature = { chip::EndpointId{ kTemperatureMeasurementEndpointId }, AppTask::OnIdentifyStart,
-				  AppTask::OnIdentifyStop, EMBER_ZCL_IDENTIFY_IDENTIFY_TYPE_AUDIBLE_BEEP };
+				  AppTask::OnIdentifyStop, Clusters::Identify::IdentifyTypeEnum::kAudibleBeep };
 Identify sIdentifyHumidity = { chip::EndpointId{ kHumidityMeasurementEndpointId }, AppTask::OnIdentifyStart,
-			       AppTask::OnIdentifyStop, EMBER_ZCL_IDENTIFY_IDENTIFY_TYPE_AUDIBLE_BEEP };
+			       AppTask::OnIdentifyStop, Clusters::Identify::IdentifyTypeEnum::kAudibleBeep };
 Identify sIdentifyPressure = { chip::EndpointId{ kPressureMeasurementEndpointId }, AppTask::OnIdentifyStart,
-			       AppTask::OnIdentifyStop, EMBER_ZCL_IDENTIFY_IDENTIFY_TYPE_AUDIBLE_BEEP };
+			       AppTask::OnIdentifyStop, Clusters::Identify::IdentifyTypeEnum::kAudibleBeep };
 
-const device *sBme688SensorDev = DEVICE_DT_GET_ONE(bosch_bme680);
 } /* namespace */
-
-AppTask AppTask::sAppTask;
-
-#ifdef CONFIG_CHIP_WIFI
-app::Clusters::NetworkCommissioning::Instance
-	sWiFiCommissioningInstance(0, &(NetworkCommissioning::NrfWiFiDriver::Instance()));
-#endif
-
-CHIP_ERROR AppTask::Init()
-{
-	/* Initialize CHIP stack */
-	LOG_INF("Init CHIP stack");
-
-	CHIP_ERROR err = chip::Platform::MemoryInit();
-	if (err != CHIP_NO_ERROR) {
-		LOG_ERR("Platform::MemoryInit() failed");
-		return err;
-	}
-
-	err = PlatformMgr().InitChipStack();
-	if (err != CHIP_NO_ERROR) {
-		LOG_ERR("PlatformMgr().InitChipStack() failed");
-		return err;
-	}
-
-#if defined(CONFIG_NET_L2_OPENTHREAD)
-	err = ThreadStackMgr().InitThreadStack();
-	if (err != CHIP_NO_ERROR) {
-		LOG_ERR("ThreadStackMgr().InitThreadStack() failed");
-		return err;
-	}
-
-#ifdef CONFIG_OPENTHREAD_MTD_SED
-	err = ConnectivityMgr().SetThreadDeviceType(ConnectivityManager::kThreadDeviceType_SleepyEndDevice);
-#else
-	err = ConnectivityMgr().SetThreadDeviceType(ConnectivityManager::kThreadDeviceType_MinimalEndDevice);
-#endif
-	if (err != CHIP_NO_ERROR) {
-		LOG_ERR("ConnectivityMgr().SetThreadDeviceType() failed");
-		return err;
-	}
-
-#elif defined(CONFIG_CHIP_WIFI)
-	sWiFiCommissioningInstance.Init();
-#else
-	return CHIP_ERROR_INTERNAL;
-#endif /* CONFIG_NET_L2_OPENTHREAD */
-
-	/* Initialize RGB LED */
-	LEDWidget::InitGpio();
-	LEDWidget::SetStateUpdateCallback(LEDStateUpdateHandler);
-
-	sRedLED.Init(DK_LED1);
-	sGreenLED.Init(DK_LED2);
-	sBlueLED.Init(DK_LED3);
-
-	UpdateStatusLED();
-
-	/* Initialize buttons */
-	int ret = dk_buttons_init(ButtonStateHandler);
-	if (ret) {
-		LOG_ERR("dk_buttons_init() failed");
-		return chip::System::MapErrorZephyr(ret);
-	}
-
-	if (!device_is_ready(sBme688SensorDev)) {
-		LOG_ERR("BME688 sensor device not ready");
-		return chip::System::MapErrorZephyr(-ENODEV);
-	}
-
-	ret = BatteryMeasurementInit();
-	if (ret) {
-		LOG_ERR("Battery measurement init failed");
-		return chip::System::MapErrorZephyr(ret);
-	}
-
-	ret = BatteryMeasurementEnable();
-	if (ret) {
-		LOG_ERR("Enabling battery measurement failed");
-		return chip::System::MapErrorZephyr(ret);
-	}
-
-	ret = BatteryChargeControlInit();
-	if (ret) {
-		LOG_ERR("Battery charge control init failed");
-		return chip::System::MapErrorZephyr(ret);
-	}
-
-	ret = BuzzerInit();
-	if (ret) {
-		LOG_ERR("Buzzer init failed");
-		return chip::System::MapErrorZephyr(ret);
-	}
-
-#ifdef CONFIG_CHIP_OTA_REQUESTOR
-	/* OTA image confirmation must be done before the factory data init. */
-	OtaConfirmNewImage();
-#endif
-
-#ifdef CONFIG_MCUMGR_TRANSPORT_BT
-	/* Initialize DFU over SMP */
-	GetDFUOverSMP().Init();
-	GetDFUOverSMP().ConfirmNewImage();
-	GetDFUOverSMP().StartServer();
-#endif
-
-/* Get factory data */
-#ifdef CONFIG_CHIP_FACTORY_DATA
-	ReturnErrorOnFailure(mFactoryDataProvider.Init());
-	SetDeviceInstanceInfoProvider(&mFactoryDataProvider);
-	SetDeviceAttestationCredentialsProvider(&mFactoryDataProvider);
-	SetCommissionableDataProvider(&mFactoryDataProvider);
-	/* Read EnableKey from the factory data. */
-	MutableByteSpan enableKey(sTestEventTriggerEnableKey);
-	err = mFactoryDataProvider.GetEnableKey(enableKey);
-	if (err != CHIP_NO_ERROR) {
-		LOG_ERR("mFactoryDataProvider.GetEnableKey() failed. Could not delegate a test event trigger");
-		memset(sTestEventTriggerEnableKey, 0, sizeof(sTestEventTriggerEnableKey));
-	}
-#else
-	SetDeviceInstanceInfoProvider(&DeviceInstanceInfoProviderMgrImpl());
-	SetDeviceAttestationCredentialsProvider(Examples::GetExampleDACProvider());
-#endif
-
-	/* Initialize timers */
-	k_timer_init(
-		&sFunctionTimer, [](k_timer *) { sAppTask.PostEvent(AppEvent{ AppEvent::FunctionTimer }); }, nullptr);
-	k_timer_init(
-		&sMeasurementsTimer, [](k_timer *) { sAppTask.PostEvent(AppEvent{ AppEvent::MeasurementsTimer }); },
-		nullptr);
-	k_timer_start(&sMeasurementsTimer, K_MSEC(kMeasurementsIntervalMs), K_MSEC(kMeasurementsIntervalMs));
-	k_timer_init(
-		&sIdentifyTimer, [](k_timer *) { sAppTask.PostEvent(AppEvent{ AppEvent::IdentifyTimer }); }, nullptr);
-
-	/* Initialize CHIP server */
-	static chip::CommonCaseDeviceServerInitParams initParams;
-	static OTATestEventTriggerDelegate testEventTriggerDelegate{ ByteSpan(sTestEventTriggerEnableKey) };
-	(void)initParams.InitializeStaticResourcesBeforeServerInit();
-
-	initParams.testEventTriggerDelegate = &testEventTriggerDelegate;
-	ReturnErrorOnFailure(chip::Server::GetInstance().Init(initParams));
-
-	gExampleDeviceInfoProvider.SetStorageDelegate(&Server::GetInstance().GetPersistentStorage());
-	chip::DeviceLayer::SetDeviceInfoProvider(&gExampleDeviceInfoProvider);
-	AppFabricTableDelegate::Init();
-
-	ConfigurationMgr().LogDeviceConfig();
-	PrintOnboardingCodes(chip::RendezvousInformationFlags(chip::RendezvousInformationFlag::kBLE));
-
-#ifdef CONFIG_CHIP_ICD_SUBSCRIPTION_HANDLING
-	chip::app::InteractionModelEngine::GetInstance()->RegisterReadHandlerAppCallback(&GetICDUtil());
-#endif
-
-	/*
-	 * Add CHIP event handler and start CHIP thread.
-	 * Note that all the initialization code should happen prior to this point
-	 * to avoid data races between the main and the CHIP threads.
-	 */
-	PlatformMgr().AddEventHandler(ChipEventHandler, 0);
-
-	err = PlatformMgr().StartEventLoopTask();
-	if (err != CHIP_NO_ERROR) {
-		LOG_ERR("PlatformMgr().StartEventLoopTask() failed");
-		return err;
-	}
-
-	return CHIP_NO_ERROR;
-}
-
-void AppTask::OpenPairingWindow()
-{
-	if (Server::GetInstance().GetFabricTable().FabricCount() != 0) {
-		LOG_INF("Matter service BLE advertising not started - device is already commissioned");
-		return;
-	}
-
-	if (ConnectivityMgr().IsBLEAdvertisingEnabled()) {
-		LOG_INF("BLE advertising is already enabled");
-		return;
-	}
-
-	if (chip::Server::GetInstance().GetCommissioningWindowManager().OpenBasicCommissioningWindow() !=
-	    CHIP_NO_ERROR) {
-		LOG_ERR("OpenBasicCommissioningWindow() failed");
-	}
-}
-
-CHIP_ERROR AppTask::StartApp()
-{
-	ReturnErrorOnFailure(Init());
-
-	AppEvent event = {};
-
-	while (true) {
-		k_msgq_get(&sAppEventQueue, &event, K_FOREVER);
-		DispatchEvent(event);
-	}
-
-	return CHIP_NO_ERROR;
-}
-
-void AppTask::PostEvent(const AppEvent &event)
-{
-	if (k_msgq_put(&sAppEventQueue, &event, K_NO_WAIT)) {
-		LOG_ERR("Failed to post event to app task event queue");
-	}
-}
-
-void AppTask::DispatchEvent(AppEvent &event)
-{
-	switch (event.Type) {
-	case AppEvent::FunctionPress:
-		ButtonPushHandler();
-		break;
-	case AppEvent::FunctionRelease:
-		ButtonReleaseHandler();
-		break;
-	case AppEvent::FunctionTimer:
-		FunctionTimerHandler();
-		break;
-	case AppEvent::MeasurementsTimer:
-		MeasurementsTimerHandler();
-		break;
-	case AppEvent::IdentifyTimer:
-		IdentifyTimerHandler();
-		break;
-	case AppEvent::UpdateLedState:
-		event.UpdateLedStateEvent.LedWidget->UpdateState();
-		break;
-	default:
-		LOG_INF("Unknown event received");
-		break;
-	}
-}
-
-void AppTask::ButtonPushHandler()
-{
-	sFunctionTimerMode = FunctionTimerMode::kFactoryResetTrigger;
-	k_timer_start(&sFunctionTimer, K_MSEC(kFactoryResetTriggerTimeoutMs), K_NO_WAIT);
-}
-
-void AppTask::ButtonReleaseHandler()
-{
-	/* If the button was released within the first kFactoryResetTriggerTimeoutMs, open the BLE pairing
-	 * window. */
-	if (sFunctionTimerMode == FunctionTimerMode::kFactoryResetTrigger) {
-		GetAppTask().OpenPairingWindow();
-	}
-
-	sFunctionTimerMode = FunctionTimerMode::kDisabled;
-	k_timer_stop(&sFunctionTimer);
-}
-
-void AppTask::ButtonStateHandler(uint32_t buttonState, uint32_t hasChanged)
-{
-	if (hasChanged & DK_BTN1_MSK) {
-		if (buttonState & DK_BTN1_MSK)
-			sAppTask.PostEvent(AppEvent{ AppEvent::FunctionPress });
-		else
-			sAppTask.PostEvent(AppEvent{ AppEvent::FunctionRelease });
-	}
-}
-
-void AppTask::FunctionTimerHandler()
-{
-	switch (sFunctionTimerMode) {
-	case FunctionTimerMode::kFactoryResetTrigger:
-		LOG_INF("Factory Reset triggered. Release button within %ums to cancel.",
-			kFactoryResetCompleteTimeoutMs);
-		sFunctionTimerMode = FunctionTimerMode::kFactoryResetComplete;
-		k_timer_start(&sFunctionTimer, K_MSEC(kFactoryResetCompleteTimeoutMs), K_NO_WAIT);
-		break;
-	case FunctionTimerMode::kFactoryResetComplete:
-		ConfigurationMgr().InitiateFactoryReset();
-		break;
-	default:
-		break;
-	}
-}
 
 void AppTask::MeasurementsTimerHandler()
 {
-	sAppTask.UpdateClustersState();
+	Instance().UpdateClustersState();
 }
 
 void AppTask::OnIdentifyStart(Identify *)
 {
+	Nrf::PostTask(
+		[] { Nrf::GetBoard().GetLED(Nrf::DeviceLeds::LED2).Blink(Nrf::LedConsts::kIdentifyBlinkRate_ms); });
 	k_timer_start(&sIdentifyTimer, K_MSEC(kIdentifyTimerIntervalMs), K_MSEC(kIdentifyTimerIntervalMs));
 }
 
@@ -606,94 +294,113 @@ void AppTask::UpdateClustersState()
 	UpdatePowerSourceClusterState();
 }
 
-void AppTask::UpdateStatusLED()
+void AppTask::UpdateLedState()
 {
-	LedState nextState;
-
-	if (sIsNetworkProvisioned && sIsNetworkEnabled) {
-		nextState = LedState::kProvisioned;
-	} else if (sHaveBLEConnections) {
-		nextState = LedState::kConnectedBle;
-	} else if (sIsBleAdvertisingEnabled) {
-		nextState = LedState::kAdvertisingBle;
-	} else {
-		nextState = LedState::kAlive;
+	if (!Instance().mGreenLED || !Instance().mBlueLED || !Instance().mRedLED) {
+		return;
 	}
 
-	/* In case of changing signalled state, turn off all leds to synchronize blinking */
-	if (nextState != sLedState) {
-		sGreenLED.Set(false);
-		sBlueLED.Set(false);
-		sRedLED.Set(false);
-	}
-	sLedState = nextState;
+	Instance().mGreenLED->Set(false);
+	Instance().mBlueLED->Set(false);
+	Instance().mRedLED->Set(false);
 
-	switch (sLedState) {
-	case LedState::kAlive:
-		sGreenLED.Blink(50, 950);
+	switch (Nrf::GetBoard().GetDeviceState()) {
+	case Nrf::DeviceState::DeviceAdvertisingBLE:
+		Instance().mBlueLED->Blink(Nrf::LedConsts::StatusLed::Disconnected::kOn_ms,
+					   Nrf::LedConsts::StatusLed::Disconnected::kOff_ms);
 		break;
-	case LedState::kAdvertisingBle:
-		sBlueLED.Blink(50, 950);
+	case Nrf::DeviceState::DeviceDisconnected:
+		Instance().mGreenLED->Blink(Nrf::LedConsts::StatusLed::Disconnected::kOn_ms,
+					    Nrf::LedConsts::StatusLed::Disconnected::kOff_ms);
 		break;
-	case LedState::kConnectedBle:
-		sBlueLED.Blink(100, 100);
+	case Nrf::DeviceState::DeviceConnectedBLE:
+		Instance().mBlueLED->Blink(Nrf::LedConsts::StatusLed::BleConnected::kOn_ms,
+					   Nrf::LedConsts::StatusLed::BleConnected::kOff_ms);
 		break;
-	case LedState::kProvisioned:
-		sBlueLED.Blink(50, 950);
-		sRedLED.Blink(50, 950);
+	case Nrf::DeviceState::DeviceProvisioned:
+		Instance().mRedLED->Blink(Nrf::LedConsts::StatusLed::Disconnected::kOn_ms,
+					  Nrf::LedConsts::StatusLed::Disconnected::kOff_ms);
+		Instance().mBlueLED->Blink(Nrf::LedConsts::StatusLed::Disconnected::kOn_ms,
+					   Nrf::LedConsts::StatusLed::Disconnected::kOff_ms);
 		break;
 	default:
 		break;
 	}
 }
 
-void AppTask::LEDStateUpdateHandler(LEDWidget &ledWidget)
+CHIP_ERROR AppTask::Init()
 {
-	sAppTask.PostEvent(AppEvent{ AppEvent::UpdateLedState, &ledWidget });
+	/* Initialize Matter stack */
+#ifdef CONFIG_MCUMGR_TRANSPORT_BT
+	ReturnErrorOnFailure(
+		Nrf::Matter::PrepareServer(Nrf::Matter::InitData{ .mPostServerInitClbk = []() -> CHIP_ERROR {
+			Nrf::GetDFUOverSMP().StartServer();
+			return CHIP_NO_ERROR;
+		} }));
+#else
+	ReturnErrorOnFailure(Nrf::Matter::PrepareServer());
+#endif
+
+	/* Set references for RGB LED */
+	mRedLED = &Nrf::GetBoard().GetLED(Nrf::DeviceLeds::LED1);
+	mGreenLED = &Nrf::GetBoard().GetLED(Nrf::DeviceLeds::LED2);
+	mBlueLED = &Nrf::GetBoard().GetLED(Nrf::DeviceLeds::LED3);
+
+	if (!Nrf::GetBoard().Init(nullptr, UpdateLedState)) {
+		LOG_ERR("User interface initialization failed.");
+		return CHIP_ERROR_INCORRECT_STATE;
+	}
+
+	/* Register Matter event handler that controls the connectivity status LED based on the captured Matter network
+	 * state. */
+	ReturnErrorOnFailure(Nrf::Matter::RegisterEventHandler(Nrf::Board::DefaultMatterEventHandler, 0));
+
+	if (!device_is_ready(sBme688SensorDev)) {
+		LOG_ERR("BME688 sensor device not ready");
+		return chip::System::MapErrorZephyr(-ENODEV);
+	}
+
+	int ret = BatteryMeasurementInit();
+	if (ret) {
+		LOG_ERR("Battery measurement init failed");
+		return chip::System::MapErrorZephyr(ret);
+	}
+
+	ret = BatteryMeasurementEnable();
+	if (ret) {
+		LOG_ERR("Enabling battery measurement failed");
+		return chip::System::MapErrorZephyr(ret);
+	}
+
+	ret = BatteryChargeControlInit();
+	if (ret) {
+		LOG_ERR("Battery charge control init failed");
+		return chip::System::MapErrorZephyr(ret);
+	}
+
+	ret = BuzzerInit();
+	if (ret) {
+		LOG_ERR("Buzzer init failed");
+		return chip::System::MapErrorZephyr(ret);
+	}
+
+	/* Initialize timers */
+	k_timer_init(
+		&sMeasurementsTimer, [](k_timer *) { Nrf::PostTask([] { MeasurementsTimerHandler(); }); }, nullptr);
+	k_timer_init(
+		&sIdentifyTimer, [](k_timer *) { Nrf::PostTask([] { IdentifyTimerHandler(); }); }, nullptr);
+	k_timer_start(&sMeasurementsTimer, K_MSEC(kMeasurementsIntervalMs), K_MSEC(kMeasurementsIntervalMs));
+
+	return Nrf::Matter::StartServer();
 }
 
-void AppTask::ChipEventHandler(const ChipDeviceEvent *event, intptr_t /* arg */)
+CHIP_ERROR AppTask::StartApp()
 {
-	switch (event->Type) {
-	case DeviceEventType::kCHIPoBLEAdvertisingChange:
-		UpdateStatusLED();
-#ifdef CONFIG_CHIP_NFC_COMMISSIONING
-		if (event->CHIPoBLEAdvertisingChange.Result == kActivity_Started) {
-			if (NFCMgr().IsTagEmulationStarted()) {
-				LOG_INF("NFC Tag emulation is already started");
-			} else {
-				ShareQRCodeOverNFC(
-					chip::RendezvousInformationFlags(chip::RendezvousInformationFlag::kBLE));
-			}
-		} else if (event->CHIPoBLEAdvertisingChange.Result == kActivity_Stopped) {
-			NFCMgr().StopTagEmulation();
-		}
-#endif
-		sHaveBLEConnections = ConnectivityMgr().NumBLEConnections() != 0;
-		UpdateStatusLED();
-		break;
-#if defined(CONFIG_NET_L2_OPENTHREAD)
-	case DeviceEventType::kDnssdInitialized:
-#if CONFIG_CHIP_OTA_REQUESTOR
-		InitBasicOTARequestor();
-#endif /* CONFIG_CHIP_OTA_REQUESTOR */
-		break;
-	case DeviceEventType::kThreadStateChange:
-		sIsNetworkProvisioned = ConnectivityMgr().IsThreadProvisioned();
-		sIsNetworkEnabled = ConnectivityMgr().IsThreadEnabled();
-#elif defined(CONFIG_CHIP_WIFI)
-	case DeviceEventType::kWiFiConnectivityChange:
-		sIsNetworkProvisioned = ConnectivityMgr().IsWiFiStationProvisioned();
-		sIsNetworkEnabled = ConnectivityMgr().IsWiFiStationEnabled();
-#if CONFIG_CHIP_OTA_REQUESTOR
-		if (event->WiFiConnectivityChange.Result == kConnectivity_Established) {
-			InitBasicOTARequestor();
-		}
-#endif /* CONFIG_CHIP_OTA_REQUESTOR */
-#endif
-		UpdateStatusLED();
-		break;
-	default:
-		break;
+	ReturnErrorOnFailure(Init());
+
+	while (true) {
+		Nrf::DispatchNextTask();
 	}
+
+	return CHIP_NO_ERROR;
 }

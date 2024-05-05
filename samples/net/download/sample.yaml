@@ -1,15 +1,14 @@
 sample:
   name: Download sample
 tests:
-  sample.net.download.tfm.lte:
+  sample.net.download_client:
     build_only: true
-    extra_args: OVERLAY_CONFIG="overlay-tfm.conf"
     integration_platforms:
-      - nrf9160dk_nrf9160_ns
-      - nrf9161dk_nrf9161_ns
-    platform_allow: nrf9160dk_nrf9160_ns nrf9161dk_nrf9161_ns
+      - nrf9161dk/nrf9161/ns
+    platform_allow:
+      - nrf9161dk/nrf9161/ns
     tags: ci_build
-  sample.net.download_client.lte:
+  sample.net.download_client.ci:
     build_only: true
     extra_configs:
       - CONFIG_SHELL=y
@@ -17,19 +16,13 @@ tests:
       - CONFIG_DOWNLOAD_CLIENT_SHELL=y
       - CONFIG_SAMPLE_COMPUTE_HASH=y
     integration_platforms:
-      - nrf9160dk_nrf9160_ns
-      - nrf9161dk_nrf9161_ns
-    platform_allow: nrf9160dk_nrf9160_ns nrf9161dk_nrf9161_ns
-    tags: ci_build
-  sample.net.download_client.wifi:
-    build_only: true
-    extra_configs:
-      - CONFIG_SHELL=y
-      - CONFIG_DOWNLOAD_CLIENT_SHELL=y
-      - CONFIG_SAMPLE_COMPUTE_HASH=y
-      - CONFIG_WIFI_CREDENTIALS_STATIC_SSID="test-ssid"
-      - CONFIG_WIFI_CREDENTIALS_STATIC_PASSWORD="test-password"
-    integration_platforms:
-      - nrf7002dk_nrf5340_cpuapp
-    platform_allow: nrf7002dk_nrf5340_cpuapp
+      - nrf9160dk/nrf9160/ns
+      - nrf9161dk/nrf9161/ns
+      - nrf9151dk/nrf9151/ns
+      - nrf7002dk/nrf5340/cpuapp/ns
+    platform_allow:
+      - nrf9160dk/nrf9160/ns
+      - nrf9161dk/nrf9161/ns
+      - nrf9151dk/nrf9151/ns
+      - nrf7002dk/nrf5340/cpuapp/ns
     tags: ci_build

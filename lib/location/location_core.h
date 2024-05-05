@@ -7,8 +7,6 @@
 #ifndef LOCATION_CORE_H
 #define LOCATION_CORE_H
 
-#define LOCATION_METHOD_INTERNAL_WIFI_CELLULAR 100
-
 /** Information required to carry out a location request. */
 struct location_request_info {
 	const struct location_wifi_config *wifi;
@@ -37,6 +35,9 @@ struct location_request_info {
 	/** Whether to perform fallback for current location request processing. */
 	bool execute_fallback;
 
+	/** Uptime at the start of the positioning for the current method. */
+	int64_t elapsed_time_method_start_timestamp;
+
 	/**
 	 * Device uptime when location request timer expires.
 	 * This is used in cloud location method to calculate timeout for the cloud operation.
@@ -58,7 +59,6 @@ struct location_method_api {
 };
 
 int location_core_init(void);
-int location_core_event_handler_set(location_event_handler_t handler);
 int location_core_validate_params(const struct location_config *config);
 int location_core_location_get(const struct location_config *config);
 int location_core_cancel(void);
@@ -82,7 +82,6 @@ void location_core_cloud_location_ext_result_set(
 
 void location_core_config_log(const struct location_config *config);
 void location_core_timer_start(int32_t timeout);
-void location_core_timer_stop(void);
 struct k_work_q *location_core_work_queue_get(void);
 
 #endif /* LOCATION_CORE_H */

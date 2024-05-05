@@ -19,10 +19,11 @@ struct shell_model_instance {
 	uint8_t elem_idx;
 };
 
-struct sensor_value shell_model_strtosensorval(const char *str, int *err)
+sensor_value_type shell_model_strtosensorval(
+	const struct bt_mesh_sensor_format *format, const char *str, int *err)
 {
 	int temp_err = 0;
-	struct sensor_value out = { 0 };
+	sensor_value_type out = { 0 };
 
 	double val = shell_model_strtodbl(str, &temp_err);
 
@@ -31,14 +32,22 @@ struct sensor_value shell_model_strtosensorval(const char *str, int *err)
 		return out;
 	}
 
+#ifdef CONFIG_BT_MESH_SENSOR_USE_LEGACY_SENSOR_VALUE
 	out.val1 = (int)val;
 	out.val2 = (val - out.val1) * 1000000;
-
+#else
+	temp_err = bt_mesh_sensor_value_from_float(format, val, &out);
+	/* Ignore ERANGE to let the value be clamped to the format range. */
+	if (temp_err && temp_err != -ERANGE) {
+		*err = temp_err;
+	}
+#endif
 	return out;
 }
 
-void shell_model_print_sensorval(const struct shell *shell, struct sensor_value *value)
+void shell_model_print_sensorval(const struct shell *shell, sensor_value_type *value)
 {
+#ifdef CONFIG_BT_MESH_SENSOR_USE_LEGACY_SENSOR_VALUE
 	shell_fprintf(shell, SHELL_NORMAL, "%s%d", (value->val1 < 0 || value->val2 < 0) ? "-" : "",
 		      abs(value->val1));
 	if (value->val2) {
@@ -51,6 +60,9 @@ void shell_model_print_sensorval(const struct shell *shell, struct sensor_value 
 		}
 		shell_fprintf(shell, SHELL_NORMAL, ".%0*d", digits, val);
 	}
+#else
+	shell_fprintf(shell, SHELL_NORMAL, "%s", bt_mesh_sensor_ch_str(value));
+#endif
 }
 
 static size_t whitespace_trim(char *out, size_t len, const char *str)
@@ -140,7 +152,7 @@ double shell_model_strtodbl(const char *str, int *err)
 	return (trimmed_buf[0] == '-') ? ((double)intgr - frac_dbl) : ((double)intgr + frac_dbl);
 }
 
-static bool model_first_get(uint16_t id, struct bt_mesh_model **mod, uint16_t *cid)
+static bool model_first_get(uint16_t id, const struct bt_mesh_model **mod, uint16_t *cid)
 {
 	const struct bt_mesh_comp *comp = bt_mesh_comp_get();
 
@@ -159,20 +171,20 @@ static bool model_first_get(uint16_t id, struct bt_mesh_model **mod, uint16_t *c
 	return false;
 }
 
-bool shell_model_first_get(uint16_t id, struct bt_mesh_model **mod)
+bool shell_model_first_get(uint16_t id, const struct bt_mesh_model **mod)
 {
 	return model_first_get(id, mod, NULL);
 }
 
-bool shell_vnd_model_first_get(uint16_t cid, uint16_t id, struct bt_mesh_model **mod)
+bool shell_vnd_model_first_get(uint16_t cid, uint16_t id, const struct bt_mesh_model **mod)
 {
 	return model_first_get(id, mod, &cid);
 }
 
-static int instance_set(const struct shell *shell, struct bt_mesh_model **mod, uint16_t mod_id,
-			uint16_t *cid, uint8_t elem_idx)
+static int instance_set(const struct shell *shell, const struct bt_mesh_model **mod,
+			uint16_t mod_id, uint16_t *cid, uint8_t elem_idx)
 {
-	struct bt_mesh_model *mod_temp;
+	const struct bt_mesh_model *mod_temp;
 	const struct bt_mesh_comp *comp = bt_mesh_comp_get();
 
 	if (elem_idx >= comp->elem_count) {
@@ -196,13 +208,13 @@ static int instance_set(const struct shell *shell, struct bt_mesh_model **mod, u
 	return 0;
 }
 
-int shell_model_instance_set(const struct shell *shell, struct bt_mesh_model **mod, uint16_t mod_id,
-			     uint8_t elem_idx)
+int shell_model_instance_set(const struct shell *shell, const struct bt_mesh_model **mod,
+			     uint16_t mod_id, uint8_t elem_idx)
 {
 	return instance_set(shell, mod, mod_id, NULL, elem_idx);
 }
 
-int shell_vnd_model_instance_set(const struct shell *shell, struct bt_mesh_model **mod,
+int shell_vnd_model_instance_set(const struct shell *shell, const struct bt_mesh_model **mod,
 				 uint16_t mod_id, uint16_t cid, uint8_t elem_idx)
 {
 	return instance_set(shell, mod, mod_id, &cid, elem_idx);
@@ -212,11 +224,11 @@ static void model_instances_get(uint16_t id, uint16_t *cid, struct shell_model_i
 				uint8_t len)
 {
 	const struct bt_mesh_comp *comp = bt_mesh_comp_get();
-	struct bt_mesh_elem *elem;
-	struct bt_mesh_model *mod;
+	const struct bt_mesh_elem *elem;
+	const struct bt_mesh_model *mod;
 
 	for (int i = 0; i < len; i++) {
-		elem = bt_mesh_elem_find(comp->elem[i].addr);
+		elem = bt_mesh_elem_find(comp->elem[i].rt->addr);
 
 		if (cid) {
 			mod = bt_mesh_model_find_vnd(elem, *cid, id);
@@ -225,8 +237,8 @@ static void model_instances_get(uint16_t id, uint16_t *cid, struct shell_model_i
 		}
 
 		if (mod) {
-			arr[i].addr = comp->elem[i].addr;
-			arr[i].elem_idx = mod->elem_idx;
+			arr[i].addr = comp->elem[i].rt->addr;
+			arr[i].elem_idx = mod->rt->elem_idx;
 		}
 	}
 }

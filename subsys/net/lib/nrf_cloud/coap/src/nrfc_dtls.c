@@ -16,12 +16,16 @@
 #include <zephyr/net/socket.h>
 #endif
 #include <modem/lte_lc.h>
+#if defined(CONFIG_MODEM_KEY_MGMT)
 #include <modem/modem_key_mgmt.h>
+#endif
 #if defined(CONFIG_MODEM_INFO)
 #include <modem/modem_info.h>
 #endif
+#if defined(CONFIG_NRF_MODEM_LIB)
 #include <nrf_socket.h>
 #include <nrf_modem_at.h>
+#endif
 
 #include "nrfc_dtls.h"
 
@@ -55,8 +59,8 @@ static int get_modem_info(void)
 		return err;
 	}
 
-	LOG_INF("IMEI:                    %s", mdm_param.device.imei.value_string);
-	LOG_INF("Modem FW version:        %s", mdm_param.device.modem_fw.value_string);
+	LOG_INF("IMEI:                  %s", mdm_param.device.imei.value_string);
+	LOG_INF("Modem FW version:      %s", mdm_param.device.modem_fw.value_string);
 
 	return 0;
 }

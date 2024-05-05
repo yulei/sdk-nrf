@@ -24,23 +24,8 @@ extern const struct shell *mosh_shell;
 
 static struct k_work_delayable cloud_reconnect_work;
 static struct k_work cloud_cmd_execute_work;
-static struct k_work shadow_update_work;
 
 static char shell_cmd[CLOUD_CMD_MAX_LENGTH + 1];
-
-static int cloud_shell_print_usage(const struct shell *shell, size_t argc, char **argv)
-{
-	int ret = 1;
-
-	if (argc > 1) {
-		mosh_error("%s: subcommand not found", argv[1]);
-		ret = -EINVAL;
-	}
-
-	shell_help(shell);
-
-	return ret;
-}
 
 static void cloud_reconnect_work_fn(struct k_work *work)
 {
@@ -112,33 +97,6 @@ end:
 	return ret;
 }
 
-/**
- * @brief Updates the nRF Cloud shadow with information about supported capabilities.
- */
-static void shadow_update_work_fn(struct k_work *work)
-{
-	int err;
-	struct nrf_cloud_svc_info_ui ui_info = {
-		.gnss = IS_ENABLED(CONFIG_MOSH_LOCATION), /* Show map on nrf cloud */
-	};
-	struct nrf_cloud_svc_info service_info = {
-		.ui = &ui_info
-	};
-	struct nrf_cloud_device_status device_status = {
-		.modem = NULL,
-		.svc = &service_info,
-		.conn_inf = NRF_CLOUD_INFO_NO_CHANGE
-	};
-
-	ARG_UNUSED(work);
-	err = nrf_cloud_shadow_device_status_update(&device_status);
-	if (err) {
-		mosh_error("Failed to update device shadow, error: %d", err);
-	}
-}
-
-static K_WORK_DEFINE(shadow_update_work, shadow_update_work_fn);
-
 static void nrf_cloud_event_handler(const struct nrf_cloud_evt *evt)
 {
 	const int reconnection_delay = 10;
@@ -160,7 +118,6 @@ static void nrf_cloud_event_handler(const struct nrf_cloud_evt *evt)
 	case NRF_CLOUD_EVT_READY:
 		mosh_print("nRF Cloud event: NRF_CLOUD_EVT_READY");
 		mosh_print("Connection to nRF Cloud established");
-		k_work_submit_to_queue(&mosh_common_work_q, &shadow_update_work);
 		break;
 	case NRF_CLOUD_EVT_RX_DATA_GENERAL:
 		mosh_print("nRF Cloud event: NRF_CLOUD_EVT_RX_DATA_GENERAL");
@@ -258,11 +215,6 @@ static void cmd_cloud_disconnect(const struct shell *shell, size_t argc, char **
 	}
 }
 
-static int cmd_cloud(const struct shell *shell, size_t argc, char **argv)
-{
-	return cloud_shell_print_usage(shell, argc, argv);
-}
-
 SHELL_STATIC_SUBCMD_SET_CREATE(
 	sub_cloud,
 	SHELL_CMD_ARG(connect, NULL, "Establish MQTT connection to nRF Cloud.", cmd_cloud_connect,
@@ -271,4 +223,4 @@ SHELL_STATIC_SUBCMD_SET_CREATE(
 	SHELL_SUBCMD_SET_END
 );
 
-SHELL_CMD_REGISTER(cloud, &sub_cloud, "MQTT connection to nRF Cloud", cmd_cloud);
+SHELL_CMD_REGISTER(cloud, &sub_cloud, "MQTT connection to nRF Cloud", mosh_print_help_shell);

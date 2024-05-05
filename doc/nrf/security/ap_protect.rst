@@ -59,6 +59,11 @@ See the related hardware documentation for more information about which implemen
      - Hardware and software AP-Protect support
      - Related hardware documentation
      - Additional information
+   * - nRF9161
+     -
+     - ✔
+     - `AP-Protect for nRF9161`_
+     - Also supports Secure AP-Protect (see note below)
    * - nRF9160
      - ✔
      -
@@ -106,7 +111,7 @@ See the related hardware documentation for more information about which implemen
      -
 
 .. note::
-    The SoCs or SiPs that support `ARM TrustZone`_ and different :ref:`app_boards_spe_nspe` (nRF5340 and nRF9160) implement two AP-Protect systems: AP-Protect and Secure AP-Protect.
+    The SoCs or SiPs that support `ARM TrustZone`_ and different :ref:`app_boards_spe_nspe` (nRF5340 and nRF91 Series) implement two AP-Protect systems: AP-Protect and Secure AP-Protect.
     While AP-Protect blocks access to all CPU registers and memories, Secure AP-Protect limits access to the CPU to only non-secure accesses.
     This means that the CPU is entirely unavailable while it is running the code in the Secure Processing Environment, and only non-secure registers and address-mapped resources can be accessed.
 
@@ -136,8 +141,10 @@ Based on the available implementation types, you can configure the access port p
        The MDK will close the debug AHB-AP, but not lock it, so the AHB-AP can be reopened by the firmware.
        Reopening the AHB-AP should be preceded by a handshake operation over UART, CTRL-AP Mailboxes, or some other communication channel.
      - Hardware and software
-   * - Open
-     - :kconfig:option:`CONFIG_NRF_APPROTECT_USE_UICR` (:kconfig:option:`CONFIG_NRF_SECURE_APPROTECT_USE_UICR` for Secure AP-Protect)
+   * - Open (default)
+     - | :kconfig:option:`CONFIG_NRF_APPROTECT_USE_UICR` (:kconfig:option:`CONFIG_NRF_SECURE_APPROTECT_USE_UICR` for Secure AP-Protect)
+       |
+       | This option is set to ``y`` by default in the |NCS|.
      - In this state, AP-Protect follows the UICR register. If the UICR is open, meaning ``UICR.APPROTECT`` has the value ``Disabled``, the AP-Protect will be disabled. (The exact value, placement, the enumeration name, and format varies between nRF Series families.)
      - Hardware; hardware and software
 
@@ -166,6 +173,7 @@ Enabling AP-Protect with :kconfig:option:`CONFIG_NRF_APPROTECT_USE_UICR`
 ========================================================================
 
 Setting the :kconfig:option:`CONFIG_NRF_APPROTECT_USE_UICR` Kconfig option to ``y`` and compiling the firmware makes the AP-Protect disabled by default.
+This is the default setting in the |NCS|.
 
 You can start debugging the firmware without additional steps needed.
 

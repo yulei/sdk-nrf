@@ -5,6 +5,7 @@
  */
 
 #include "temp_sensor_manager.h"
+#include "app/task_executor.h"
 #include "app_task.h"
 #include "temperature_measurement/sensor.h"
 
@@ -21,16 +22,14 @@ CHIP_ERROR TempSensorManager::Init()
 {
 	k_timer_init(&sSensorTimer, &TempSensorManager::TimerEventHandler, nullptr);
 	k_timer_start(&sSensorTimer, K_MSEC(kSensorTimerPeriodMs), K_MSEC(kSensorTimerPeriodMs));
+	TemperatureSensor::Instance().FullMeasurement();
+
 	return CHIP_NO_ERROR;
 }
 
 void TempSensorManager::TimerEventHandler(k_timer *timer)
 {
-	AppEvent event;
-	event.Type = AppEventType::Timer;
-	event.TimerEvent.Context = k_timer_user_data_get(timer);
-	event.Handler = TempSensorManager::SensorTimerEventHandler;
-	AppTask::Instance().PostEvent(event);
+	Nrf::PostTask([] { TempSensorManager::SensorTimerEventHandler(); });
 }
 
 /*
@@ -39,14 +38,9 @@ void TempSensorManager::TimerEventHandler(k_timer *timer)
  *	values
  */
 
-void TempSensorManager::SensorTimerEventHandler(const AppEvent &Event)
+void TempSensorManager::SensorTimerEventHandler()
 {
-#ifdef CONFIG_THERMOSTAT_EXTERNAL_SENSOR
-	GetMeasurement(RealSensor::Instance());
-#else
-	GetMeasurement(MockedSensor::Instance());
-
-#endif
+	TemperatureSensor::Instance().FullMeasurement();
 }
 
 void TempSensorManager::SetLocalTemperature(int16_t temperature)
@@ -56,7 +50,23 @@ void TempSensorManager::SetLocalTemperature(int16_t temperature)
 	PlatformMgr().UnlockChipStack();
 }
 
-template <typename T> void TempSensorManager::GetMeasurement(T const &sensor)
+void TempSensorManager::ClearLocalTemperature()
 {
-	sensor.Instance().TemperatureMeasurement();
+	PlatformMgr().LockChipStack();
+	app::Clusters::Thermostat::Attributes::LocalTemperature::SetNull(kThermostatEndpoint);
+	PlatformMgr().UnlockChipStack();
+}
+
+void TempSensorManager::SetOutdoorTemperature(int16_t temperature)
+{
+	PlatformMgr().LockChipStack();
+	app::Clusters::Thermostat::Attributes::OutdoorTemperature::Set(kThermostatEndpoint, temperature);
+	PlatformMgr().UnlockChipStack();
+}
+
+void TempSensorManager::ClearOutdoorTemperature()
+{
+	PlatformMgr().LockChipStack();
+	app::Clusters::Thermostat::Attributes::OutdoorTemperature::SetNull(kThermostatEndpoint);
+	PlatformMgr().UnlockChipStack();
 }

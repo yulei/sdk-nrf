@@ -12,6 +12,7 @@
 #include <zephyr/pm/device.h>
 #include <zephyr/shell/shell.h>
 #include <zephyr/shell/shell_uart.h>
+#include <zephyr/drivers/uart.h>
 #include <modem/lte_lc.h>
 #include <modem/nrf_modem_lib_trace.h>
 
@@ -25,20 +26,6 @@ static const struct device *const shell_uart_dev = DEVICE_DT_GET(UART_DEVICE_NOD
 
 bool uart_shell_disable_during_sleep_requested;
 extern bool link_shell_msleep_notifications_subscribed;
-
-static int print_help(const struct shell *shell, size_t argc, char **argv)
-{
-	int ret = 1;
-
-	if (argc > 1) {
-		mosh_error("%s: subcommand not found", argv[1]);
-		ret = -EINVAL;
-	}
-
-	shell_help(shell);
-
-	return ret;
-}
 
 static void uart_disable_handler(struct k_work *work)
 {
@@ -169,9 +156,36 @@ static int cmd_uart_enable_when_sleep(void)
 	return 0;
 }
 
-static int cmd_uart_during_sleep(const struct shell *shell, size_t argc, char **argv)
+static int cmd_uart_baudrate(const struct shell *shell, size_t argc, char **argv)
 {
-	return print_help(shell, argc, argv);
+	int err;
+	int baudrate;
+	struct uart_config cfg;
+
+	baudrate = atoi(argv[1]);
+	if (baudrate < 0 || baudrate > 1000000) {
+		mosh_error("Invalid baudrate: %d", baudrate);
+
+		return -EINVAL;
+	}
+
+	err = uart_config_get(shell_uart_dev, &cfg);
+	if (err) {
+		mosh_error("Failed to read UART configuration, error: %d", err);
+
+		return -ENOEXEC;
+	}
+
+	cfg.baudrate = baudrate;
+
+	err = uart_configure(shell_uart_dev, &cfg);
+	if (err) {
+		mosh_error("Failed to set UART configuration, error: %d", err);
+
+		return -ENOEXEC;
+	}
+
+	return 0;
 }
 
 SHELL_STATIC_SUBCMD_SET_CREATE(
@@ -197,8 +211,19 @@ SHELL_STATIC_SUBCMD_SET_CREATE(sub_uart,
 		&sub_uart_during_sleep,
 		"Disable UARTs during the modem sleep mode. UARTs are re-enabled once the modem "
 		"exits sleep mode.",
-		cmd_uart_during_sleep),
+		mosh_print_help_shell),
+	SHELL_CMD_ARG(
+		baudrate,
+		NULL,
+		"<baudrate>\nSet shell UART baudrate.",
+		cmd_uart_baudrate,
+		2,
+		0),
 	SHELL_SUBCMD_SET_END
 );
 
-SHELL_CMD_REGISTER(uart, &sub_uart, "Commands for disabling UARTs for power measurement.", NULL);
+SHELL_CMD_REGISTER(
+	uart,
+	&sub_uart,
+	"Commands for disabling UARTs for power measurement and setting shell UART baudrate.",
+	mosh_print_help_shell);

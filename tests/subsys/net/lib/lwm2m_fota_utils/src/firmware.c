@@ -338,12 +338,12 @@ static void *init_firmware(void)
 
 	settings_register_fake.custom_fake = NULL;
 	settings_subsys_init_fake.return_val = -1;
-	rc = lwm2m_init_firmware();
+	rc = lwm2m_init_firmware_cb(NULL);
 	zassert_equal(rc, -1, "wrong return value");
 	settings_subsys_init_fake.return_val = 0;
 	settings_register_fake.return_val = -1;
 
-	rc = lwm2m_init_firmware();
+	rc = lwm2m_init_firmware_cb(NULL);
 	zassert_equal(rc, -1, "wrong return value");
 	init_firmware_success();
 	return NULL;
@@ -543,7 +543,7 @@ ZTEST(lwm2m_client_utils_firmware, test_firmware_pull_failures_cb)
 	printf("State %d\r\n", state);
 	zassert_equal(state, STATE_DOWNLOADING, "wrong result value");
 	zassert_not_null(firmware_fota_download_cb, "Fota client cb is NULL");
-	pull_callback_event_stub(FOTA_DOWNLOAD_EVT_ERROR, FOTA_DOWNLOAD_ERROR_CAUSE_NO_ERROR);
+	pull_callback_event_stub(FOTA_DOWNLOAD_EVT_ERROR, FOTA_DOWNLOAD_ERROR_CAUSE_CONNECT_FAILED);
 	result = get_app_result();
 	state = get_app_state();
 	zassert_equal(result, RESULT_CONNECTION_LOST, "wrong result value");

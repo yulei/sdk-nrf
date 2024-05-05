@@ -89,86 +89,86 @@ void test_parse_cereg(void)
 	/* For CEREG reads, we only check the network status, as that's the only
 	 * functionality that is exposed.
 	 */
-	err = parse_cereg(at_response_0, false, &status, NULL, NULL);
+	err = parse_cereg(at_response_0, false, &status, NULL, NULL, NULL);
 	TEST_ASSERT_EQUAL(0, err);
 	TEST_ASSERT_EQUAL(LTE_LC_NW_REG_NOT_REGISTERED, status);
 
-	err = parse_cereg(at_response_1, false, &status, &cell, &mode);
+	err = parse_cereg(at_response_1, false, &status, &cell, &mode, NULL);
 	TEST_ASSERT_EQUAL(0, err);
 	TEST_ASSERT_EQUAL(LTE_LC_NW_REG_REGISTERED_HOME, status);
 	TEST_ASSERT_EQUAL(0x01020304, cell.id);
 	TEST_ASSERT_EQUAL(0x0A0B, cell.tac);
 
-	err = parse_cereg(at_response_2, false, &status, NULL, NULL);
+	err = parse_cereg(at_response_2, false, &status, NULL, NULL, NULL);
 	TEST_ASSERT_EQUAL(0, err);
 	TEST_ASSERT_EQUAL(LTE_LC_NW_REG_SEARCHING, status);
 
-	err = parse_cereg(at_response_3, false, &status, NULL, NULL);
+	err = parse_cereg(at_response_3, false, &status, NULL, NULL, NULL);
 	TEST_ASSERT_EQUAL(0, err);
 	TEST_ASSERT_EQUAL(LTE_LC_NW_REG_REGISTRATION_DENIED, status);
 
-	err = parse_cereg(at_response_4, false, &status, NULL, NULL);
+	err = parse_cereg(at_response_4, false, &status, NULL, NULL, NULL);
 	TEST_ASSERT_EQUAL(0, err);
 	TEST_ASSERT_EQUAL(LTE_LC_NW_REG_UNKNOWN, status);
 
-	err = parse_cereg(at_response_5, false, &status, NULL, NULL);
+	err = parse_cereg(at_response_5, false, &status, NULL, NULL, NULL);
 	TEST_ASSERT_EQUAL(0, err);
 	TEST_ASSERT_EQUAL(LTE_LC_NW_REG_REGISTERED_ROAMING, status);
 
-	err = parse_cereg(at_response_90, false, &status, NULL, NULL);
+	err = parse_cereg(at_response_90, false, &status, NULL, NULL, NULL);
 	TEST_ASSERT_EQUAL(0, err);
 	TEST_ASSERT_EQUAL(LTE_LC_NW_REG_UICC_FAIL, status);
 
-	err = parse_cereg(at_response_wrong, false, &status, NULL, NULL);
+	err = parse_cereg(at_response_wrong, false, &status, NULL, NULL, NULL);
 	TEST_ASSERT_NOT_EQUAL_MESSAGE(0, err, "parse_cereg should have failed");
 
 	/* For CEREG notifications, we test the parser function, which
 	 * implicitly also tests parse_nw_reg_status() for notifications.
 	 */
-	err = parse_cereg(at_notif_0, true, &status, &cell, &mode);
+	err = parse_cereg(at_notif_0, true, &status, &cell, &mode, NULL);
 	TEST_ASSERT_EQUAL(0, err);
 	TEST_ASSERT_EQUAL(LTE_LC_NW_REG_NOT_REGISTERED, status);
 
-	err = parse_cereg(at_notif_1, true, &status, &cell, &mode);
+	err = parse_cereg(at_notif_1, true, &status, &cell, &mode, NULL);
 	TEST_ASSERT_EQUAL(0, err);
 	TEST_ASSERT_EQUAL(LTE_LC_NW_REG_REGISTERED_HOME, status);
 	TEST_ASSERT_EQUAL(0x01020304, cell.id);
 	TEST_ASSERT_EQUAL(0x0A0B, cell.tac);
 	TEST_ASSERT_EQUAL(9, mode);
 
-	err = parse_cereg(at_notif_2, true, &status, &cell, &mode);
+	err = parse_cereg(at_notif_2, true, &status, &cell, &mode, NULL);
 	TEST_ASSERT_EQUAL(0, err);
 	TEST_ASSERT_EQUAL(LTE_LC_NW_REG_SEARCHING, status);
 	TEST_ASSERT_EQUAL(0x01020304, cell.id);
 	TEST_ASSERT_EQUAL(0x0A0B, cell.tac);
 	TEST_ASSERT_EQUAL(9, mode);
 
-	err = parse_cereg(at_notif_3, true, &status, &cell, &mode);
+	err = parse_cereg(at_notif_3, true, &status, &cell, &mode, NULL);
 	TEST_ASSERT_EQUAL(0, err);
 	TEST_ASSERT_EQUAL(LTE_LC_NW_REG_REGISTRATION_DENIED, status);
 	TEST_ASSERT_EQUAL(0x01020304, cell.id);
 	TEST_ASSERT_EQUAL(0x0A0B, cell.tac);
 	TEST_ASSERT_EQUAL(9, mode);
 
-	err = parse_cereg(at_notif_4, true, &status, &cell, &mode);
+	err = parse_cereg(at_notif_4, true, &status, &cell, &mode, NULL);
 	TEST_ASSERT_EQUAL(0, err);
 	TEST_ASSERT_EQUAL(LTE_LC_NW_REG_UNKNOWN, status);
 	TEST_ASSERT_EQUAL(0xFFFFFFFF, cell.id);
 	TEST_ASSERT_EQUAL(0xFFFF, cell.tac);
 	TEST_ASSERT_EQUAL(9, mode);
 
-	err = parse_cereg(at_notif_5, true, &status, &cell, &mode);
+	err = parse_cereg(at_notif_5, true, &status, &cell, &mode, NULL);
 	TEST_ASSERT_EQUAL(0, err);
 	TEST_ASSERT_EQUAL(LTE_LC_NW_REG_REGISTERED_ROAMING, status);
 	TEST_ASSERT_EQUAL(0x01020304, cell.id);
 	TEST_ASSERT_EQUAL(0x0A0B, cell.tac);
 	TEST_ASSERT_EQUAL(9, mode);
 
-	err = parse_cereg(at_notif_90, true, &status, &cell, &mode);
+	err = parse_cereg(at_notif_90, true, &status, &cell, &mode, NULL);
 	TEST_ASSERT_EQUAL(0, err);
 	TEST_ASSERT_EQUAL(LTE_LC_NW_REG_UICC_FAIL, status);
 
-	err = parse_cereg(at_notif_wrong, true, &status, &cell, &mode);
+	err = parse_cereg(at_notif_wrong, true, &status, &cell, &mode, NULL);
 	TEST_ASSERT_NOT_EQUAL_MESSAGE(0, err, "parse_cereg should have failed");
 }
 
@@ -394,82 +394,198 @@ void test_parse_psm(void)
 		char *tau_ext;
 		char *tau_legacy;
 	};
-	struct psm_strings disabled = {
+	struct psm_strings psm_disabled_tau_ext = {
+		.active_time = "11100000",
+		.tau_ext = "00001000",
+		.tau_legacy = "11100000",
+	};
+	struct psm_strings psm_disabled_tau_legacy = {
 		.active_time = "11100000",
 		.tau_ext = "11100000",
-		.tau_legacy = "11100000",
+		.tau_legacy = "01001010",
 	};
 	struct psm_strings tau_legacy = {
 		.active_time = "00001000",
 		.tau_ext = "11100000",
 		.tau_legacy = "00101010",
 	};
-	struct psm_strings no_tau_legacy = {
+	struct psm_strings invalid_no_tau = {
 		.active_time = "00001000",
 		.tau_ext = "11100000",
+		.tau_legacy = "11100000",
 	};
 	struct psm_strings invalid_values = {
 		.active_time = "0001111111",
 		.tau_ext = "00001",
+		.tau_legacy = "111",
 	};
 	struct psm_strings valid_values_0 = {
 		.active_time = "01000001",
 		.tau_ext = "01000010",
+		.tau_legacy = "11100000",
 	};
 	struct psm_strings valid_values_1 = {
 		.active_time = "00100100",
 		.tau_ext = "00001000",
+		.tau_legacy = "11100000",
 	};
 	struct psm_strings valid_values_2 = {
 		.active_time = "00010000",
 		.tau_ext = "10111011",
+		.tau_legacy = "11100000",
 	};
 
-	err = parse_psm(disabled.active_time, disabled.tau_ext, disabled.tau_legacy, &psm_cfg);
+	err = parse_psm(psm_disabled_tau_ext.active_time,
+			psm_disabled_tau_ext.tau_ext,
+			psm_disabled_tau_ext.tau_legacy,
+			&psm_cfg);
 	TEST_ASSERT_EQUAL(0, err);
-	TEST_ASSERT_EQUAL(-1, psm_cfg.tau);
+	TEST_ASSERT_EQUAL(4800, psm_cfg.tau);
 	TEST_ASSERT_EQUAL(-1, psm_cfg.active_time);
 
 	memset(&psm_cfg, 0, sizeof(psm_cfg));
 
-	err = parse_psm(tau_legacy.active_time, tau_legacy.tau_ext, tau_legacy.tau_legacy,
-				&psm_cfg);
+	err = parse_psm(psm_disabled_tau_legacy.active_time,
+			psm_disabled_tau_legacy.tau_ext,
+			psm_disabled_tau_legacy.tau_legacy,
+			&psm_cfg);
+	TEST_ASSERT_EQUAL(0, err);
+	TEST_ASSERT_EQUAL(3600, psm_cfg.tau);
+	TEST_ASSERT_EQUAL(-1, psm_cfg.active_time);
+
+	memset(&psm_cfg, 0, sizeof(psm_cfg));
+
+	err = parse_psm(tau_legacy.active_time,
+			tau_legacy.tau_ext,
+			tau_legacy.tau_legacy,
+			&psm_cfg);
 	TEST_ASSERT_EQUAL(0, err);
 	TEST_ASSERT_EQUAL(600, psm_cfg.tau);
 	TEST_ASSERT_EQUAL(16, psm_cfg.active_time);
 
 	memset(&psm_cfg, 0, sizeof(psm_cfg));
 
-	err = parse_psm(no_tau_legacy.active_time, no_tau_legacy.tau_ext, NULL, &psm_cfg);
-	TEST_ASSERT_EQUAL(0, err);
-	TEST_ASSERT_EQUAL(-1, psm_cfg.tau);
-	TEST_ASSERT_EQUAL(16, psm_cfg.active_time);
-
-	memset(&psm_cfg, 0, sizeof(psm_cfg));
-
-	err = parse_psm(invalid_values.active_time, invalid_values.tau_ext, NULL, &psm_cfg);
+	err = parse_psm(invalid_no_tau.active_time,
+			invalid_no_tau.tau_ext,
+			invalid_no_tau.tau_legacy,
+			&psm_cfg);
 	TEST_ASSERT_EQUAL(-EINVAL, err);
 
 	memset(&psm_cfg, 0, sizeof(psm_cfg));
 
-	err = parse_psm(valid_values_0.active_time, valid_values_0.tau_ext, NULL, &psm_cfg);
+	err = parse_psm(invalid_values.active_time,
+			invalid_values.tau_ext,
+			invalid_values.tau_legacy,
+			&psm_cfg);
+	TEST_ASSERT_EQUAL(-EINVAL, err);
+
+	memset(&psm_cfg, 0, sizeof(psm_cfg));
+
+	err = parse_psm(valid_values_0.active_time,
+			valid_values_0.tau_ext,
+			valid_values_0.tau_legacy,
+			&psm_cfg);
 	TEST_ASSERT_EQUAL(0, err);
 	TEST_ASSERT_EQUAL(72000, psm_cfg.tau);
 	TEST_ASSERT_EQUAL(360, psm_cfg.active_time);
 
 	memset(&psm_cfg, 0, sizeof(psm_cfg));
 
-	err = parse_psm(valid_values_1.active_time, valid_values_1.tau_ext, NULL, &psm_cfg);
+	err = parse_psm(valid_values_1.active_time,
+			valid_values_1.tau_ext,
+			valid_values_1.tau_legacy,
+			&psm_cfg);
 	TEST_ASSERT_EQUAL(0, err);
 	TEST_ASSERT_EQUAL(4800, psm_cfg.tau);
 	TEST_ASSERT_EQUAL(240, psm_cfg.active_time);
 
 	memset(&psm_cfg, 0, sizeof(psm_cfg));
 
-	err = parse_psm(valid_values_2.active_time, valid_values_2.tau_ext, NULL, &psm_cfg);
+	err = parse_psm(valid_values_2.active_time,
+			valid_values_2.tau_ext,
+			valid_values_2.tau_legacy,
+			&psm_cfg);
 	TEST_ASSERT_EQUAL(0, err);
 	TEST_ASSERT_EQUAL(1620, psm_cfg.tau);
 	TEST_ASSERT_EQUAL(32, psm_cfg.active_time);
+}
+
+void test_encode_psm(void)
+{
+	int err;
+	char tau_ext_str[9] = "";
+	char active_time_str[9] = "";
+
+	err = encode_psm(tau_ext_str, active_time_str, 11400, 60);
+	TEST_ASSERT_EQUAL(0, err);
+	TEST_ASSERT_EQUAL_STRING("00010011", tau_ext_str);
+	TEST_ASSERT_EQUAL_STRING("00011110", active_time_str);
+
+	memset(tau_ext_str, 0, sizeof(tau_ext_str));
+	memset(active_time_str, 0, sizeof(active_time_str));
+
+	/* Test value -1 */
+	err = encode_psm(tau_ext_str, active_time_str, -1, -1);
+	TEST_ASSERT_EQUAL(0, err);
+	TEST_ASSERT_EQUAL_STRING("", tau_ext_str);
+	TEST_ASSERT_EQUAL_STRING("", active_time_str);
+
+	memset(tau_ext_str, 0, sizeof(tau_ext_str));
+	memset(active_time_str, 0, sizeof(active_time_str));
+
+	/* Test too big TAU */
+	err = encode_psm(tau_ext_str, active_time_str, 35712001, 61);
+	TEST_ASSERT_EQUAL(-EINVAL, err);
+	TEST_ASSERT_EQUAL_STRING("", tau_ext_str);
+	TEST_ASSERT_EQUAL_STRING("00011111", active_time_str);
+
+	memset(tau_ext_str, 0, sizeof(tau_ext_str));
+	memset(active_time_str, 0, sizeof(active_time_str));
+
+	/* Test too big active time */
+	err = encode_psm(tau_ext_str, active_time_str, 61, 11161);
+	TEST_ASSERT_EQUAL(-EINVAL, err);
+	TEST_ASSERT_EQUAL_STRING("01111111", tau_ext_str);
+	TEST_ASSERT_EQUAL_STRING("", active_time_str);
+
+	memset(tau_ext_str, 0, sizeof(tau_ext_str));
+	memset(active_time_str, 0, sizeof(active_time_str));
+
+	/* Test value 1 rounding to 2*/
+	err = encode_psm(tau_ext_str, active_time_str, 1, 1);
+	TEST_ASSERT_EQUAL(0, err);
+	TEST_ASSERT_EQUAL_STRING("01100001", tau_ext_str);
+	TEST_ASSERT_EQUAL_STRING("00000001", active_time_str);
+
+	memset(tau_ext_str, 0, sizeof(tau_ext_str));
+	memset(active_time_str, 0, sizeof(active_time_str));
+
+	/* Test maximum values */
+	err = encode_psm(tau_ext_str, active_time_str, 35712000, 11160);
+	TEST_ASSERT_EQUAL(0, err);
+	TEST_ASSERT_EQUAL_STRING("11011111", tau_ext_str);
+	TEST_ASSERT_EQUAL_STRING("01011111", active_time_str);
+
+	memset(tau_ext_str, 0, sizeof(tau_ext_str));
+	memset(active_time_str, 0, sizeof(active_time_str));
+
+	/****************************************/
+	err = encode_psm(tau_ext_str, active_time_str, 123456, 89);
+	TEST_ASSERT_EQUAL(0, err);
+	TEST_ASSERT_EQUAL_STRING("01000100", tau_ext_str);
+	TEST_ASSERT_EQUAL_STRING("00100010", active_time_str);
+
+	memset(tau_ext_str, 0, sizeof(tau_ext_str));
+	memset(active_time_str, 0, sizeof(active_time_str));
+
+	/****************************************/
+	err = encode_psm(tau_ext_str, active_time_str, 62, 63);
+	TEST_ASSERT_EQUAL(0, err);
+	TEST_ASSERT_EQUAL_STRING("01111111", tau_ext_str);
+	TEST_ASSERT_EQUAL_STRING("00100010", active_time_str);
+
+	memset(tau_ext_str, 0, sizeof(tau_ext_str));
+	memset(active_time_str, 0, sizeof(active_time_str));
 }
 
 void test_parse_mdmev(void)

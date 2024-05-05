@@ -6,7 +6,7 @@
 
 #include <zephyr/ztest.h>
 #include <zephyr/kernel.h>
-#include <zephyr/random/rand32.h>
+#include <zephyr/random/random.h>
 #include <bluetooth/mesh/time_srv.h>
 #include <bluetooth/mesh/models.h>
 #include "time_internal.h"
@@ -40,6 +40,7 @@ static struct bt_mesh_time_status expected_status;
 static uint32_t time_status_rx_number;
 static bool is_randomized;
 static bool is_unsolicited;
+static bool is_skipped;
 
 static void tc_setup(void *f)
 {
@@ -50,7 +51,12 @@ static void tc_setup(void *f)
 		.tm_hour = 0,   .tm_min = 0, .tm_sec = 0,
 	};
 
+	is_randomized = false;
+	is_unsolicited = false;
+	is_skipped = false;
 	time_status_rx_number = 0;
+	mock_elem[0].models->pub->mod = mock_elem[0].models;
+	mock_elem[0].models->pub->ttl = 10;
 	zassert_not_null(_bt_mesh_time_srv_cb.init, "Init cb is null");
 	_bt_mesh_time_srv_cb.init(mock_elem[0].models);
 
@@ -69,7 +75,8 @@ static void tc_teardown(void *f)
 	_bt_mesh_time_srv_cb.reset(mock_elem[0].models);
 }
 
-int bt_mesh_model_extend(struct bt_mesh_model *extending_mod, struct bt_mesh_model *base_mod)
+int bt_mesh_model_extend(const struct bt_mesh_model *extending_mod,
+			 const struct bt_mesh_model *base_mod)
 {
 	return 0;
 }
@@ -78,7 +85,7 @@ void bt_mesh_model_msg_init(struct net_buf_simple *msg, uint32_t opcode)
 {
 }
 
-int bt_mesh_msg_send(struct bt_mesh_model *model, struct bt_mesh_msg_ctx *ctx,
+int bt_mesh_msg_send(const struct bt_mesh_model *model, struct bt_mesh_msg_ctx *ctx,
 		     struct net_buf_simple *buf)
 {
 	struct bt_mesh_time_status status;
@@ -89,6 +96,10 @@ int bt_mesh_msg_send(struct bt_mesh_model *model, struct bt_mesh_msg_ctx *ctx,
 		(SUBSEC_STEPS * (k_uptime_get() - time_srv.data.sync.uptime)) / MSEC_PER_SEC;
 
 	zassert_equal_ptr(time_srv.model, model);
+
+	if (is_skipped) {
+		return 0;
+	}
 
 	if (is_randomized) {
 		zassert_is_null(ctx);
@@ -122,7 +133,7 @@ int bt_mesh_msg_send(struct bt_mesh_model *model, struct bt_mesh_msg_ctx *ctx,
 	return 0;
 }
 
-int bt_mesh_model_send(struct bt_mesh_model *model, struct bt_mesh_msg_ctx *ctx,
+int bt_mesh_model_send(const struct bt_mesh_model *model, struct bt_mesh_msg_ctx *ctx,
 		       struct net_buf_simple *msg, const struct bt_mesh_send_cb *cb, void *cb_data)
 {
 	return 0;
@@ -184,7 +195,6 @@ ZTEST(time_model, test_time_set_timing)
 {
 	int64_t start_time = k_uptime_get();
 
-	is_randomized = false;
 	is_unsolicited = true;
 
 	while (k_uptime_get() - start_time < TEST_TIME) {
@@ -244,6 +254,38 @@ ZTEST(time_model, test_time_periodic_pub_status_mix)
 	}
 
 	zassert_equal(TEST_TIME / STATUS_INTERVAL_MIN, time_status_rx_number);
+}
+
+/** Test scenario: update handler of the Time model is called once
+ *  (emulation of publication by timer). TTL should be equal configured value.
+ *  Unsolicited Time Status is published. TTL should be 0.
+ *  Unsolicited Time Status is published again. TTL is still 0.
+ *  Update handler is called. TTL should go back to the configured value.
+ *  Update handler is called again. TTL should be still equal the configured value.
+ */
+ZTEST(time_model, test_time_pub_ttl)
+{
+	struct bt_mesh_model_pub *pub = mock_elem[0].models->pub;
+
+	is_skipped = true;
+
+	zassert_equal(10, pub->ttl);
+	zassert_ok(_bt_mesh_time_srv_update_handler(mock_elem[0].models));
+	zassert_equal(10, pub->ttl);
+
+	net_buf_simple_reset(pub->msg);
+	zassert_ok(bt_mesh_time_srv_time_status_send(&time_srv, NULL));
+	zassert_equal(0, pub->ttl);
+	net_buf_simple_reset(pub->msg);
+	zassert_ok(bt_mesh_time_srv_time_status_send(&time_srv, NULL));
+	zassert_equal(0, pub->ttl);
+
+	net_buf_simple_reset(pub->msg);
+	zassert_ok(_bt_mesh_time_srv_update_handler(mock_elem[0].models));
+	zassert_equal(10, pub->ttl);
+	net_buf_simple_reset(pub->msg);
+	zassert_ok(_bt_mesh_time_srv_update_handler(mock_elem[0].models));
+	zassert_equal(10, pub->ttl);
 }
 
 ZTEST_SUITE(time_model, NULL, NULL, tc_setup, tc_teardown, NULL);

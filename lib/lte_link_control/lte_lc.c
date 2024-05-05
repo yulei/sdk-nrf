@@ -57,8 +57,6 @@ enum feaconf_feat {
 
 /* Static variables */
 
-static bool is_initialized;
-
 /* Request eDRX to be disabled */
 static const char edrx_disable[] = "AT+CEDRXS=3";
 /* Default eDRX setting */
@@ -69,9 +67,9 @@ static char ptw_param_ltem[5] = CONFIG_LTE_PTW_VALUE_LTE_M;
 static char ptw_param_nbiot[5] = CONFIG_LTE_PTW_VALUE_NBIOT;
 /* Default PSM RAT setting */
 static char psm_param_rat[9] = CONFIG_LTE_PSM_REQ_RAT;
-/* Default PSM RPATU setting */
+/* Default PSM RPTAU setting */
 static char psm_param_rptau[9] = CONFIG_LTE_PSM_REQ_RPTAU;
-/* Request PSM to be disabled */
+/* Request PSM to be disabled and timers set to default values */
 static const char psm_disable[] = "AT+CPSMS=";
 /* Enable CSCON (RRC mode) notifications */
 static const char cscon[] = "AT+CSCON=1";
@@ -84,35 +82,21 @@ static char rai_param[2] = CONFIG_LTE_RAI_REQ_VALUE;
 static struct lte_lc_ncellmeas_params ncellmeas_params;
 /* Sempahore value 1 means ncellmeas is not ongoing, and 0 means it's ongoing. */
 K_SEM_DEFINE(ncellmeas_idle_sem, 1, 1);
+/* Network attach semaphore */
+static K_SEM_DEFINE(link, 0, 1);
 
-static const enum lte_lc_system_mode sys_mode_preferred = SYS_MODE_PREFERRED;
-
-/* System mode to use when connecting to LTE network, which can be changed in
- * two ways:
- *	- Automatically to fallback mode (if enabled) when connection to the
- *	  preferred mode is unsuccessful and times out.
- *	- By calling lte_lc_system_mode_set() and set the mode explicitly.
+/* The preferred system mode to use when connecting to LTE network. Can be changed by calling
+ * lte_lc_system_mode_set().
+ *
+ * extern in lte_lc_modem_hooks.c
  */
-static enum lte_lc_system_mode sys_mode_target = SYS_MODE_PREFERRED;
-
-/* System mode preference to set when configuring system mode. */
-static enum lte_lc_system_mode_preference mode_pref_target = CONFIG_LTE_MODE_PREFERENCE_VALUE;
-static enum lte_lc_system_mode_preference mode_pref_current;
-
-static const enum lte_lc_system_mode sys_mode_fallback =
-#if IS_ENABLED(CONFIG_LTE_NETWORK_USE_FALLBACK)
-	IS_ENABLED(CONFIG_LTE_NETWORK_MODE_LTE_M)	?
-		LTE_LC_SYSTEM_MODE_NBIOT		:
-	IS_ENABLED(CONFIG_LTE_NETWORK_MODE_NBIOT)	?
-		LTE_LC_SYSTEM_MODE_LTEM			:
-	IS_ENABLED(CONFIG_LTE_NETWORK_MODE_LTE_M_GPS)	?
-		LTE_LC_SYSTEM_MODE_NBIOT_GPS		:
-	IS_ENABLED(CONFIG_LTE_NETWORK_MODE_NBIOT_GPS)	?
-		LTE_LC_SYSTEM_MODE_LTEM_GPS		:
-#endif
-	LTE_LC_SYSTEM_MODE_DEFAULT;
-
-static enum lte_lc_system_mode sys_mode_current = LTE_LC_SYSTEM_MODE_DEFAULT;
+enum lte_lc_system_mode lte_lc_sys_mode = SYS_MODE_PREFERRED;
+/* System mode preference to set when configuring system mode. Can be changed by calling
+ * lte_lc_system_mode_set().
+ *
+ * extern in lte_lc_modem_hooks.c
+ */
+enum lte_lc_system_mode_preference lte_lc_sys_mode_pref = CONFIG_LTE_MODE_PREFERENCE_VALUE;
 
 /* Parameters to be passed using AT%XSYSTEMMMODE=<params>,<preference> */
 static const char *const system_mode_params[] = {
@@ -139,7 +123,13 @@ static const char system_mode_preference[] = {
 	[LTE_LC_SYSTEM_MODE_PREFER_NBIOT_PLMN_PRIO]	= '4',
 };
 
-static struct k_sem link;
+static void lte_lc_psm_get_work_fn(struct k_work *work_item);
+K_WORK_DEFINE(lte_lc_psm_get_work, lte_lc_psm_get_work_fn);
+
+#define LTE_LC_PSM_GET_STACK_SIZE 1024
+K_THREAD_STACK_DEFINE(lte_lc_psm_get_stack, LTE_LC_PSM_GET_STACK_SIZE);
+
+static struct k_work_q lte_lc_psm_get_work_q;
 
 static bool is_cellid_valid(uint32_t cellid)
 {
@@ -148,6 +138,41 @@ static bool is_cellid_valid(uint32_t cellid)
 	}
 
 	return true;
+}
+
+static void lte_lc_evt_psm_update_send(struct lte_lc_psm_cfg *psm_cfg)
+{
+	static struct lte_lc_psm_cfg prev_psm_cfg;
+	struct lte_lc_evt evt = {0};
+
+	/* PSM configuration update event */
+	if ((psm_cfg->tau != prev_psm_cfg.tau) ||
+	    (psm_cfg->active_time != prev_psm_cfg.active_time)) {
+		evt.type = LTE_LC_EVT_PSM_UPDATE;
+
+		memcpy(&prev_psm_cfg, psm_cfg, sizeof(struct lte_lc_psm_cfg));
+		memcpy(&evt.psm_cfg, psm_cfg, sizeof(struct lte_lc_psm_cfg));
+		event_handler_list_dispatch(&evt);
+	}
+}
+
+static void lte_lc_psm_get_work_fn(struct k_work *work_item)
+{
+	int err;
+	struct lte_lc_psm_cfg psm_cfg = {
+		.active_time = -1,
+		.tau = -1
+	};
+
+	err = lte_lc_psm_get(&psm_cfg.tau, &psm_cfg.active_time);
+	if (err) {
+		if (err != -EBADMSG) {
+			LOG_ERR("Failed to get PSM information");
+		}
+		return;
+	}
+
+	lte_lc_evt_psm_update_send(&psm_cfg);
 }
 
 AT_MONITOR(ltelc_atmon_cereg, "+CEREG", at_handler_cereg);
@@ -165,19 +190,20 @@ static void at_handler_cereg(const char *response)
 
 	__ASSERT_NO_MSG(response != NULL);
 
-	static enum lte_lc_nw_reg_status prev_reg_status =
-		LTE_LC_NW_REG_NOT_REGISTERED;
+	static enum lte_lc_nw_reg_status prev_reg_status = LTE_LC_NW_REG_NOT_REGISTERED;
 	static struct lte_lc_cell prev_cell;
-	static struct lte_lc_psm_cfg prev_psm_cfg;
 	static enum lte_lc_lte_mode prev_lte_mode = LTE_LC_LTE_MODE_NONE;
 	enum lte_lc_nw_reg_status reg_status = 0;
 	struct lte_lc_cell cell = {0};
 	enum lte_lc_lte_mode lte_mode;
-	struct lte_lc_psm_cfg psm_cfg = {0};
+	struct lte_lc_psm_cfg psm_cfg = {
+		.active_time = -1,
+		.tau = -1
+	};
 
-	LOG_DBG("+CEREG notification: %s", response);
+	LOG_DBG("+CEREG notification: %.*s", strlen(response) - strlen("\r\n"), response);
 
-	err = parse_cereg(response, true, &reg_status, &cell, &lte_mode);
+	err = parse_cereg(response, true, &reg_status, &cell, &lte_mode, &psm_cfg);
 	if (err) {
 		LOG_ERR("Failed to parse notification (error %d): %s",
 			err, response);
@@ -248,9 +274,17 @@ static void at_handler_cereg(const char *response)
 		evt.type = LTE_LC_EVT_LTE_MODE_UPDATE;
 		evt.lte_mode = lte_mode;
 
-		LTE_LC_TRACE(lte_mode == LTE_LC_LTE_MODE_LTEM ?
-			     LTE_LC_TRACE_LTE_MODE_UPDATE_LTEM :
-			     LTE_LC_TRACE_LTE_MODE_UPDATE_NBIOT);
+		switch (lte_mode) {
+		case LTE_LC_LTE_MODE_LTEM:
+			LTE_LC_TRACE(LTE_LC_TRACE_LTE_MODE_UPDATE_LTEM);
+			break;
+		case LTE_LC_LTE_MODE_NBIOT:
+			LTE_LC_TRACE(LTE_LC_TRACE_LTE_MODE_UPDATE_NBIOT);
+			break;
+		case LTE_LC_LTE_MODE_NONE:
+			LTE_LC_TRACE(LTE_LC_TRACE_LTE_MODE_UPDATE_NONE);
+			break;
+		}
 
 		event_handler_list_dispatch(&evt);
 	}
@@ -260,23 +294,21 @@ static void at_handler_cereg(const char *response)
 		return;
 	}
 
-	err = lte_lc_psm_get(&psm_cfg.tau, &psm_cfg.active_time);
-	if (err) {
-		if (err != -EBADMSG) {
-			LOG_ERR("Failed to get PSM information");
-		}
+	if (psm_cfg.tau == -1) {
+		/* Need to get legacy T3412 value as TAU using AT%XMONITOR.
+		 *
+		 * As we are in an AT notification handler that is run from the system work queue,
+		 * we shall not send AT commands here because another AT command might be ongoing,
+		 * and the second command will be blocked until the first one completes.
+		 * Further AT notifications from the modem will gradually exhaust AT monitor
+		 * library's heap, and eventually it will run out causing an assert or
+		 * AT notifications not being dispatched.
+		 */
+		k_work_submit_to_queue(&lte_lc_psm_get_work_q, &lte_lc_psm_get_work);
 		return;
 	}
 
-	/* PSM configuration update event */
-	if ((psm_cfg.tau != prev_psm_cfg.tau) ||
-	    (psm_cfg.active_time != prev_psm_cfg.active_time)) {
-		evt.type = LTE_LC_EVT_PSM_UPDATE;
-
-		memcpy(&prev_psm_cfg, &psm_cfg, sizeof(struct lte_lc_psm_cfg));
-		memcpy(&evt.psm_cfg, &psm_cfg, sizeof(struct lte_lc_psm_cfg));
-		event_handler_list_dispatch(&evt);
-	}
+	lte_lc_evt_psm_update_send(&psm_cfg);
 }
 
 static void at_handler_cscon(const char *response)
@@ -378,8 +410,8 @@ static void at_handler_ncellmeas_gci(const char *response)
 	LOG_DBG("parse_ncellmeas_gci returned %d", err);
 	switch (err) {
 	case -E2BIG:
-		LOG_WRN("Not all neighbor cells could be parsed");
-		LOG_WRN("More cells than the configured max count of %d were found",
+		LOG_WRN("Not all neighbor cells could be parsed. "
+			"More cells than the configured max count of %d were found",
 			CONFIG_LTE_NEIGHBOR_CELLS_MAX);
 		/* Fall through */
 	case 0: /* Fall through */
@@ -555,78 +587,51 @@ static int enable_notifications(void)
 	/* +CSCON notifications */
 	err = nrf_modem_at_printf(cscon);
 	if (err) {
-		char buf[50];
-
-		/* AT+CSCON is supported from modem firmware v1.1.0, and will
-		 * not work for older versions. If the command fails, RRC
-		 * mode change notifications will not be received. This is not
-		 * considered a critical error, and the error code is therefore
-		 * not returned, while informative log messages are printed.
-		 */
-		LOG_WRN("AT+CSCON failed (%d), RRC notifications are not enabled", err);
-		LOG_WRN("AT+CSCON is supported in nRF9160 modem >= v1.1.0");
-
-		err = nrf_modem_at_cmd(buf, sizeof(buf), "AT+CGMR");
-		if (err == 0) {
-			char *end = strstr(buf, "\r\nOK");
-
-			if (end) {
-				*end = '\0';
-			}
-
-			LOG_WRN("Current modem firmware version: %s", buf);
-		}
+		LOG_WRN("Failed to enable RRC notifications (+CSCON), error %d", err);
+		return -EFAULT;
 	}
 
 	return 0;
 }
 
-static int init_and_config(void)
+static int fallback_system_mode_set(void)
 {
 	int err;
+	enum lte_lc_system_mode fallback_sys_mode;
 
-	if (is_initialized) {
-		LOG_DBG("The library is already initialized and configured");
-		return 0;
+	switch (lte_lc_sys_mode) {
+	case LTE_LC_SYSTEM_MODE_LTEM:
+		fallback_sys_mode = LTE_LC_SYSTEM_MODE_NBIOT;
+		break;
+
+	case LTE_LC_SYSTEM_MODE_NBIOT:
+		fallback_sys_mode = LTE_LC_SYSTEM_MODE_LTEM;
+		break;
+
+	case LTE_LC_SYSTEM_MODE_LTEM_GPS:
+		fallback_sys_mode = LTE_LC_SYSTEM_MODE_NBIOT_GPS;
+		break;
+
+	case LTE_LC_SYSTEM_MODE_NBIOT_GPS:
+		fallback_sys_mode = LTE_LC_SYSTEM_MODE_LTEM_GPS;
+		break;
+
+	default:
+		LOG_WRN("Fallback enabled, but not possible from current system mode %d",
+			lte_lc_sys_mode);
+		return -EINVAL;
 	}
 
-	k_sem_init(&link, 0, 1);
-
-	err = lte_lc_system_mode_get(&sys_mode_current, &mode_pref_current);
+	err = nrf_modem_at_printf("AT%%XSYSTEMMODE=%s,%c",
+				  system_mode_params[fallback_sys_mode],
+				  system_mode_preference[lte_lc_sys_mode_pref]);
 	if (err) {
-		LOG_ERR("Could not get current system mode, error: %d", err);
-		return err;
+		LOG_ERR("Failed to set system mode, error: %d", err);
+		return -EFAULT;
 	}
 
-	if (IS_ENABLED(CONFIG_LTE_NETWORK_MODE_DEFAULT)) {
-		sys_mode_target = sys_mode_current;
-
-		LOG_DBG("Default system mode is used: %d", sys_mode_current);
-	}
-
-	if ((sys_mode_current != sys_mode_target) ||
-	    (mode_pref_current != mode_pref_target)) {
-		err = lte_lc_system_mode_set(sys_mode_target, mode_pref_target);
-		if (err) {
-			LOG_ERR("Could not set system mode, error: %d", err);
-			return err;
-		}
-
-		LOG_DBG("System mode (%d) and preference (%d) configured",
-			sys_mode_target, mode_pref_target);
-	} else {
-		LOG_DBG("System mode (%d) and preference (%d) are already configured",
-			sys_mode_current, mode_pref_current);
-	}
-
-	/* Listen for RRC connection mode notifications */
-	err = enable_notifications();
-	if (err) {
-		LOG_ERR("Failed to enable notifications");
-		return err;
-	}
-
-	is_initialized = true;
+	LOG_DBG("Trying fallback, system mode set to %d, preference %d",
+		fallback_sys_mode, lte_lc_sys_mode_pref);
 
 	return 0;
 }
@@ -634,15 +639,9 @@ static int init_and_config(void)
 static int connect_lte(bool blocking)
 {
 	int err;
-	int tries = (IS_ENABLED(CONFIG_LTE_NETWORK_USE_FALLBACK) ? 2 : 1);
-	enum lte_lc_func_mode current_func_mode;
+	enum lte_lc_func_mode original_func_mode;
 	enum lte_lc_nw_reg_status reg_status;
 	static atomic_t in_progress;
-
-	if (!is_initialized) {
-		LOG_ERR("The LTE link controller is not initialized");
-		return -EPERM;
-	}
 
 	/* Check if a connection attempt is already in progress */
 	if (atomic_set(&in_progress, 1)) {
@@ -652,7 +651,8 @@ static int connect_lte(bool blocking)
 	err = lte_lc_nw_reg_status_get(&reg_status);
 	if (err) {
 		LOG_ERR("Failed to get current registration status");
-		return -EFAULT;
+		err = -EFAULT;
+		goto exit;
 	}
 
 	/* Do not attempt to register with an LTE network if the device already is registered.
@@ -667,78 +667,81 @@ static int connect_lte(bool blocking)
 		goto exit;
 	}
 
-	if (blocking) {
-		k_sem_init(&link, 0, 1);
+	err = lte_lc_func_mode_get(&original_func_mode);
+	if (err) {
+		err = -EFAULT;
+		goto exit;
 	}
 
-	do {
-		tries--;
-
-		err = lte_lc_func_mode_get(&current_func_mode);
-		if (err) {
-			err = -EFAULT;
-			goto exit;
-		}
-
-		/* Change the modem sys-mode only if it's not running or is meant to change */
-		if (!IS_ENABLED(CONFIG_LTE_NETWORK_MODE_DEFAULT) &&
-		    ((current_func_mode == LTE_LC_FUNC_MODE_POWER_OFF) ||
-		     (current_func_mode == LTE_LC_FUNC_MODE_OFFLINE))) {
-			err = lte_lc_system_mode_set(sys_mode_target, mode_pref_current);
+	if (lte_lc_sys_mode != LTE_LC_SYSTEM_MODE_DEFAULT &&
+	    IS_ENABLED(CONFIG_LTE_NETWORK_USE_FALLBACK)) {
+		/* Set system mode, because it may have been changed by fallback. */
+		if (original_func_mode != LTE_LC_FUNC_MODE_POWER_OFF &&
+		    original_func_mode != LTE_LC_FUNC_MODE_OFFLINE) {
+			err = lte_lc_func_mode_set(LTE_LC_FUNC_MODE_OFFLINE);
 			if (err) {
 				err = -EFAULT;
 				goto exit;
 			}
 		}
 
-		err = lte_lc_func_mode_set(LTE_LC_FUNC_MODE_NORMAL);
-		if (err || !blocking) {
+		err = lte_lc_system_mode_set(lte_lc_sys_mode, lte_lc_sys_mode_pref);
+		if (err) {
+			err = -EFAULT;
 			goto exit;
 		}
+	}
 
-		err = k_sem_take(&link, K_SECONDS(CONFIG_LTE_NETWORK_TIMEOUT));
-		if (err == -EAGAIN) {
-			LOG_INF("Network connection attempt timed out");
+	/* Reset the semaphore, it may have already been given by an earlier +CEREG notification. */
+	k_sem_reset(&link);
 
-			if (IS_ENABLED(CONFIG_LTE_NETWORK_USE_FALLBACK) &&
-			    (tries > 0)) {
-				if (sys_mode_target == sys_mode_preferred) {
-					sys_mode_target = sys_mode_fallback;
-				} else {
-					sys_mode_target = sys_mode_preferred;
-				}
+	err = lte_lc_func_mode_set(LTE_LC_FUNC_MODE_NORMAL);
+	if (err || !blocking) {
+		goto exit;
+	}
 
-				err = lte_lc_func_mode_set(LTE_LC_FUNC_MODE_OFFLINE);
-				if (err) {
-					err = -EFAULT;
-					goto exit;
-				}
+	err = k_sem_take(&link, K_SECONDS(CONFIG_LTE_NETWORK_TIMEOUT));
+	if (err == -EAGAIN) {
+		LOG_INF("Network connection attempt timed out");
+		err = -ETIMEDOUT;
 
-				LOG_INF("Using fallback network mode");
-			} else {
+		if (IS_ENABLED(CONFIG_LTE_NETWORK_USE_FALLBACK)) {
+			err = lte_lc_func_mode_set(LTE_LC_FUNC_MODE_OFFLINE);
+			if (err) {
+				err = -EFAULT;
+				goto exit;
+			}
+
+			err = fallback_system_mode_set();
+			if (err) {
+				err = -ETIMEDOUT;
+				goto exit;
+			}
+
+			k_sem_reset(&link);
+
+			err = lte_lc_func_mode_set(LTE_LC_FUNC_MODE_NORMAL);
+			if (err || !blocking) {
+				goto exit;
+			}
+
+			err = k_sem_take(&link, K_SECONDS(CONFIG_LTE_NETWORK_TIMEOUT));
+			if (err == -EAGAIN) {
+				LOG_INF("Network connection attempt timed out");
 				err = -ETIMEDOUT;
 			}
-		} else {
-			tries = 0;
 		}
-	} while (tries > 0);
+	}
 
 exit:
+	if (err) {
+		/* Connecting to LTE network failed, restore original functional mode. */
+		lte_lc_func_mode_set(original_func_mode);
+	}
+
 	atomic_clear(&in_progress);
 
 	return err;
-}
-
-static int init_and_connect(void)
-{
-	int err;
-
-	err = lte_lc_init();
-	if (err) {
-		return err;
-	}
-
-	return connect_lte(true);
 }
 
 static int feaconf_write(enum feaconf_feat feat, bool state)
@@ -750,9 +753,7 @@ static int feaconf_write(enum feaconf_feat feat, bool state)
 
 int lte_lc_init(void)
 {
-	int err = init_and_config();
-
-	return err ? -EFAULT : 0;
+	return 0;
 }
 
 void lte_lc_register_handler(lte_lc_evt_handler_t handler)
@@ -768,10 +769,6 @@ void lte_lc_register_handler(lte_lc_evt_handler_t handler)
 
 int lte_lc_deregister_handler(lte_lc_evt_handler_t handler)
 {
-	if (!is_initialized) {
-		LOG_ERR("Module not initialized yet");
-		return -EINVAL;
-	}
 	if (handler == NULL) {
 		LOG_ERR("Invalid handler (handler=0x%08X)", (uint32_t)handler);
 		return -EINVAL;
@@ -787,7 +784,7 @@ int lte_lc_connect(void)
 
 int lte_lc_init_and_connect(void)
 {
-	return init_and_connect();
+	return connect_lte(true);
 }
 
 int lte_lc_connect_async(lte_lc_evt_handler_t handler)
@@ -804,25 +801,12 @@ int lte_lc_connect_async(lte_lc_evt_handler_t handler)
 
 int lte_lc_init_and_connect_async(lte_lc_evt_handler_t handler)
 {
-	int err;
-
-	err = init_and_config();
-	if (err) {
-		return -EFAULT;
-	}
-
 	return lte_lc_connect_async(handler);
 }
 
 int lte_lc_deinit(void)
 {
-	if (is_initialized) {
-		is_initialized = false;
-
-		return lte_lc_func_mode_set(LTE_LC_FUNC_MODE_POWER_OFF) ? -EFAULT : 0;
-	}
-
-	return 0;
+	return lte_lc_power_off();
 }
 
 int lte_lc_normal(void)
@@ -852,7 +836,7 @@ int lte_lc_psm_param_set(const char *rptau, const char *rat)
 		LOG_DBG("RPTAU set to %s", psm_param_rptau);
 	} else {
 		*psm_param_rptau = '\0';
-		LOG_DBG("RPTAU use default");
+		LOG_DBG("Using modem default value for RPTAU");
 	}
 
 	if (rat != NULL) {
@@ -860,15 +844,34 @@ int lte_lc_psm_param_set(const char *rptau, const char *rat)
 		LOG_DBG("RAT set to %s", psm_param_rat);
 	} else {
 		*psm_param_rat = '\0';
-		LOG_DBG("RAT use default");
+		LOG_DBG("Using modem default value for RAT");
 	}
 
 	return 0;
 }
 
+int lte_lc_psm_param_set_seconds(int rptau, int rat)
+{
+	int ret;
+
+	ret = encode_psm(psm_param_rptau, psm_param_rat, rptau, rat);
+
+	if (ret != 0) {
+		*psm_param_rptau = '\0';
+		*psm_param_rat = '\0';
+	}
+
+	LOG_DBG("RPTAU=%d (%s), RAT=%d (%s), ret=%d",
+		rptau, psm_param_rptau, rat, psm_param_rat, ret);
+
+	return ret;
+}
+
 int lte_lc_psm_req(bool enable)
 {
 	int err;
+
+	LOG_DBG("enable=%d, tau=%s, rat=%s", enable, psm_param_rptau, psm_param_rat);
 
 	if (enable) {
 		if (strlen(psm_param_rptau) == 8 &&
@@ -915,7 +918,7 @@ int lte_lc_psm_get(int *tau, int *active_time)
 	 * <phys_cell_id>,<EARFCN>,<rsrp>,<snr>,<NW-provided_eDRX_value>,<Active-Time>,
 	 * <Periodic-TAUext>,<Periodic-TAU>]
 	 * We need to parse the three last parameters, Active-Time, Periodic-TAU-ext and
-	 * Periodic-TAU. N.B. Periodic-TAU will not be present on modem firmwares < 1.2.0.
+	 * Periodic-TAU.
 	 */
 
 	response[0] = '\0';
@@ -967,10 +970,12 @@ int lte_lc_psm_get(int *tau, int *active_time)
 		return -EBADMSG;
 	}
 
-	/* It's ok not to have legacy Periodic-TAU, older FWs don't provide it. */
 	comma_ptr = strchr(comma_ptr + 1, ch);
 	if (comma_ptr) {
 		strncpy(tau_legacy_str, comma_ptr + 2, 8);
+	} else {
+		LOG_ERR("AT command parsing failed");
+		return -EBADMSG;
 	}
 
 	err = parse_psm(active_time_str, tau_ext_str, tau_legacy_str, &psm_cfg);
@@ -1253,10 +1258,10 @@ int lte_lc_system_mode_set(enum lte_lc_system_mode mode,
 		return -EFAULT;
 	}
 
-	sys_mode_current = mode;
-	sys_mode_target = mode;
-	mode_pref_current = preference;
-	mode_pref_target = preference;
+	lte_lc_sys_mode = mode;
+	lte_lc_sys_mode_pref = preference;
+
+	LOG_DBG("System mode set to %d, preference %d", lte_lc_sys_mode, lte_lc_sys_mode_pref);
 
 	return 0;
 }
@@ -1338,18 +1343,6 @@ int lte_lc_system_mode_get(enum lte_lc_system_mode *mode,
 			LOG_ERR("Unsupported LTE preference: %d", mode_preference);
 			return -EFAULT;
 		}
-	}
-
-	if (sys_mode_current != *mode) {
-		LOG_DBG("Current system mode updated from %d to %d",
-			sys_mode_current, *mode);
-		sys_mode_current = *mode;
-	}
-
-	if ((preference != NULL) && (mode_pref_current != *preference)) {
-		LOG_DBG("Current system mode preference updated from %d to %d",
-			mode_pref_current, *preference);
-		mode_pref_current = *preference;
 	}
 
 	return 0;
@@ -1437,11 +1430,6 @@ int lte_lc_func_mode_set(enum lte_lc_func_mode mode)
 	if (err) {
 		LOG_ERR("Failed to set functional mode. Please check XSYSTEMMODE.");
 		return -EFAULT;
-	}
-
-	STRUCT_SECTION_FOREACH(lte_lc_cfun_cb, e) {
-		LOG_DBG("CFUN monitor callback: %p", e->callback);
-		e->callback(mode, e->context);
 	}
 
 	return 0;
@@ -1872,3 +1860,21 @@ int lte_lc_factory_reset(enum lte_lc_factory_reset_type type)
 {
 	return nrf_modem_at_printf("AT%%XFACTORYRESET=%d", type) ? -EFAULT : 0;
 }
+
+static int lte_lc_sys_init(void)
+{
+	struct k_work_queue_config cfg = {
+		.name = "lte_lc_psm_get_work_q",
+	};
+
+	k_work_queue_start(
+		&lte_lc_psm_get_work_q,
+		lte_lc_psm_get_stack,
+		K_THREAD_STACK_SIZEOF(lte_lc_psm_get_stack),
+		K_LOWEST_APPLICATION_THREAD_PRIO,
+		&cfg);
+
+	return 0;
+}
+
+SYS_INIT(lte_lc_sys_init, APPLICATION, 0);

@@ -4,13 +4,14 @@
 # SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
 #
 
+set(is_getting_includes FALSE)
+
 # Legacy APIs missing driver support or APIs assumed to be
 # deprecated with more PSA API awareness.
 append_with_prefix(src_crypto_legacy ${ARM_MBEDTLS_PATH}/library
   dhm.c
   cipher.c
   cipher_wrap.c
-  hash_info.c
   md.c
   pk.c
   pk_wrap.c
@@ -18,18 +19,23 @@ append_with_prefix(src_crypto_legacy ${ARM_MBEDTLS_PATH}/library
   sha1.c
   sha256.c
   sha512.c
+  sha3.c
   ripemd160.c
   md5.c
   aesni.c
+  aesce.c
   aria.c
   camellia.c
   des.c
+  psa_util.c
+  platform_util.c
 )
 
-# Add all files that are neccessary for nrf_oberon + builtin in legacy mode
+# Add all files that are neccessary for (nrf_oberon or cracen) + builtin in legacy mode
 # These files are used only as a convenience until PSA Crypto APIs are standarized
 if(CONFIG_MBEDTLS_LEGACY_CRYPTO_C OR
-  CONFIG_PSA_CRYPTO_DRIVER_OBERON)
+  CONFIG_PSA_CRYPTO_DRIVER_OBERON OR
+  CONFIG_PSA_CRYPTO_DRIVER_CRACEN)
   append_with_prefix(src_crypto_legacy ${ARM_MBEDTLS_PATH}/library
     cmac.c
     ccm.c
@@ -38,6 +44,7 @@ if(CONFIG_MBEDTLS_LEGACY_CRYPTO_C OR
     ecdsa.c
     ecp.c
     ecp_curves.c
+    ecp_curves_new.c
     gcm.c
     hkdf.c
     hmac_drbg.c
@@ -46,7 +53,7 @@ if(CONFIG_MBEDTLS_LEGACY_CRYPTO_C OR
   )
 endif()
 
-if(CONFIG_CRYPTOCELL_CC310_USABLE)
+if(CONFIG_HAS_HW_NRF_CC310)
 append_with_prefix(src_crypto_legacy ${ARM_MBEDTLS_PATH}/library
   gcm.c
 )
@@ -66,6 +73,7 @@ if(NOT CONFIG_OBERON_BACKEND)
     chacha20.c
     poly1305.c
     ecjpake.c
+    platform.c
   )
 endif()
 
@@ -99,6 +107,7 @@ if(DEFINED src_crypto_legacy_base)
 endif()
 
 if(TARGET mbedcrypto_oberon_mbedtls_imported)
+  set(is_getting_includes TRUE)
 
   # Get the include paths from nrf_oberon libraries
   get_target_property(NRF_OBERON_MBEDTLS_INCLUDE_PATH mbedcrypto_oberon_mbedtls_imported
@@ -124,11 +133,13 @@ target_link_libraries(mbedcrypto_oberon_mbedtls_imported
     INTERFACE
       ${NRF_OBERON_MBEDTLS_INCLUDE_PATH}
       ${NRF_OBERON_INCLUDE_PATH}
-  )
+	)
 endif()
 
 
 if(CONFIG_MBEDTLS_LEGACY_CRYPTO_C AND CONFIG_CC3XX_BACKEND)
+  set(is_getting_includes TRUE)
+
   # Link directly with cc3xx platform/mbedcrypto libraries
   target_link_libraries(${mbedcrypto_target} PRIVATE
     nrf_cc3xx_legacy_crypto_imported
@@ -147,6 +158,8 @@ if(CONFIG_MBEDTLS_LEGACY_CRYPTO_C AND CONFIG_CC3XX_BACKEND)
 endif()
 
 if(TARGET nrf_cc3xx_core_imported)
+  set(is_getting_includes TRUE)
+
   # The CC3XX needs funcionality which is provided by the inluded source files in src_crypto_legacy
   # Link CC3XX with mbedcrypto_target because of link order dependency
   target_link_libraries(nrf_cc3xx_core_imported INTERFACE
@@ -165,3 +178,23 @@ target_include_directories(${mbedcrypto_target}
 INTERFACE
   $<$<TARGET_EXISTS:nrf_cc3xx_platform>:$<TARGET_PROPERTY:nrf_cc3xx_platform,INTERFACE_INCLUDE_DIRECTORIES>>
 )
+
+if(NOT is_getting_includes)
+  if(NOT DEFINED ARM_MBEDTLS_PATH)
+  message(FATAL_ERROR "misconfiguration")
+  endif()
+
+  # Add mbedtls legacy include paths to the mbedtls legacy library and
+  # it's users (users get the headers because we use interface).  Also
+  # since nrf_security only provides some of the headers, add the rest
+  # from Zephyr. We place nrf_security before ARM_MBEDTLS_PATH so that
+  # nrf_security takes precedence.
+  target_include_directories(${mbedcrypto_target}
+  INTERFACE
+  ${NRF_SECURITY_ROOT}/include
+  ${OBERON_PSA_PATH}/include
+  ${OBERON_PSA_PATH}/library
+  ${ARM_MBEDTLS_PATH}/include
+  ${ARM_MBEDTLS_PATH}/library
+  )
+endif()

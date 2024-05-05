@@ -6,13 +6,14 @@
 
 #include <zephyr/net/buf.h>
 #include <zephyr/sys/byteorder.h>
-#include <zephyr/random/rand32.h>
+#include <zephyr/random/random.h>
 
 #include <zephyr/bluetooth/bluetooth.h>
 #include <zephyr/bluetooth/l2cap.h>
 #include <zephyr/bluetooth/gatt.h>
 
-#include <bluetooth/services/fast_pair.h>
+#include <bluetooth/services/fast_pair/fast_pair.h>
+#include <bluetooth/services/fast_pair/uuid.h>
 
 /* Those headers are included to make a workaround of Android issue with sending old RPA address
  * during Key-based Pairing write.
@@ -29,19 +30,6 @@ LOG_MODULE_REGISTER(fast_pair, CONFIG_BT_FAST_PAIR_LOG_LEVEL);
 #include "fp_keys.h"
 #include "fp_auth.h"
 #include "fp_storage_pn.h"
-
-/* Fast Pair GATT Service UUIDs defined by the Fast Pair specification. */
-#define BT_UUID_FAST_PAIR			BT_UUID_DECLARE_16(FP_SERVICE_UUID)
-#define BT_UUID_FAST_PAIR_MODEL_ID \
-	BT_UUID_DECLARE_128(BT_UUID_128_ENCODE(0xFE2C1233, 0x8366, 0x4814, 0x8EB0, 0x01DE32100BEA))
-#define BT_UUID_FAST_PAIR_KEY_BASED_PAIRING \
-	BT_UUID_DECLARE_128(BT_UUID_128_ENCODE(0xFE2C1234, 0x8366, 0x4814, 0x8EB0, 0x01DE32100BEA))
-#define BT_UUID_FAST_PAIR_PASSKEY \
-	BT_UUID_DECLARE_128(BT_UUID_128_ENCODE(0xFE2C1235, 0x8366, 0x4814, 0x8EB0, 0x01DE32100BEA))
-#define BT_UUID_FAST_PAIR_ACCOUNT_KEY \
-	BT_UUID_DECLARE_128(BT_UUID_128_ENCODE(0xFE2C1236, 0x8366, 0x4814, 0x8EB0, 0x01DE32100BEA))
-#define BT_UUID_FAST_PAIR_ADDITIONAL_DATA \
-	BT_UUID_DECLARE_128(BT_UUID_128_ENCODE(0xFE2C1237, 0x8366, 0x4814, 0x8EB0, 0x01DE32100BEA))
 
 /* Make sure that MTU value of at least 83 is used (recommended by the Fast Pair specification). */
 #define FP_RECOMMENDED_MTU			83
@@ -133,27 +121,27 @@ static ssize_t write_additional_data(struct bt_conn *conn,
 				     uint16_t len, uint16_t offset, uint8_t flags);
 
 BT_GATT_SERVICE_DEFINE(fast_pair_svc,
-BT_GATT_PRIMARY_SERVICE(BT_UUID_FAST_PAIR),
-	BT_GATT_CHARACTERISTIC(BT_UUID_FAST_PAIR_MODEL_ID,
+BT_GATT_PRIMARY_SERVICE(BT_FAST_PAIR_UUID_FPS),
+	BT_GATT_CHARACTERISTIC(BT_FAST_PAIR_UUID_MODEL_ID,
 		BT_GATT_CHRC_READ,
 		BT_GATT_PERM_READ,
 		read_model_id, NULL, NULL),
-	BT_GATT_CHARACTERISTIC(BT_UUID_FAST_PAIR_KEY_BASED_PAIRING,
+	BT_GATT_CHARACTERISTIC(BT_FAST_PAIR_UUID_KEY_BASED_PAIRING,
 		BT_GATT_CHRC_WRITE | BT_GATT_CHRC_NOTIFY,
 		BT_GATT_PERM_WRITE,
 		NULL, write_key_based_pairing, NULL),
 	BT_GATT_CCC(NULL, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),
-	BT_GATT_CHARACTERISTIC(BT_UUID_FAST_PAIR_PASSKEY,
+	BT_GATT_CHARACTERISTIC(BT_FAST_PAIR_UUID_PASSKEY,
 		BT_GATT_CHRC_WRITE | BT_GATT_CHRC_NOTIFY,
 		BT_GATT_PERM_WRITE,
 		NULL, write_passkey, NULL),
 	BT_GATT_CCC(NULL, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),
-	BT_GATT_CHARACTERISTIC(BT_UUID_FAST_PAIR_ACCOUNT_KEY,
+	BT_GATT_CHARACTERISTIC(BT_FAST_PAIR_UUID_ACCOUNT_KEY,
 		BT_GATT_CHRC_WRITE,
 		BT_GATT_PERM_WRITE,
 		NULL, write_account_key, NULL),
 #if CONFIG_BT_FAST_PAIR_GATT_SERVICE_ADDITIONAL_DATA
-	BT_GATT_CHARACTERISTIC(BT_UUID_FAST_PAIR_ADDITIONAL_DATA,
+	BT_GATT_CHARACTERISTIC(BT_FAST_PAIR_UUID_ADDITIONAL_DATA,
 		BT_GATT_CHRC_WRITE | BT_GATT_CHRC_NOTIFY,
 		BT_GATT_PERM_WRITE,
 		NULL, write_additional_data, NULL),
@@ -239,7 +227,7 @@ static int notify_personalized_name(struct bt_conn *conn)
 	if (!additional_data_attr) {
 		additional_data_attr = bt_gatt_find_by_uuid(fast_pair_svc.attrs,
 							    fast_pair_svc.attr_count,
-							    BT_UUID_FAST_PAIR_ADDITIONAL_DATA);
+							    BT_FAST_PAIR_UUID_ADDITIONAL_DATA);
 		__ASSERT_NO_MSG(additional_data_attr != NULL);
 	}
 
@@ -260,6 +248,13 @@ static ssize_t read_model_id(struct bt_conn *conn,
 {
 	uint8_t model_id[FP_REG_DATA_MODEL_ID_LEN];
 	ssize_t res;
+
+	if (!bt_fast_pair_is_ready()) {
+		res = BT_GATT_ERR(BT_ATT_ERR_UNLIKELY);
+		LOG_INF("Model ID read: res=%d conn=%p, "
+			"Return error because Fast Pair is not enabled",  res, (void *)conn);
+		return res;
+	}
 
 	if (!fp_reg_data_get_model_id(model_id, sizeof(model_id))) {
 		res = bt_gatt_attr_read(conn, attr, buf, len, offset, model_id, sizeof(model_id));
@@ -504,6 +499,17 @@ static ssize_t write_key_based_pairing(struct bt_conn *conn,
 
 	NET_BUF_SIMPLE_DEFINE(rsp, FP_CRYPTO_AES128_BLOCK_LEN);
 
+	/* It is assumed that this function executes in the cooperative thread context. */
+	__ASSERT_NO_MSG(!k_is_preempt_thread());
+	__ASSERT_NO_MSG(!k_is_in_isr());
+
+	if (!bt_fast_pair_is_ready()) {
+		res = BT_GATT_ERR(BT_ATT_ERR_UNLIKELY);
+		LOG_INF("Key-based Pairing write: res=%d conn=%p, "
+			"Return error because Fast Pair is not enabled", res, (void *)conn);
+		return res;
+	}
+
 	if (offset != 0) {
 		LOG_WRN("Invalid offset: off=%" PRIu16 " (Key-based Pairing)", offset);
 		res = BT_GATT_ERR(BT_ATT_ERR_INVALID_OFFSET);
@@ -621,6 +627,17 @@ static ssize_t write_passkey(struct bt_conn *conn,
 	NET_BUF_SIMPLE_DEFINE(req, FP_CRYPTO_AES128_BLOCK_LEN);
 	NET_BUF_SIMPLE_DEFINE(rsp, FP_CRYPTO_AES128_BLOCK_LEN);
 
+	/* It is assumed that this function executes in the cooperative thread context. */
+	__ASSERT_NO_MSG(!k_is_preempt_thread());
+	__ASSERT_NO_MSG(!k_is_in_isr());
+
+	if (!bt_fast_pair_is_ready()) {
+		res = BT_GATT_ERR(BT_ATT_ERR_UNLIKELY);
+		LOG_INF("Passkey write: res=%d conn=%p, "
+			"Return error because Fast Pair is not enabled", res, (void *)conn);
+		return res;
+	}
+
 	if (offset != 0) {
 		LOG_WRN("Invalid offset: off=%" PRIu16 " (Passkey)", offset);
 		res = BT_GATT_ERR(BT_ATT_ERR_INVALID_OFFSET);
@@ -679,6 +696,17 @@ static ssize_t write_account_key(struct bt_conn *conn,
 	int err = 0;
 	ssize_t res = len;
 
+	/* It is assumed that this function executes in the cooperative thread context. */
+	__ASSERT_NO_MSG(!k_is_preempt_thread());
+	__ASSERT_NO_MSG(!k_is_in_isr());
+
+	if (!bt_fast_pair_is_ready()) {
+		res = BT_GATT_ERR(BT_ATT_ERR_UNLIKELY);
+		LOG_INF("Account Key write: res=%d conn=%p, "
+			"Return error because Fast Pair is not enabled", res, (void *)conn);
+		return res;
+	}
+
 	if (offset != 0) {
 		LOG_WRN("Invalid offset: off=%" PRIu16 " (Account Key)", offset);
 		res = BT_GATT_ERR(BT_ATT_ERR_INVALID_OFFSET);
@@ -729,6 +757,17 @@ static ssize_t write_additional_data(struct bt_conn *conn,
 	int err = 0;
 	ssize_t res = len;
 
+	/* It is assumed that this function executes in the cooperative thread context. */
+	__ASSERT_NO_MSG(!k_is_preempt_thread());
+	__ASSERT_NO_MSG(!k_is_in_isr());
+
+	if (!bt_fast_pair_is_ready()) {
+		res = BT_GATT_ERR(BT_ATT_ERR_UNLIKELY);
+		LOG_INF("Additional Data write: res=%d conn=%p, "
+			"Return error because Fast Pair is not enabled", res, (void *)conn);
+		return res;
+	}
+
 	if (offset != 0) {
 		LOG_WRN("Invalid offset: off=%" PRIu16 " (Additional Data)", offset);
 		res = BT_GATT_ERR(BT_ATT_ERR_INVALID_OFFSET);
@@ -766,6 +805,14 @@ finish:
 
 int bt_fast_pair_info_cb_register(const struct bt_fast_pair_info_cb *cb)
 {
+	/* It is assumed that this function executes in the cooperative thread context. */
+	__ASSERT_NO_MSG(!k_is_preempt_thread());
+	__ASSERT_NO_MSG(!k_is_in_isr());
+
+	if (bt_fast_pair_is_ready()) {
+		return -EACCES;
+	}
+
 	if (!cb) {
 		return -EINVAL;
 	}

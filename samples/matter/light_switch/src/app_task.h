@@ -6,31 +6,15 @@
 
 #pragma once
 
-#include "app_event.h"
-#include "led_widget.h"
+#include "board/board.h"
 
 #include <platform/CHIPDeviceLayer.h>
-
-#if CONFIG_CHIP_FACTORY_DATA
-#include <platform/nrfconnect/FactoryDataProvider.h>
-#else
-#include <platform/nrfconnect/DeviceInstanceInfoProviderImpl.h>
-#endif
-
-#ifdef CONFIG_MCUMGR_TRANSPORT_BT
-#include "dfu_over_smp.h"
-#endif
-
-#ifdef CONFIG_CHIP_ICD_SUBSCRIPTION_HANDLING
-#include "icd_util.h"
-#endif
 
 struct k_timer;
 struct Identify;
 
 class AppTask {
 public:
-
 	static AppTask &Instance()
 	{
 		static AppTask sAppTask;
@@ -45,34 +29,15 @@ public:
 	static void IdentifyStopHandler(Identify *);
 
 private:
-	enum class Timer : uint8_t { Function, DimmerTrigger, Dimmer };
-	enum class Button : uint8_t {
-		Function,
-		Dimmer,
-	};
+	enum Timer : uint8_t { DimmerTrigger, Dimmer };
 
 	CHIP_ERROR Init();
 
-	static void PostEvent(const AppEvent &event);
-	static void DispatchEvent(const AppEvent &event);
-	static void ButtonPushHandler(const AppEvent &event);
-	static void ButtonReleaseHandler(const AppEvent &event);
-	static void TimerEventHandler(const AppEvent &event);
-	static void StartBLEAdvertisementHandler(const AppEvent &event);
-	static void UpdateLedStateEventHandler(const AppEvent &event);
-
-	static void ChipEventHandler(const chip::DeviceLayer::ChipDeviceEvent *event, intptr_t arg);
-	static void ButtonEventHandler(uint32_t buttonState, uint32_t hasChanged);
-	static void LEDStateUpdateHandler(LEDWidget &ledWidget);
-	static void FunctionTimerTimeoutCallback(k_timer *timer);
-	static void UpdateStatusLED();
+	static void DimmerTriggerEventHandler();
+	static void TimerEventHandler(const Timer &event);
+	static void ButtonEventHandler(Nrf::ButtonState state, Nrf::ButtonMask hasChanged);
 
 	static void StartTimer(Timer, uint32_t);
 	static void CancelTimer(Timer);
-
-	FunctionEvent mFunction = FunctionEvent::NoneSelected;
-
-#if CONFIG_CHIP_FACTORY_DATA
-	chip::DeviceLayer::FactoryDataProvider<chip::DeviceLayer::InternalFlashFactoryData> mFactoryDataProvider;
-#endif
+	static void UserTimerTimeoutCallback(k_timer *timer);
 };

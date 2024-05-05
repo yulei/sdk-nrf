@@ -64,6 +64,28 @@ This option lets you use the Matter shell commands with :ref:`matter_samples`.
 
 See :doc:`matter:nrfconnect_examples_cli` in the Matter documentation for the list of available Matter shell commands.
 
+.. _ug_matter_configuring_settings_shell:
+
+Matter Settings shell commands
+------------------------------
+
+You can enable the Matter Settings shell commands to monitor the current usage of the Zephyr Settings NVS.
+These commands are useful for verifying that the ``settings`` partition has the proper size and meets the application requirements.
+
+To enable the Matter Settings shell module, set the :kconfig:option:`CONFIG_NCS_SAMPLE_MATTER_SETTINGS_SHELL` Kconfig option to ``y``.
+
+You can use the following shell commands:
+
+* ``matter_settings peak`` - Read the maximum settings usage peak.
+* ``matter_settings reset`` - Reset the peak value.
+* ``matter_settings get_size <name>`` - Get the size of the specific entry.
+* ``matter_settings current`` - Get the size of the current settings usage.
+* ``matter_settings free`` - Get the size of the current free settings space.
+
+.. note::
+
+  The Matter Settings shell module is available only for the NVS Zephyr Settings backend.
+
 .. _ug_matter_configuring_device_identification:
 
 Matter device identification
@@ -100,7 +122,7 @@ To enable the FFS support, set the following configuration options to meet the A
 * :kconfig:option:`CONFIG_CHIP_DEVICE_TYPE` to the appropriate value, depending on the device used.
   The value must be compliant with the Matter Device Type Identifier.
 
-Every Matter device must use an unique device identifier for rotating device identifier calculation purpose.
+Every Matter device must use a unique device identifier for rotating device identifier calculation purpose.
 By default, the identifier is set to a random value and stored in the factory data partition.
 You can choose your own unique identifier value instead by setting the :kconfig:option:`CONFIG_CHIP_DEVICE_GENERATE_ROTATING_DEVICE_UID` Kconfig option to ``n`` and using the :kconfig:option:`CONFIG_CHIP_DEVICE_ROTATING_DEVICE_UID` Kconfig option.
 When using your own identifier, the value can be stored in either firmware or factory data.
@@ -136,8 +158,46 @@ To enable one of the reactions to the last fabric removal, set the corresponding
   This means the device is restored to the factory settings.
 
 To create a delay between  the chosen reaction and the last fabric being removed, set the :kconfig:option:`CONFIG_CHIP_LAST_FABRIC_REMOVED_ACTION_DELAY` Kconfig option to a specific time in milliseconds.
-By default this Kconfig option is set to 500 milliseconds.
+By default this Kconfig option is set to 1 second.
 
 .. note::
   The :kconfig:option:`CONFIG_CHIP_FACTORY_RESET_ERASE_NVS` Kconfig option is set to ``y`` by default.
   To disable removing application-specific non-volatile data when the :kconfig:option:`CONFIG_CHIP_LAST_FABRIC_REMOVED_ERASE_AND_REBOOT` Kconfig option is selected, set the :kconfig:option:`CONFIG_CHIP_FACTORY_RESET_ERASE_NVS` Kconfig option to ``n``.
+
+.. _ug_matter_configuring_read_client:
+
+Read Client functionality
+=========================
+
+The Read Client functionality is used for reading attributes from another device in the Matter network.
+This functionality is disabled by default for Matter samples in the |NCS|, except for ones that need to read attributes from the bound devices, such as the :ref:`matter_light_switch_sample` and :ref:`matter_thermostat_sample` samples, and the :ref:`matter_bridge_app` application.
+Enable the feature if your device needs to be able to access attributes from a different device within the Matter network using, for example, bindings.
+
+Persistent storage
+==================
+
+The persistent storage module allows for the application data and configuration to survive a device reboot.
+|NCS| Matter applications use one generic Persistent Storage API that can be enabled by the :kconfig:option:`CONFIG_NCS_SAMPLE_MATTER_PERSISTENT_STORAGE` Kconfig option.
+This API consists of methods with ``Secure`` and ``NonSecure`` prefixes, which handle secure (ARM Platform Security Architecture Persistent Storage) and non-secure (raw Zephyr settings) storage operations, respectively.
+
+You can learn more details about the Persistent Storage API from the :file:`ncs/nrf/samples/matter/common/src/persistent_storage/persistent_storage.h` header file.
+
+The interface is implemented by two available backends.
+Both can be used simultaneously by controlling the following Kconfig options:
+
+* :kconfig:option:`CONFIG_NCS_SAMPLE_MATTER_SETTINGS_STORAGE_BACKEND` - Activates the implementation that takes advantage of the raw :ref:`Zephyr settings<zephyr:settings_api>`.
+  This backend implements ``NonSecure`` methods of the Persistent Storage API and returns ``PSErrorCode::NotSupported`` for ``Secure`` methods.
+* :kconfig:option:`CONFIG_NCS_SAMPLE_MATTER_SECURE_STORAGE_BACKEND` - Activates the module based on the ARM PSA Protected Storage API implementation from the :ref:`trusted_storage_readme` |NCS| library.
+  This backend implements ``Secure`` methods of the Persistent Storage API and returns ``PSErrorCode::NotSupported`` for ``NonSecure`` methods.
+
+Both backends allow you to control the maximum length of a string-type key under which an asset can be stored.
+You can do this using the :kconfig:option:`CONFIG_NCS_SAMPLE_MATTER_STORAGE_MAX_KEY_LEN` Kconfig option.
+
+If both backends are activated at the same time (:kconfig:option:`CONFIG_NCS_SAMPLE_MATTER_SETTINGS_STORAGE_BACKEND` and :kconfig:option:`CONFIG_NCS_SAMPLE_MATTER_SECURE_STORAGE_BACKEND` enabled) all methods of the generic interface are supported.
+
+Similarly to the non-secure backend, the secure backend leverages the Zephyr Settings to interface with the FLASH memory.
+
+Additionally, in case of the secure storage backend, the following Kconfig options control the storage limits:
+
+* :kconfig:option:`CONFIG_NCS_SAMPLE_MATTER_SECURE_STORAGE_MAX_ENTRY_NUMBER` - Defines the maximum number or assets that can be stored in the secure storage.
+* :kconfig:option:`CONFIG_TRUSTED_STORAGE_BACKEND_AEAD_MAX_DATA_SIZE` - Defines the maximum length of the secret that is stored.

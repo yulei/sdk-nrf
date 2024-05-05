@@ -12,14 +12,50 @@
  * @brief Utility functions for serial LTE modem
  * @{
  */
-#include <zephyr/logging/log.h>
-#include <zephyr/types.h>
-#include <ctype.h>
-#include <stdbool.h>
-#include <zephyr/net/socket.h>
+#include "slm_trap_macros.h"
 #include <modem/at_cmd_parser.h>
+#include <modem/lte_lc.h>
+#include <zephyr/logging/log.h>
+#include <zephyr/net/socket.h>
+#include <stdbool.h>
+#include <hal/nrf_gpio.h>
 
 extern struct k_work_q slm_work_q; /* SLM's work queue. */
+
+/** @return Whether the modem is in the given functional mode. */
+bool slm_is_modem_functional_mode(enum lte_lc_func_mode mode);
+
+/** @brief Puts the modem in minimal function mode. */
+int slm_power_off_modem(void);
+
+/** @brief Performs a reset of the SiP. */
+FUNC_NORETURN void slm_reset(void);
+
+void slm_enter_idle(void);
+FUNC_NORETURN void slm_enter_sleep(void);
+FUNC_NORETURN void slm_enter_shutdown(void);
+
+/** @brief Temporarily sets the indicate pin high. */
+int slm_indicate(void);
+
+/** Replacement for @c nrf_modem_at_printf() that cannot be
+ *  used so that the AT command interception works properly.
+ */
+int slm_util_at_printf(const char *fmt, ...);
+
+/** Replacement for @c nrf_modem_at_scanf() that cannot be
+ *  used so that the AT command interception works properly.
+ */
+int slm_util_at_scanf(const char *cmd, const char *fmt, ...);
+
+/** Forwards an AT command to the modem while bypassing interception.
+ *  @warning This must only be called from code that needs to bypass
+ *  AT command interception, such as from interception callbacks themselves.
+ *  @note This is only capable of handling AT responses that are
+ *  at most two lines long (including the line that holds the result code).
+ *  @return Like @c nrf_modem_at_cmd().
+ */
+int slm_util_at_cmd_no_intercept(char *buf, size_t len, const char *at_cmd);
 
 /**
  * @brief Compare string ignoring case
@@ -30,16 +66,6 @@ extern struct k_work_q slm_work_q; /* SLM's work queue. */
  * @return true If two commands match, false if not.
  */
 bool slm_util_casecmp(const char *str1, const char *str2);
-
-/**
- * @brief Compare name of AT command ignoring case
- *
- * @param cmd Command string received from UART
- * @param slm_cmd Propreiatry command supported by SLM
- *
- * @return true If two commands match, false if not.
- */
-bool slm_util_cmd_casecmp(const char *cmd, const char *slm_cmd);
 
 /**
  * @brief Detect hexdecimal string data type
@@ -127,10 +153,10 @@ int util_string_to_double_get(const struct at_param_list *list, size_t index, do
  * @brief use AT command to get IPv4 and IPv6 addresses for specified PDN
  *
  * @param[in] cid PDP Context ID as defined in "+CGDCONT" command (0~10).
- * @param[out] addr4 Buffer to hold the IPv4 address, size NET_IPV4_ADDR_LEN.
- * @param[out] addr6 Buffer to hold the IPv6 address, size NET_IPV6_ADDR_LEN.
+ * @param[out] addr4 Buffer to hold the IPv4 address. May be NULL.
+ * @param[out] addr6 Buffer to hold the IPv6 address. May be NULL.
  */
-void util_get_ip_addr(int cid, char *addr4, char *addr6);
+void util_get_ip_addr(int cid, char addr4[INET_ADDRSTRLEN], char addr6[INET6_ADDRSTRLEN]);
 
 /**
  * @brief convert string to integer
@@ -153,15 +179,13 @@ int util_str_to_int(const char *str, int base, int *output);
  * @param[in] host Name or IP address of remote host.
  * @param[in] port Service port of remote host.
  * @param[in] family Desired address family for the returned address.
- * @param[in] log_inst The log instance of the module calling this function.
  * @param[out] sa The returned address.
  *
  * @retval 0 If the operation was successful.
  *           Otherwise, an errno code or a dns_resolve_status enum value
  *           (defined in `zephyr/net/dns_resolve.h`).
  */
-int util_resolve_host(int cid, const char *host, uint16_t port, int family,
-	Z_LOG_INSTANCE_STRUCT *log_inst, struct sockaddr *sa);
+int util_resolve_host(int cid, const char *host, uint16_t port, int family, struct sockaddr *sa);
 /** @} */
 
 #endif /* SLM_UTIL_ */

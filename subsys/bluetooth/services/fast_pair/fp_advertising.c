@@ -6,13 +6,14 @@
 
 #include <errno.h>
 #include <zephyr/net/buf.h>
-#include <zephyr/random/rand32.h>
+#include <zephyr/random/random.h>
 #include <zephyr/bluetooth/bluetooth.h>
 
 #include <zephyr/logging/log.h>
 LOG_MODULE_DECLARE(fast_pair, CONFIG_BT_FAST_PAIR_LOG_LEVEL);
 
-#include <bluetooth/services/fast_pair.h>
+#include <bluetooth/services/fast_pair/fast_pair.h>
+#include <bluetooth/services/fast_pair/uuid.h>
 #include "fp_battery.h"
 #include "fp_common.h"
 #include "fp_crypto.h"
@@ -37,7 +38,7 @@ enum fp_field_type {
 	FP_FIELD_TYPE_HIDE_BATTERY_UI_INDICATION = 0b0100,
 };
 
-static const uint16_t fast_pair_uuid = FP_SERVICE_UUID;
+static const uint16_t fast_pair_uuid = BT_FAST_PAIR_UUID_FPS_VAL;
 static const uint8_t version_and_flags;
 static const uint8_t empty_account_key_list;
 
@@ -95,6 +96,14 @@ static size_t bt_fast_pair_adv_data_size_discoverable(void)
 
 size_t bt_fast_pair_adv_data_size(struct bt_fast_pair_adv_config fp_adv_config)
 {
+	/* It is assumed that this function executes in the cooperative thread context. */
+	__ASSERT_NO_MSG(!k_is_preempt_thread());
+	__ASSERT_NO_MSG(!k_is_in_isr());
+
+	if (!bt_fast_pair_is_ready()) {
+		return 0;
+	}
+
 	int account_key_cnt = fp_storage_ak_count();
 	size_t res = 0;
 	int err;
@@ -223,6 +232,15 @@ static int fp_adv_data_fill_discoverable(struct net_buf_simple *buf)
 int bt_fast_pair_adv_data_fill(struct bt_data *bt_adv_data, uint8_t *buf, size_t buf_size,
 			       struct bt_fast_pair_adv_config fp_adv_config)
 {
+	/* It is assumed that this function executes in the cooperative thread context. */
+	__ASSERT_NO_MSG(!k_is_preempt_thread());
+	__ASSERT_NO_MSG(!k_is_in_isr());
+
+	if (!bt_fast_pair_is_ready()) {
+		LOG_ERR("Fast Pair not enabled");
+		return -EACCES;
+	}
+
 	struct net_buf_simple nb;
 	int account_key_cnt = fp_storage_ak_count();
 	size_t adv_data_len = bt_fast_pair_adv_data_size(fp_adv_config);

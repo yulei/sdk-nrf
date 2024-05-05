@@ -20,6 +20,7 @@
 #include <cJSON.h>
 #include <modem/lte_lc.h>
 #include <net/wifi_location_common.h>
+#include <net/nrf_cloud_location.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -92,6 +93,48 @@ struct nrf_cloud_obj {
 	enum nrf_cloud_enc_src enc_src;
 	/** Encoded data */
 	struct nrf_cloud_data encoded_data;
+};
+
+/** @brief Types of shadow updates */
+enum nrf_cloud_obj_shadow_type {
+	/* A shadow delta, when there is a mismatch between "desired" and "reported" sections. */
+	NRF_CLOUD_OBJ_SHADOW_TYPE_DELTA,
+	/* The accepted shadow data. nRF Cloud provides a trimmed report to reduce overhead. */
+	NRF_CLOUD_OBJ_SHADOW_TYPE_ACCEPTED
+};
+
+/** @brief Object containing shadow delta data */
+struct nrf_cloud_obj_shadow_delta {
+	/** The shadow version number */
+	int ver;
+	/** Timestamp of the delta event */
+	int64_t ts;
+	/** The delta data in the "state" object */
+	struct nrf_cloud_obj state;
+};
+
+/** @brief Object containing the accepted shadow data */
+struct nrf_cloud_obj_shadow_accepted {
+	/** The "desired" shadow data */
+	struct nrf_cloud_obj desired;
+	/** The "reported" shadow data */
+	struct nrf_cloud_obj reported;
+	/** The reported "config" shadow data.
+	 * nRF Cloud separates this to allow for easier processing.
+	 */
+	struct nrf_cloud_obj config;
+};
+
+/** @brief Object containing shadow update data */
+struct nrf_cloud_obj_shadow_data {
+	/** The type of shadow data provided in the union */
+	enum nrf_cloud_obj_shadow_type type;
+	union {
+		/** Accepted data; for type = NRF_CLOUD_OBJ_SHADOW_TYPE_ACCEPTED */
+		struct nrf_cloud_obj_shadow_accepted *accepted;
+		/** Delta data; for type = NRF_CLOUD_OBJ_SHADOW_TYPE_DELTA */
+		struct nrf_cloud_obj_shadow_delta *delta;
+	};
 };
 
 /** @brief Define an nRF Cloud JSON object.
@@ -218,6 +261,43 @@ int nrf_cloud_obj_str_get(const struct nrf_cloud_obj *const obj, const char *con
 			  char **str);
 
 /**
+ * @brief Get the boolean value associated with the provided key.
+ *
+ * @param[in] obj Object containing the key and value.
+ * @param[in] key Key.
+ * @param[out] val Boolean value associated with the provided key.
+ *
+ * @retval -EINVAL Invalid parameter.
+ * @retval -ENODEV Object does not contain the provided key.
+ * @retval -ENOENT Object is not initialized.
+ * @retval -ENOTSUP Action not supported for the object's type.
+ * @retval -ENOMSG Value associated with the key is not a boolean.
+ * @retval 0 Success; boolean found.
+ */
+int nrf_cloud_obj_bool_get(const struct nrf_cloud_obj *const obj, const char *const key,
+			   bool *val);
+
+/**
+ * @brief Get and detach the object associated with the provided key.
+ *
+ * @details If successful, the object data specified by the given key is removed from obj
+ *          and moved into obj_out.
+ *
+ * @param[in] obj Object containing the key and object.
+ * @param[in] key Key.
+ * @param[out] obj_out Object associated with the provided key.
+ *
+ * @retval -EINVAL Invalid parameter.
+ * @retval -ENODEV Object does not contain the provided key.
+ * @retval -ENOENT Object is not initialized.
+ * @retval -ENOTSUP Action not supported for the object's type.
+ * @retval -ENOMSG Value associated with the key is not an object.
+ * @retval 0 Success; string found.
+ */
+int nrf_cloud_obj_object_detach(struct nrf_cloud_obj *const obj, const char *const key,
+				struct nrf_cloud_obj *const obj_out);
+
+/**
  * @brief Initialize an object as an nRF Cloud device message.
  *
  * @details If successful, memory is allocated for the provided object.
@@ -294,6 +374,15 @@ int nrf_cloud_obj_reset(struct nrf_cloud_obj *const obj);
  * @retval 0 Success; memory freed.
  */
 int nrf_cloud_obj_free(struct nrf_cloud_obj *const obj);
+
+/**
+ * @brief Check if an object is a JSON array eligible for bulk transfer.
+ *
+ * @param[in] obj Object to check.
+ *
+ * @return bool True if the object is a JSON array.
+ */
+bool nrf_cloud_obj_bulk_check(struct nrf_cloud_obj *const obj);
 
 /**
  * @brief Add an object to a bulk message object.
@@ -399,6 +488,9 @@ int nrf_cloud_obj_null_add(struct nrf_cloud_obj *const obj, const char *const ke
 
 /**
  * @brief Add a key string and object to the provided object.
+ *
+ * @details If successful, obj_to_add will be reset with @ref nrf_cloud_obj_reset
+ *          since its data has been moved to obj.
  *
  * @param[out] obj Object to contain key and object.
  * @param[in] key Key string; must be valid and constant for the life of the object.
@@ -515,7 +607,7 @@ int nrf_cloud_obj_gnss_msg_create(struct nrf_cloud_obj *const obj,
  * @param[out] obj Uninitialzed object to contain the Location message.
  * @param[in] cells_inf Cellular network data, can be NULL if wifi_inf is provided.
  * @param[in] wifi_inf Wi-Fi network data, can be NULL if cells_inf is provided.
- * @param[in] request_loc If true, nRF Cloud will send the location data to the device.
+ * @param[in] config Optional configuration of request. If NULL, use cloud defaults.
  *
  * @retval -EINVAL Invalid parameter.
  * @retval -EDOM Too few Wi-Fi networks, see NRF_CLOUD_LOCATION_WIFI_AP_CNT_MIN.
@@ -527,7 +619,7 @@ int nrf_cloud_obj_gnss_msg_create(struct nrf_cloud_obj *const obj,
 int nrf_cloud_obj_location_request_create(struct nrf_cloud_obj *const obj,
 					  const struct lte_lc_cells_info *const cells_inf,
 					  const struct wifi_scan_info *const wifi_inf,
-					  const bool request_loc);
+					  const struct nrf_cloud_location_config *const config);
 
 /**
  * @brief Add PVT data to the provided object.
@@ -662,25 +754,22 @@ int nrf_cloud_error_msg_decode(const char * const buf,
  *      "myData":{"myValue":1}
  *
  *  If rejecting, the delta should be modified with the correct data and passed
- *  into this function as the input_obj parameter, with the accept flag set to false.
+ *  into this function as the delta_state_obj parameter, with the accept flag set to false.
  *  Example input_obj:
  *      "myData":{"myValue":3}
  *
  *  A value can be removed from the shadow by setting it to null.
  *  Example input_obj:
  *      "myData":{"myValue":null}
- *  The output parameter can then be sent to nRF Cloud using nrf_cloud_coap_shadow_state_update()
- *  when using CoAP or nrf_cloud_send() when using MQTT.
+ *  On success, the delta_state_obj parameter can be sent to nRF Cloud using
+ *  nrf_cloud_coap_shadow_state_update() for CoAP or nrf_cloud_obj_shadow_update() for MQTT.
  *
- *  @param[in]  input_obj  Shadow fragment to encode for sending.
+ *  @param[in]  delta_state_obj  The contents of the "state" object received in a shadow delta.
  *  @param[in]  accept     Flag to indicate whether to accept (place in reported section) or reject
  *                         (place in desired section).
- *  @param[out] output     Pointer to and length of a buffer containing the JSON-formatted
- *                         text to send.
  */
-int nrf_cloud_shadow_delta_response_encode(cJSON *input_obj,
-					   bool accept,
-					   struct nrf_cloud_data *const output);
+int nrf_cloud_obj_shadow_delta_response_encode(struct nrf_cloud_obj *const delta_state_obj,
+					       bool accept);
 
 /** @} */
 

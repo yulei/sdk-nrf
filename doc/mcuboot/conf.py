@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2023 Nordic Semiconductor
+# Copyright (c) 2024 Nordic Semiconductor
 #
 # SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
 #
@@ -23,8 +23,8 @@ ZEPHYR_BASE = utils.get_projdir("zephyr")
 # General configuration --------------------------------------------------------
 
 project = "MCUboot"
-copyright = "2019-2023, Nordic Semiconductor"
-version = release = "1.10.0"
+copyright = "2019-2024, Nordic Semiconductor"
+version = release = "2.0.99"
 
 sys.path.insert(0, str(ZEPHYR_BASE / "doc" / "_extensions"))
 sys.path.insert(0, str(NRF_BASE / "doc" / "_extensions"))

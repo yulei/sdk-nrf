@@ -35,8 +35,8 @@ IPv6 network support
 
 The development kits for this sample offer the following IPv6 network support for Matter:
 
-* Matter over Thread is supported for ``nrf52840dk_nrf52840`` and ``nrf5340dk_nrf5340_cpuapp``.
-* Matter over Wi-Fi is supported for ``nrf5340dk_nrf5340_cpuapp`` with the ``nrf7002_ek`` shield attached or for ``nrf7002dk_nrf5340_cpuapp``.
+* Matter over Thread is supported for ``nrf52840dk_nrf52840``, ``nrf5340dk_nrf5340_cpuapp``, and ``nrf54l15pdk_nrf54l15``.
+* Matter over Wi-Fi is supported for ``nrf5340dk_nrf5340_cpuapp`` with the ``nrf7002_ek`` shield attached or for ``nrf7002dk/nrf5340/cpuapp``.
 
 Overview
 ********
@@ -84,11 +84,12 @@ You can read more about ACLs on the :doc:`matter:access-control-guide` in the Ma
 External sensor integration
 ===========================
 
-The thermsotat sample lets you connect to an external temperature sensor, for example :ref:`Matter weather station application on Nordic Thingy:53 <matter_weather_station_app>`.
+The thermostat sample lets you connect to an external temperature sensor, for example :ref:`Matter weather station application on Nordic Thingy:53 <matter_weather_station_app>`.
 This establishes the :ref:`matter_thermostat_sample_binding` to Matter's temperature measurement cluster.
 
-To enable this feature, set :kconfig:option:`CONFIG_THERMOSTAT_EXTERNAL_SENSOR` to ``y`` in the configuration files or use the ``-DCONFIG_THERMOSTAT_EXTERNAL_SENSOR=y`` :ref:`CMake option <cmake_options>` when building the sample.
-You can then follow steps listed in :ref:`matter_thermostat_sensor_testing`.
+By default, the thermostat sample generates simulated temperature measurements that simulate local temperature changes.
+Additionally, you can enable periodic outdoor temperature measurements by binding the thermostat with an external temperature sensor device.
+To test this feature, follow the steps listed in the :ref:`matter_thermostat_sensor_testing` section.
 
 .. _matter_thermostat_sample_binding:
 
@@ -105,28 +106,30 @@ Using binding, the thermostat device updates its Binding cluster with all releva
 Matter thermostat build types
 =============================
 
-The sample uses different configuration files depending on the supported features.
-Configuration files are provided for different build types and they are located in the application root directory.
+The sample does not use a single :file:`prj.conf` file.
+Configuration files are provided for different build types, and they are located in the sample root directory.
+Before you start testing the application, you can select one of the build types supported by the application.
 
-The :file:`prj.conf` file represents a ``debug`` build type.
-Other build types are covered by dedicated files with the build type added as a suffix to the ``prj`` part, as per the following list.
-For example, the ``release`` build type file name is :file:`prj_release.conf`.
-If a board has other configuration files, for example associated with partition layout or child image configuration, these follow the same pattern.
+See :ref:`app_build_additions_build_types` and :ref:`cmake_options` for more information.
 
-.. include:: /config_and_build/modifying.rst
-   :start-after: build_types_overview_start
-   :end-before: build_types_overview_end
+The sample supports the following build types:
 
-Before you start testing the application, you can select one of the build types supported by the sample.
-This sample supports the following build types, depending on the selected board:
+.. list-table:: Sample build types
+   :widths: auto
+   :header-rows: 1
 
-* ``debug`` -- Debug version of the application - can be used to enable additional features for verifying the application behavior, such as logs or command-line shell.
-* ``release`` -- Release version of the application - can be used to enable only the necessary application functionalities to optimize its performance.
-* ``no_dfu`` -- Debug version of the application without Device Firmware Upgrade feature support - can be used for the nRF52840 DK, nRF5340 DK, and nRF7002 DK.
-
-.. note::
-    `Selecting a build type`_ is optional.
-    The ``debug`` build type is used by default if no build type is explicitly selected.
+   * - Build type
+     - File name
+     - Supported board
+     - Description
+   * - Debug (default)
+     - :file:`prj.conf`
+     - All from `Requirements`_
+     - Debug version of the application; can be used to enable additional features for verifying the application behavior, such as logs or command-line shell.
+   * - Release
+     - :file:`prj_release.conf`
+     - All from `Requirements`_
+     - Release version of the application; can be used to enable only the necessary application functionalities to optimize its performance.
 
 Device Firmware Upgrade support
 ===============================
@@ -134,6 +137,10 @@ Device Firmware Upgrade support
 .. include:: ../lock/README.rst
     :start-after: matter_door_lock_sample_build_with_dfu_start
     :end-before: matter_door_lock_sample_build_with_dfu_end
+
+.. include:: ../template/README.rst
+    :start-after: matter_template_nrf54l15_build_with_dfu_start
+    :end-before: matter_template_nrf54l15_build_with_dfu_end
 
 .. _matter_thermostat_network_mode:
 
@@ -154,28 +161,20 @@ Factory data support
 User interface
 **************
 
+.. include:: ../template/README.rst
+   :start-after: matter_template_nrf54l15_0_3_0_interface_start
+   :end-before: matter_template_nrf54l15_0_3_0_interface_end
+
 .. include:: ../lock/README.rst
     :start-after: matter_door_lock_sample_led1_start
     :end-before: matter_door_lock_sample_led1_end
 
-Button 1:
-    Depending on how long you press the button:
-
-    * If pressed for less than three seconds, it initiates the SMP server (Simple Management Protocol).
-      After that, the Direct Firmware Update (DFU) over Bluetooth Low Energy can be started.
-      (See `Upgrading the device firmware`_.)
-    * If pressed for more than three seconds, it initiates the factory reset of the device.
-      Releasing the button within the 3-second window cancels the factory reset procedure.
+.. include:: ../lock/README.rst
+    :start-after: matter_door_lock_sample_button1_start
+    :end-before: matter_door_lock_sample_button1_end
 
 Button 2:
-    * On nRF52840 DK and nRF5340 DK: Prints the most recent thermostat data to terminal.
-    * On nRF7002 DK:
-
-      * If pressed for less than three seconds, it prints the most recent thermostat data to terminal.
-      * If pressed for more than three seconds, it starts the NFC tag emulation, enables Bluetooth LE advertising for the predefined period of time (15 minutes by default), and makes the device discoverable over Bluetooth LE.
-
-Button 4:
-    * On nRF52840 DK and nRF5340 DK: Starts the NFC tag emulation, enables Bluetooth LE advertising for the predefined period of time (15 minutes by default), and makes the device discoverable over Bluetooth LE.
+    * Prints the most recent thermostat data to terminal.
 
 .. include:: ../lock/README.rst
     :start-after: matter_door_lock_sample_jlink_start
@@ -195,37 +194,7 @@ Selecting a build type
 ======================
 
 Before you start testing the application, you can select one of the `Matter thermostat build types`_, depending on your building method.
-
-Selecting a build type in |VSC|
--------------------------------
-
-.. include:: /config_and_build/modifying.rst
-   :start-after: build_types_selection_vsc_start
-   :end-before: build_types_selection_vsc_end
-
-Selecting a build type from command line
-----------------------------------------
-
-.. include:: /config_and_build/modifying.rst
-   :start-after: build_types_selection_cmd_start
-   :end-before: For example, you can replace the
-
-For example, you can replace the *selected_build_type* variable to build the ``release`` firmware for ``nrf52840dk_nrf52840`` by running the following command in the project directory:
-
-.. parsed-literal::
-   :class: highlight
-
-   west build -b nrf52840dk_nrf52840 -d build_nrf52840dk_nrf52840 -- -DCONF_FILE=prj_release.conf
-
-The ``build_nrf52840dk_nrf52840`` parameter specifies the output directory for the build files.
-
-.. note::
-   If the selected board does not support the selected build type, the build is interrupted.
-   For example, if the ``shell`` build type is not supported by the selected board, the following notification appears:
-
-   .. code-block:: console
-
-      File not found: ./ncs/nrf/samples/matter/thermostat/configuration/nrf52840dk_nrf52840/prj_shell.conf
+See :ref:`cmake_options` for information about how to select a build type.
 
 .. _matter_thermostat_testing:
 
@@ -248,7 +217,7 @@ After building the sample and programming it to your development kit, complete t
 #. Observe the UART terminal.
    The sample starts automatically printing the simulated temperature data to the terminal with 30-second intervals.
 #. Press **Button 2** to print the most recent temperature data to the terminal.
-#. Press **Button 1** for six seconds to initiate the factory reset of the device.
+#. Keep the **Button 1** pressed for more than six seconds to initiate factory reset of the device.
 
 The device reboots after all its settings are erased.
 
@@ -266,23 +235,20 @@ After building this sample and the :ref:`Matter weather station <matter_weather_
 #. Commission devices to the Matter network.
    See `Commissioning the device`_ for more information.
    During the commissioning process, write down the values for the thermostat node ID, the temperature sensor node ID, and the temperature sensor endpoint ID.
-   These IDs are going to be used in the next steps (*<thermostat_node_ID>*, *<temperature_sensor_node_ID>*, and *<thermostat_sensor_endpoint_ID>*, respectively).
+   These IDs are going to be used in the next steps (*<thermostat_node_ID>*, *<temperature_sensor_node_ID>*, and *<temperature_sensor_endpoint_ID>*, respectively).
 #. Use the :doc:`CHIP Tool <matter:chip_tool_guide>` ("Writing ACL to the ``accesscontrol`` cluster" section) to add proper ACL for the temperature sensor device.
-   Use the following command, with *<thermostat_node_ID>* and *<temperature_sensor_endpoint_ID>* values from the previous step about commissioning:
+   Use the following command, with *<thermostat_node_ID>*, *<temperature_sensor_node_ID>*, and *<temperature_sensor_endpoint_ID>* values from the previous step about commissioning:
 
    .. code-block:: console
 
-      $ ./chip-tool accesscontrol write acl '[{"fabricIndex": 1, "privilege": 5, "authMode": 2, "subjects": [112233], "targets": null}, \
-      {"fabricIndex": 1, "privilege": 1, "authMode": 2, "subjects": [<thermostat_node_ID>], "targets": \
-      [{"cluster": 1026, "endpoint": <thermostat_sensor_endpoint_ID>, "deviceType": null}]}]' <Sensor Device NodeId> 0
+      chip-tool accesscontrol write acl '[{"fabricIndex": 1, "privilege": 5, "authMode": 2, "subjects": [112233], "targets": null}, {"fabricIndex": 1, "privilege": 1, "authMode": 2, "subjects": [<thermostat_node_ID>], "targets": [{"cluster": 1026, "endpoint": <temperature_sensor_endpoint_ID>, "deviceType": null}]}]' <temperature_sensor_node_ID> 0
 
 #. Write a binding table to the thermostat to inform the device about the temperature sensor endpoint.
-   Use the following command, with *<temperature_sensor_node_ID>* and *<thermostat_sensor_endpoint_ID>* values from the previous step about commissioning:
+   Use the following command, with *<thermostat_node_ID>*, *<temperature_sensor_node_ID>*, and *<temperature_sensor_endpoint_ID>* values from the previous step about commissioning:
 
    .. code-block:: console
 
-      $ ./chip-tool binding write binding '[{"fabricIndex": 1, "node": <temperature_sensor_node_ID>, "endpoint": <thermostat_sensor_endpoint_ID>, \
-      "cluster": 1026}]' <thermostat_node_ID> 1
+      chip-tool binding write binding '[{"fabricIndex": 1, "node": <temperature_sensor_node_ID>, "endpoint": <temperature_sensor_endpoint_ID>, "cluster": 1026}]' <thermostat_node_ID> 1
 
    (You can read more about this step in the "Adding a binding table to the ``binding`` cluster" in the CHIP Tool guide.)
 

@@ -51,7 +51,7 @@ Other examples:
 * ``AT#XFTP="mput",<file>``
 * ``AT#XMQTTPUB=<topic>,"",<qos>,<retain>``
 * ``AT#XNRFCLOUD=2``
-* ``AT#XCARRIER="app_data"``
+* ``AT#XCARRIER="app_data_set"``
 
 The SLM application sends an *OK* response when it successfully enters data mode.
 
@@ -147,7 +147,7 @@ CONFIG_SLM_DATAMODE_BUF_SIZE - Buffer size for data mode
 Data mode AT commands
 *********************
 
-The following commands list contains data-mode related AT commands.
+The following command list describes data mode-related AT commands.
 
 Data mode control #XDATACTRL
 ============================

@@ -120,7 +120,7 @@ struct bt_mesh_plvl_srv_handlers {
 	 * The user may implement this handler to subscribe to change to the
 	 * Power Range state. If the change in range causes the current Power
 	 * state to be out of range, the Power state should be changed to the
-	 * nearest value inside the range. It's recommended to call
+	 * nearest value inside the range. It is recommended to call
 	 * @ref bt_mesh_plvl_srv_pub to notify the mesh if the Power state
 	 * changes.
 	 *
@@ -147,9 +147,9 @@ struct bt_mesh_plvl_srv {
 	/** Generic Power OnOff server instance. */
 	struct bt_mesh_ponoff_srv ponoff;
 	/** Pointer to the model entry in the composition data. */
-	struct bt_mesh_model *plvl_model;
+	const struct bt_mesh_model *plvl_model;
 	/** Pointer to the model entry of the Setup Server. */
-	struct bt_mesh_model *plvl_setup_model;
+	const struct bt_mesh_model *plvl_setup_model;
 	/** Model publication parameters. */
 	struct bt_mesh_model_pub pub;
 	/* Publication buffer */

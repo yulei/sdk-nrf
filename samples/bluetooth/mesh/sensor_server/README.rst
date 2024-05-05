@@ -1,13 +1,13 @@
 .. _bluetooth_mesh_sensor_server:
 
-Bluetooth mesh: Sensor
+Bluetooth Mesh: Sensor
 ######################
 
 .. contents::
    :local:
    :depth: 2
 
-The Bluetooth® mesh sensor sample demonstrates how to set up a basic mesh Sensor Server model application that provides sensor data to one :ref:`bt_mesh_sensor_cli_readme` model.
+The Bluetooth® Mesh sensor sample demonstrates how to set up a basic mesh Sensor Server model application that provides sensor data to one :ref:`bt_mesh_sensor_cli_readme` model.
 Five different sensor types are used to showcase different ways for the server to publish data.
 In addition, the samples demonstrate usage of both :ref:`single-channel sensor types and sensor series types <bt_mesh_sensor_types_channels>`, as well as how to add and write to a sensor setting.
 
@@ -43,7 +43,7 @@ The application needs to be programmed on a separate device, and configured acco
 Overview
 ********
 
-The following Bluetooth mesh sensor types, and their settings, are used in this sample:
+The following Bluetooth Mesh sensor types, and their settings, are used in this sample:
 
 * On Sensor Server instance on Element 1:
 
@@ -83,7 +83,7 @@ Use `nRF Mesh mobile app`_ for provisioning and configuring of models supported 
 Models
 ======
 
-The following table shows the Bluetooth mesh sensor composition data for this sample:
+The following table shows the Bluetooth Mesh sensor composition data for this sample:
 
 .. table::
    :align: center
@@ -113,7 +113,11 @@ The descriptor also specifies the temperature sensor's sampling type, which is :
 
 The :ref:`dk_buttons_and_leds_readme` library is used to detect button presses.
 
-The :ref:`Zephyr settings API <zephyr:settings_api>` is used to persistently store the sensor range setting for the temperature sensor, given that :kconfig:option:`CONFIG_BT_SETTING` is enabled.
+The :ref:`Zephyr settings API <zephyr:settings_api>` is used to persistently store the following settings given that :kconfig:option:`CONFIG_BT_SETTING` is enabled:
+
+* The temperature range used in the :c:var:`bt_mesh_sensor_present_dev_op_temp` sensor
+* The presence motion threshold used in the :c:var:`bt_mesh_sensor_presence_detected` sensor
+* The ambient light level gain used in the :c:var:`bt_mesh_sensor_present_amb_light_level` sensor
 
 User interface
 **************
@@ -125,13 +129,13 @@ Buttons:
 Once the provisioning procedure has completed, the buttons will have the following functionality:
 
 Button 1:
+   Simulates different ambient light sensor values.
+   These dummy values represent raw values coming from an ambient light sensor.
+
+Button 2:
    Simulates presence detected.
    For how long the button has to be pressed before the presence is detected depends on the motion threshold.
    The motion threshold has five steps from 0 % (representing 0 seconds) to 100 % (representing 10 seconds) separated by 25 %-steps.
-
-Button 2:
-   Simulates different ambient light sensor values.
-   These dummy values represent a raw values coming from an ambient light sensor.
 
 Configuration
 *************
@@ -166,7 +170,7 @@ Testing
 =======
 
 .. note::
-   The Bluetooth mesh sensor sample cannot demonstrate any functionality on its own, and needs a device with the :ref:`bluetooth_mesh_sensor_client` sample running in the same mesh network.
+   The Bluetooth Mesh sensor sample cannot demonstrate any functionality on its own, and needs a device with the :ref:`bluetooth_mesh_sensor_client` sample running in the same mesh network.
    Before testing the sensor sample, go through the sensor observer sample's :ref:`testing guide <bluetooth_mesh_sensor_client_testing>` with a different development kit.
 
 After programming the sample to your development kit, you can test it by using a smartphone with `nRF Mesh mobile app`_ installed.

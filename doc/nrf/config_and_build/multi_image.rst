@@ -8,19 +8,10 @@ Multi-image builds
    :depth: 2
 
 The firmware programmed to a device can be composed of either one application or several separate images.
-In the latter case, one of the images (the *parent image*) requires one or more other images (the *child images*) to be present.
+In the latter case, the *parent* :term:`image file` requires one or more other images (the *child images*) to be present.
 The child image then *chain-loads*, or *boots*, the parent image, which could also be a child image to another parent image, and boots that one.
 
 The most common use cases for builds composed of multiple images are applications that require a bootloader to be present or applications for multi-core CPUs.
-
-.. _ug_multi_image_what_are_images:
-
-What image files are
-********************
-
-.. include:: config_and_build_system.rst
-   :start-after: output_build_files_info_start
-   :end-before: output_build_files_info_end
 
 Using multiple images has the following advantages:
 
@@ -28,13 +19,9 @@ Using multiple images has the following advantages:
   This partitioning is often useful for bootloaders.
 * Since there is a symbol table for each image, the same symbol names can exist multiple times in the final firmware.
   This is useful for bootloader images, which can require their own copy of a library that the application uses, but in a different version or configuration.
-* In multi-core builds, the build configuration of a child image in a separate core can be made known to the parent image.
+* In multi-core builds, the :term:`build configuration` of a child image in a separate core can be made known to the parent image.
 
-.. include:: config_and_build_system.rst
-   :start-after: output_build_files_table_start
-   :end-before: output_build_files_table_end
-
-For more information on other build output files refer to :ref:`app_build_system` page.
+For the list of image files output by the build system for the multi-image builds, refer to :ref:`app_build_output_files` page.
 
 .. _ug_multi_image_when_to_use_images:
 
@@ -63,7 +50,7 @@ nRF5340 Audio development kit support
    When programming an application for the nRF5340 Audio DK, the application core image is built from a combination of different configuration files.
    The network core image is programmed with an application-specific precompiled Bluetooth Low Energy Controller binary file that contains the LE Audio Controller Subsystem for nRF53.
 
-   See the :ref:`nrf53_audio_app` application documentation for more information.
+   See the documentation for :ref:`nrf53_audio_app` for more information.
 
 .. _ug_multi_image_default_config:
 
@@ -134,8 +121,8 @@ See the following example:
 .. code-block:: cmake
 
    add_child_image(
-      NAME hci_rpmsg
-      SOURCE_DIR ${ZEPHYR_BASE}/samples/bluetooth/hci_rpmsg
+      NAME hci_ipc
+      SOURCE_DIR ${ZEPHYR_BASE}/samples/bluetooth/hci_ipc
       DOMAIN CPUNET
       )
 
@@ -243,7 +230,7 @@ With west, you can pass these configuration variables into CMake by using the ``
 
   .. code-block:: console
 
-     west build -b nrf52840dk_nrf52840 zephyr/samples/hello_world -- \
+     west build -b nrf52840dk/nrf52840 zephyr/samples/hello_world -- \
      -Dmcuboot_CONF_FILE=prj_a.conf \
      -DCONF_FILE=app_prj.conf
 
@@ -268,7 +255,7 @@ The following example adds an extra Kconfig fragment ``extrafragment.conf`` to `
   .. parsed-literal::
     :class: highlight
 
-     cmake -D\ *childimageone*\_OVERLAY_CONFIG=\ *extrafragment.conf*\ [...]
+     cmake -D\ *childimageone*\_EXTRA_CONF_FILE=\ *extrafragment.conf*\ [...]
 
 It is also possible to provide a custom configuration file as a replacement for the default Kconfig file for the child image.
 The following example uses the custom configuration file ``myfile.conf`` when building ``childimageone``:
@@ -281,20 +268,20 @@ The following example uses the custom configuration file ``myfile.conf`` when bu
 If your application includes multiple child images, then you can combine all the above as follows:
 
 * Setting ``CONFIG_VARIABLEONE=val`` in the main application.
-* Adding a Kconfig fragment ``extrafragment.conf`` to the ``childimageone`` child image, using ``-Dchildimageone_OVERLAY_CONFIG=extrafragment.conf``.
+* Adding a Kconfig fragment ``extrafragment.conf`` to the ``childimageone`` child image, using ``-Dchildimageone_EXTRA_CONF_FILE=extrafragment.conf``.
 * Using ``myfile.conf`` as configuration for the ``quz`` child image, using ``-Dquz_CONF_FILE=myfile.conf``.
 
   .. parsed-literal::
     :class: highlight
 
-     cmake -DCONFIG_VARIABLEONE=val -D\ *childimageone*\_OVERLAY_CONFIG=\ *extrafragment.conf*\ -Dquz_CONF_FILE=\ *myfile.conf*\ [...]
+    cmake -DCONFIG_VARIABLEONE=val -D\ *childimageone*\_EXTRA_CONF_FILE=\ *extrafragment.conf*\ -Dquz_CONF_FILE=\ *myfile.conf*\ [...]
 
 See :ref:`ug_bootloader` for more details.
 
 .. note::
 
    The build system grabs the Kconfig fragment or configuration file specified in a CMake argument relative to that image's application directory.
-   For example, the build system uses ``nrf/samples/bootloader/my-fragment.conf`` when building with the ``-Db0_OVERLAY_CONFIG=my-fragment.conf`` option, whereas ``-DOVERLAY_CONFIG=my-fragment.conf`` grabs the fragment from the main application's directory, such as ``zephyr/samples/hello_world/my-fragment.conf``.
+   For example, the build system uses ``nrf/samples/bootloader/my-fragment.conf`` when building with the ``-Db0_EXTRA_CONF_FILE=my-fragment.conf`` option, whereas ``-DEXTRA_CONF_FILE=my-fragment.conf`` grabs the fragment from the main application's directory, such as ``zephyr/samples/hello_world/my-fragment.conf``.
 
 You can also merge multiple fragments into the overall configuration for an image by giving a list of Kconfig fragments as a string, separated using ``;``.
 The following example shows how to combine ``abc.conf``, Kconfig fragment of the ``childimageone`` child image, with the ``extrafragment.conf`` fragment:
@@ -302,7 +289,7 @@ The following example shows how to combine ``abc.conf``, Kconfig fragment of the
   .. parsed-literal::
     :class: highlight
 
-     cmake -D\ *childimageone*\_OVERLAY_CONFIG='\ *extrafragment.conf*\;\ *abc.conf*\'
+     cmake -D\ *childimageone*\_EXTRA_CONF_FILE='\ *extrafragment.conf*\;\ *abc.conf*\'
 
 When the build system finds the fragment, it outputs their merge during the CMake build output as follows:
 
@@ -345,14 +332,18 @@ Permanent configuration changes to child images
 -----------------------------------------------
 
 You can make a project automatically pass Kconfig configuration files, fragments, and devicetree overlays to child images by placing them under a predefined path.
-For example, in the |NCS| applications and samples that use different :ref:`build types for configuration <gs_modifying_build_types>`, the :file:`child_image` folder in the application source directory is often used to apply :ref:`permanent configuration changes <configuration_permanent_change>`.
+For example, in the |NCS| applications and samples that use different :ref:`build types <app_build_additions_build_types>`, the :file:`child_image` folder in the application source directory is often used to apply :ref:`permanent configuration changes <configuration_permanent_change>`.
 
 The listing below describes how to leverage this functionality, where ``ACI_NAME`` is the name of the child image to which the configuration will be applied.
 
 .. literalinclude:: ../../../cmake/multi_image.cmake
     :language: c
     :start-at: It is possible for a sample to use a custom set of Kconfig fragments for a
-    :end-before: set(ACI_CONF_DIR ${APPLICATION_CONFIG_DIR}/child_image)
+    :end-before: set(ACI_CONF_DIR ${config_dir}/child_image)
+
+When you are using :ref:`app_build_additions_build_types` and the configuration name has been inferred, the child image Kconfig overlay file is searched at :file:`child_image/<ACI_NAME>_<name>.conf`.
+Alternatively, the child image Kconfig configuration file can be introduced as :file:`child_image/<ACI_NAME>/prj.conf` and follow the same pattern as the parent Kconfig.
+For example, :file:`child_image/mcuboot/prj_release.conf` can be used to define the ``release`` build type for the ``mcuboot`` child image.
 
 Child image targets
 ===================

@@ -86,18 +86,16 @@ USB CDC ACM extension
 
 For the boards with the USB device peripheral, you can build the sample with support for the USB CDC ACM class serial port instead of the physical UART.
 This build uses the sample-specific UART async adapter module that acts as a bridge between USB CDC ACM and Zephyr's UART asynchronous API used by the sample.
-See :ref:`peripheral_uart_sample_activating_variants` for details about how to build the sample with this extension using the :file:`prj_cdc.conf`.
+See :ref:`peripheral_uart_sample_activating_variants` for details about how to build the sample with this extension using the :file:`prj_cdc.conf` file.
 
 Async adapter experimental module
 ---------------------------------
 
-The default sample configuration uses the UART async API, which is an :ref:`experimental <software_maturity>` module.
-The UART async adapter creates and initializes an instance of the async module.
+The default sample configuration uses the UART async API.
+The sample uses the :ref:`lib_uart_async_adapter` library to communicate with the USB CDC ACM driver.
 This is needed because the USB CDC ACM implementation provides only the interrupt interface.
-The adapter uses data provided in the :c:struct:`uart_async_adapter_data` to connect to the UART device that does not use the asynchronous interface.
 
-The module requires the :ref:`CONFIG_BT_NUS_UART_ASYNC_ADAPTER <CONFIG_BT_NUS_UART_ASYNC_ADAPTER>` to be set to ``y``.
-For more information about the adapter, see the :file:`uart_async_adapter` source files available in the :file:`peripheral_uart/src` directory.
+To use the library, set the :kconfig:option:`CONFIG_UART_ASYNC_ADAPTER` Kconfig option to ``y``.
 
 MCUboot with serial recovery of the networking core image
 =========================================================
@@ -148,9 +146,9 @@ Configuration options
 
 Check and configure the following configuration options for the sample:
 
-.. _CONFIG_BT_NUS_UART_ASYNC_ADAPTER:
+.. _CONFIG_UART_ASYNC_ADAPTER:
 
-CONFIG_BT_NUS_UART_ASYNC_ADAPTER - Enable UART async adapter
+CONFIG_UART_ASYNC_ADAPTER - Enable UART async adapter
    Enables asynchronous adapter for UART drives that supports only IRQ interface.
 
 Building and running
@@ -165,13 +163,13 @@ Building and running
 Activating sample extensions
 ============================
 
-To activate the optional extensions supported by this sample, modify :makevar:`OVERLAY_CONFIG` in the following manner:
+To activate the optional extensions supported by this sample, modify :makevar:`EXTRA_CONF_FILE` in the following manner:
 
 * For the minimal build variant, set :file:`prj_minimal.conf`.
 * For the USB CDC ACM extension, set :file:`prj_cdc.conf`.
   Additionally, you need to set :makevar:`DTC_OVERLAY_FILE` to the :file:`usb.overlay` file.
 * For the MCUboot with serial recovery of the networking core image feature, set the :file:`nrf5340dk_app_sr_net.conf` file.
-  You also need to set the :makevar:`mcuboot_OVERLAY_CONFIG` variant to the :file:`nrf5340dk_mcuboot_sr_net.conf` file.
+  You also need to set the :makevar:`mcuboot_EXTRA_CONF_FILE` variant to the :file:`nrf5340dk_mcuboot_sr_net.conf` file.
 
 See :ref:`cmake_options` for instructions on how to add this option.
 For more information about using configuration overlay files, see :ref:`zephyr:important-build-vars` in the Zephyr documentation.
@@ -210,12 +208,9 @@ After programming the sample to your development kit, complete the following ste
 Dependencies
 ************
 
-This sample uses the following sample-specific library:
-
-* :file:`uart_async_adapter` at :file:`peripheral_uart/src`
-
 This sample uses the following |NCS| libraries:
 
+* :ref:`lib_uart_async_adapter`
 * :ref:`nus_service_readme`
 * :ref:`dk_buttons_and_leds_readme`
 

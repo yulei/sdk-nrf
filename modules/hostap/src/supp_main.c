@@ -42,10 +42,6 @@ LOG_MODULE_REGISTER(wpa_supplicant, LOG_LEVEL_DBG);
 K_SEM_DEFINE(z_wpas_ready_sem, 0, 1);
 #include <l2_packet/l2_packet.h>
 
-/* Should match with the driver name */
-#define DEFAULT_IFACE_NAME "wlan0"
-#define IFACE_MATCHING_PREFIX "wlan"
-
 static struct net_mgmt_event_callback cb;
 struct k_mutex iface_up_mutex;
 
@@ -87,6 +83,12 @@ static const struct wifi_mgmt_ops wpa_supp_ops = {
 	.mode = z_wpa_supplicant_mode,
 	.filter = z_wpa_supplicant_filter,
 	.channel = z_wpa_supplicant_channel,
+	.set_rts_threshold = z_wpa_supplicant_set_rts_threshold,
+#ifdef CONFIG_AP
+	.ap_enable = z_wpa_supplicant_ap_enable,
+	.ap_disable = z_wpa_supplicant_ap_disable,
+	.ap_sta_disconnect = z_wpa_supplicant_ap_sta_disconnect,
+#endif /* CONFIG_AP */
 };
 
 DEFINE_WIFI_NM_INSTANCE(wpa_supplicant, &wpa_supp_ops);
@@ -241,7 +243,13 @@ static int z_wpas_remove_interface(const char *ifname)
 	generate_supp_state_event(ifname, NET_EVENT_WPA_SUPP_CMD_IFACE_REMOVING, 0);
 	wpa_printf(MSG_DEBUG, "Remove interface %s\n", ifname);
 
-	os_memcpy(event->interface_status.ifname, ifname, IFNAMSIZ);
+	if (sizeof(event->interface_status.ifname) < strlen(ifname)) {
+		wpa_printf(MSG_ERROR, "Interface name too long: %s (max: %d)",
+			ifname, sizeof(event->interface_status.ifname));
+		goto err;
+	}
+
+	os_memcpy(event->interface_status.ifname, ifname, strlen(ifname));
 	event->interface_status.ievent = EVENT_INTERFACE_REMOVED;
 
 	struct wpa_supplicant_event_msg msg = {
@@ -251,7 +259,11 @@ static int z_wpas_remove_interface(const char *ifname)
 		.data = event,
 	};
 
-	z_wpas_send_event(&msg);
+	ret = z_wpas_send_event(&msg);
+	if (ret) {
+		wpa_printf(MSG_ERROR, "Failed to send event: %d", ret);
+		goto err;
+	}
 
 	while (retry++ < count &&
 		   wpa_s->wpa_state != WPA_INTERFACE_DISABLED) {
@@ -301,9 +313,25 @@ static void iface_event_handler(struct net_mgmt_event_callback *cb,
 							uint32_t mgmt_event, struct net_if *iface)
 {
 	const char *ifname = iface->if_dev->dev->name;
+	char *prefix;
+	char mgd_if_prefix[] = CONFIG_WPA_SUPP_MGD_IFACES_PREFIXES;
+	bool found = false;
 
-	if (strncmp(ifname, IFACE_MATCHING_PREFIX, sizeof(IFACE_MATCHING_PREFIX) - 1) != 0) {
-		return;
+	if (sizeof(mgd_if_prefix) > 0) {
+		prefix = strtok(mgd_if_prefix, ",");
+
+		while (prefix) {
+			if (strncmp(ifname, prefix, strlen(prefix)) == 0) {
+				found = true;
+				break;
+			}
+			prefix = strtok(NULL, ",");
+		}
+
+		if (!found) {
+			wpa_printf(MSG_DEBUG, "No matching prefix found for %s", ifname);
+			return;
+		}
 	}
 
 	wpa_printf(MSG_DEBUG, "Event: %d", mgmt_event);
@@ -335,12 +363,19 @@ static void wait_for_interface_up(const char *iface_name)
 static void iface_cb(struct net_if *iface, void *user_data)
 {
 	const char *ifname = iface->if_dev->dev->name;
+	const struct device *wifi_dev = NULL;
+
+	wifi_dev = DEVICE_DT_GET(DT_CHOSEN(zephyr_wifi));
+	if (!wifi_dev) {
+		wpa_printf(MSG_ERROR, "Device instance not found");
+		return;
+	}
 
 	if (ifname == NULL) {
 		return;
 	}
 
-	if (strncmp(ifname, DEFAULT_IFACE_NAME, strlen(ifname)) != 0) {
+	if (strncmp(ifname, wifi_dev->name, strlen(ifname)) != 0) {
 		return;
 	}
 
@@ -356,6 +391,13 @@ static void iface_cb(struct net_if *iface, void *user_data)
 static void z_wpas_iface_work_handler(struct k_work *item)
 {
 	ARG_UNUSED(item);
+	const struct device *wifi_dev = NULL;
+
+	wifi_dev = DEVICE_DT_GET(DT_CHOSEN(zephyr_wifi));
+	if (!wifi_dev) {
+		wpa_printf(MSG_ERROR, "Device instance not found");
+		return;
+	}
 
 	int ret = k_sem_take(&z_wpas_ready_sem, K_SECONDS(5));
 
@@ -365,7 +407,7 @@ static void z_wpas_iface_work_handler(struct k_work *item)
 	}
 
 	net_if_foreach(iface_cb, NULL);
-	wait_for_interface_up(DEFAULT_IFACE_NAME);
+	wait_for_interface_up(wifi_dev->name);
 
 	k_sem_give(&z_wpas_ready_sem);
 }
@@ -400,10 +442,35 @@ static void z_wpas_event_sock_handler(int sock, void *eloop_ctx, void *sock_ctx)
 	}
 
 	if (msg.data) {
-		if (msg.event == EVENT_AUTH) {
-			union wpa_event_data *data = msg.data;
+		union wpa_event_data *data = msg.data;
 
+		/* Free up deep copied data */
+		if (msg.event == EVENT_AUTH) {
 			os_free((char *)data->auth.ies);
+		} else if (msg.event == EVENT_RX_MGMT) {
+			os_free((char *)data->rx_mgmt.frame);
+		} else if (msg.event == EVENT_TX_STATUS) {
+			os_free((char *)data->tx_status.data);
+		} else if (msg.event == EVENT_ASSOC) {
+			os_free((char *)data->assoc_info.addr);
+			os_free((char *)data->assoc_info.req_ies);
+			os_free((char *)data->assoc_info.resp_ies);
+			os_free((char *)data->assoc_info.resp_frame);
+		} else if (msg.event == EVENT_ASSOC_REJECT) {
+			os_free((char *)data->assoc_reject.bssid);
+			os_free((char *)data->assoc_reject.resp_ies);
+		} else if (msg.event == EVENT_DEAUTH) {
+			os_free((char *)data->deauth_info.addr);
+			os_free((char *)data->deauth_info.ie);
+		} else if (msg.event == EVENT_DISASSOC) {
+			os_free((char *)data->disassoc_info.addr);
+			os_free((char *)data->disassoc_info.ie);
+		} else if (msg.event == EVENT_UNPROT_DEAUTH) {
+			os_free((char *)data->unprot_deauth.sa);
+			os_free((char *)data->unprot_deauth.da);
+		} else if (msg.event == EVENT_UNPROT_DISASSOC) {
+			os_free((char *)data->unprot_disassoc.sa);
+			os_free((char *)data->unprot_disassoc.da);
 		}
 		os_free(msg.data);
 	}
@@ -427,7 +494,7 @@ static int register_wpa_event_sock(void)
 
 int z_wpas_send_event(const struct wpa_supplicant_event_msg *msg)
 {
-	int ret;
+	int ret = -1;
 	unsigned int retry = 0;
 
 	k_mutex_lock(&z_wpas_event_mutex, K_FOREVER);
@@ -458,13 +525,20 @@ retry_send:
 	ret = 0;
 err:
 	k_mutex_unlock(&z_wpas_event_mutex);
-	return -1;
+	return ret;
 }
 
 static void z_wpas_start(void)
 {
 	struct wpa_params params;
 	int exitcode = -1;
+	const struct device *wifi_dev = NULL;
+
+	wifi_dev = DEVICE_DT_GET(DT_CHOSEN(zephyr_wifi));
+	if (!wifi_dev) {
+		wpa_printf(MSG_ERROR, "Device instance not found");
+		return;
+	}
 
 #if !defined(CONFIG_WPA_SUPP_CRYPTO_NONE) && !defined(CONFIG_MBEDTLS_ENABLE_HEAP)
 	/* Needed for crypto operation as default is no-op and fails */
@@ -521,7 +595,7 @@ static void z_wpas_start(void)
 		exitcode = wpa_supplicant_run(global);
 	}
 
-	generate_supp_state_event(DEFAULT_IFACE_NAME, NET_EVENT_WPA_SUPP_CMD_NOT_READY, 0);
+	generate_supp_state_event(wifi_dev->name, NET_EVENT_WPA_SUPP_CMD_NOT_READY, 0);
 	eloop_unregister_read_sock(z_wpas_event_sockpair[0]);
 
 	z_global_wpa_ctrl_deinit();

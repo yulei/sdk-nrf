@@ -9,6 +9,7 @@
 
 - platforms:
     - native_posix
+    - native_sim
     - qemu_cortex_m3
     - qemu_x86
   comment: "Cannot build samples for Native POSIX and QEMU on Windows OS"
@@ -26,12 +27,7 @@
   comment: "ruby package not available in Windows toolchain"
 
 - scenarios:
-    - sample.esb.prx
-    - sample.esb.ptx
-  comment: "Cmake error for EBC tests - NCSDK-21089"
-
-- scenarios:
-    - sample.net.mqtt.nrf9160.tls
-    - sample.net.mqtt
-    - applications.asset_tracker_v2.*
-  comment: "build failure on Windows after Zephyr upmerge - NCSIDB-1039"
+    - applications.asset_tracker_v2.*.sysbuild
+  platforms:
+    - nrf9160dk/nrf9160/ns
+  comment: "https://nordicsemi.atlassian.net/browse/NCSDK-26461"

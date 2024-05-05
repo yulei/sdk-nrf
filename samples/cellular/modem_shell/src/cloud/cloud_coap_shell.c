@@ -18,20 +18,6 @@ extern struct k_work_q mosh_common_work_q;
 
 static bool connected;
 
-static int cloud_shell_print_usage(const struct shell *shell, size_t argc, char **argv)
-{
-	int ret = 1;
-
-	if (argc > 1) {
-		mosh_error("%s: subcommand not found", argv[1]);
-		ret = -EINVAL;
-	}
-
-	shell_help(shell);
-
-	return ret;
-}
-
 static void coap_connect_work_fn(struct k_work *item)
 {
 	ARG_UNUSED(item);
@@ -97,45 +83,13 @@ static void cmd_cloud_coap_disconnect(const struct shell *shell, size_t argc, ch
 	connected = false;
 }
 
-static void cmd_cloud_coap_shadow_update(const struct shell *shell, size_t argc, char **argv)
-{
-	ARG_UNUSED(shell);
-	ARG_UNUSED(argc);
-	ARG_UNUSED(argv);
-
-	int err;
-	struct nrf_cloud_svc_info_ui ui_info = {
-		.gnss = IS_ENABLED(CONFIG_MOSH_LOCATION), /* Show map on nrf cloud */
-	};
-	struct nrf_cloud_svc_info service_info = {
-		.ui = &ui_info
-	};
-	struct nrf_cloud_device_status device_status = {
-		.modem = NULL,
-		.svc = &service_info,
-		.conn_inf = NRF_CLOUD_INFO_NO_CHANGE
-	};
-
-	err = nrf_cloud_coap_shadow_device_status_update(&device_status);
-	if (err) {
-		mosh_error("Failed to update device shadow, error: %d", err);
-	}
-}
-
-static int cmd_cloud(const struct shell *shell, size_t argc, char **argv)
-{
-	return cloud_shell_print_usage(shell, argc, argv);
-}
-
 SHELL_STATIC_SUBCMD_SET_CREATE(
 	sub_cloud,
 	SHELL_CMD_ARG(connect, NULL, "Establish CoAP connection to nRF Cloud.",
 		      cmd_cloud_coap_connect, 1, 0),
 	SHELL_CMD_ARG(disconnect, NULL, "Disconnect from nRF Cloud.",
 		      cmd_cloud_coap_disconnect, 1, 0),
-	SHELL_CMD_ARG(shadow_update, NULL, "Send device capabilities to nRF Cloud.",
-		      cmd_cloud_coap_shadow_update, 1, 0),
 	SHELL_SUBCMD_SET_END
 );
 
-SHELL_CMD_REGISTER(cloud, &sub_cloud, "CoAP connection to nRF Cloud", cmd_cloud);
+SHELL_CMD_REGISTER(cloud, &sub_cloud, "CoAP connection to nRF Cloud", mosh_print_help_shell);

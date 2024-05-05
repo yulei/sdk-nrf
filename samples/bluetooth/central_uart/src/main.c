@@ -43,9 +43,9 @@ LOG_MODULE_REGISTER(LOG_MODULE_NAME);
 
 #define NUS_WRITE_TIMEOUT K_MSEC(150)
 #define UART_WAIT_FOR_BUF_DELAY K_MSEC(50)
-#define UART_RX_TIMEOUT 50
+#define UART_RX_TIMEOUT 50000 /* Wait for RX complete event time in microseconds. */
 
-static const struct device *uart = DEVICE_DT_GET(DT_NODELABEL(uart0));
+static const struct device *uart = DEVICE_DT_GET(DT_CHOSEN(nordic_nus_uart));
 static struct k_work_delayable uart_work;
 
 K_SEM_DEFINE(nus_write_sem, 0, 1);
@@ -66,12 +66,8 @@ static void ble_data_sent(struct bt_nus_client *nus, uint8_t err,
 					const uint8_t *const data, uint16_t len)
 {
 	ARG_UNUSED(nus);
-
-	struct uart_data_t *buf;
-
-	/* Retrieve buffer context. */
-	buf = CONTAINER_OF(data, struct uart_data_t, data);
-	k_free(buf);
+	ARG_UNUSED(data);
+	ARG_UNUSED(len);
 
 	k_sem_give(&nus_write_sem);
 
@@ -144,13 +140,13 @@ static void uart_cb(const struct device *dev, struct uart_event *evt, void *user
 
 		if (aborted_buf) {
 			buf = CONTAINER_OF(aborted_buf, struct uart_data_t,
-					   data);
+					   data[0]);
 			aborted_buf = NULL;
 			aborted_len = 0;
 		} else {
 			buf = CONTAINER_OF(evt->data.tx.buf,
 					   struct uart_data_t,
-					   data);
+					   data[0]);
 		}
 
 		k_free(buf);
@@ -168,7 +164,7 @@ static void uart_cb(const struct device *dev, struct uart_event *evt, void *user
 
 	case UART_RX_RDY:
 		LOG_DBG("UART_RX_RDY");
-		buf = CONTAINER_OF(evt->data.rx.buf, struct uart_data_t, data);
+		buf = CONTAINER_OF(evt->data.rx.buf, struct uart_data_t, data[0]);
 		buf->len += evt->data.rx.len;
 
 		if (disable_req) {
@@ -216,7 +212,7 @@ static void uart_cb(const struct device *dev, struct uart_event *evt, void *user
 	case UART_RX_BUF_RELEASED:
 		LOG_DBG("UART_RX_BUF_RELEASED");
 		buf = CONTAINER_OF(evt->data.rx_buf.buf, struct uart_data_t,
-				   data);
+				   data[0]);
 
 		if (buf->len > 0) {
 			k_fifo_put(&fifo_uart_rx_data, buf);
@@ -234,7 +230,7 @@ static void uart_cb(const struct device *dev, struct uart_event *evt, void *user
 
 		aborted_len += evt->data.tx.len;
 		buf = CONTAINER_OF(aborted_buf, struct uart_data_t,
-				   data);
+				   data[0]);
 
 		uart_tx(uart, &buf->data[aborted_len],
 			buf->len - aborted_len, SYS_FOREVER_MS);
@@ -609,20 +605,42 @@ int main(void)
 
 	LOG_INF("Scanning successfully started");
 
+	struct uart_data_t nus_data = {
+		.len = 0,
+	};
+
 	for (;;) {
 		/* Wait indefinitely for data to be sent over Bluetooth */
 		struct uart_data_t *buf = k_fifo_get(&fifo_uart_rx_data,
 						     K_FOREVER);
 
-		err = bt_nus_client_send(&nus_client, buf->data, buf->len);
-		if (err) {
-			LOG_WRN("Failed to send data over BLE connection"
-				"(err %d)", err);
+		int plen = MIN(sizeof(nus_data.data) - nus_data.len, buf->len);
+		int loc = 0;
+
+		while (plen > 0) {
+			memcpy(&nus_data.data[nus_data.len], &buf->data[loc], plen);
+			nus_data.len += plen;
+			loc += plen;
+			if (nus_data.len >= sizeof(nus_data.data) ||
+			   (nus_data.data[nus_data.len - 1] == '\n') ||
+			   (nus_data.data[nus_data.len - 1] == '\r')) {
+				err = bt_nus_client_send(&nus_client, nus_data.data, nus_data.len);
+				if (err) {
+					LOG_WRN("Failed to send data over BLE connection"
+						"(err %d)", err);
+				}
+
+				err = k_sem_take(&nus_write_sem, NUS_WRITE_TIMEOUT);
+				if (err) {
+					LOG_WRN("NUS send timeout");
+				}
+
+				nus_data.len = 0;
+			}
+
+			plen = MIN(sizeof(nus_data.data), buf->len - loc);
 		}
 
-		err = k_sem_take(&nus_write_sem, NUS_WRITE_TIMEOUT);
-		if (err) {
-			LOG_WRN("NUS send timeout");
-		}
+		k_free(buf);
 	}
 }

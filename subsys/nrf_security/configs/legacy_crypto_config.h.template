@@ -943,7 +943,7 @@
  *
  * Disable if you only need to support RFC 5915 + 5480 key formats.
  */
-#define MBEDTLS_PK_PARSE_EC_EXTENDED
+#cmakedefine MBEDTLS_PK_PARSE_EC_EXTENDED
 
 /**
  * \def MBEDTLS_ERROR_STRERROR_DUMMY
@@ -3091,7 +3091,7 @@ it is (2^48 - 1), our restriction is :  (int - 0xFFFF - 0xF).*/
  * If this option is unset, the library will fall back to a default value of
  * 32 keys.
  */
-//#define MBEDTLS_PSA_KEY_SLOT_COUNT 32
+#cmakedefine MBEDTLS_PSA_KEY_SLOT_COUNT              @MBEDTLS_PSA_KEY_SLOT_COUNT@
 
 /* SSL Cache options */
 //#define MBEDTLS_SSL_CACHE_DEFAULT_TIMEOUT       86400 /**< 1 day  */
@@ -3226,7 +3226,7 @@ it is (2^48 - 1), our restriction is :  (int - 0xFFFF - 0xF).*/
  * C standards (e.g using memset_s() in C11) or calling a secure memset() from
  * their system (e.g explicit_bzero() in BSD).
  */
-#cmakedefine MBEDTLS_PLATFORM_ZEROIZE_ALT
+//#define MBEDTLS_PLATFORM_ZEROIZE_ALT
 
 /**
  * Uncomment the macro to let Mbed TLS use your alternate implementation of
@@ -3263,6 +3263,10 @@ it is (2^48 - 1), our restriction is :  (int - 0xFFFF - 0xF).*/
 #define MBEDTLS_ECP_FIXED_POINT_OPTIM      0 /**< Enable fixed-point speed-up */
 #endif
 
+#if CONFIG_MBEDTLS_CMAC_ALT
+/* NCSDK-24838 */
+#define MBEDTLS_CIPHER_MODE_CBC
+#endif
 
 /* \} name SECTION: Customisation configuration options */
 

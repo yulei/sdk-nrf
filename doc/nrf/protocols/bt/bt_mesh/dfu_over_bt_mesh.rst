@@ -1,39 +1,38 @@
 .. _dfu_over_bt_mesh:
 
-DFU over Bluetooth mesh
+DFU over Bluetooth Mesh
 #######################
 
 .. contents::
    :local:
    :depth: 2
 
-The DFU specification is implemented in the Zephyr Bluetooth mesh DFU subsystem as three separate models:
+The DFU specification is implemented in the Zephyr Bluetooth Mesh DFU subsystem as three separate models:
 
 * :ref:`zephyr:bluetooth_mesh_dfu_srv`
 * :ref:`zephyr:bluetooth_mesh_dfu_cli`
 * :ref:`zephyr:bluetooth_mesh_dfd_srv`
 
-The Bluetooth mesh DFU subsystem is in experimental state.
-For more information about the Zephyr Bluetooth mesh DFU subsystem, see :ref:`zephyr:bluetooth_mesh_dfu`.
+For more information about the Zephyr Bluetooth Mesh DFU subsystem, see :ref:`zephyr:bluetooth_mesh_dfu`.
 
-The Bluetooth mesh subsystem in |NCS| provides a set of samples that can be used for evaluation of the Bluetooth mesh DFU specification and subsystem:
+The Bluetooth Mesh subsystem in |NCS| provides a set of samples that can be used for evaluation of the Bluetooth Mesh DFU specification and subsystem:
 
 * :ref:`ble_mesh_dfu_target` sample
 * :ref:`ble_mesh_dfu_distributor` sample
 
 To configure and control DFU on the Firmware Distribution Server, it is required to have the Firmware Distribution Client model.
-The Bluetooth mesh DFU subsystem in Zephyr provides a set of shell commands that can be used to substitute the need for the client.
-For the complete list of commands, see the :ref:`zephyr:bluetooth_mesh_shell_dfd_server` section of the Bluetooth mesh shell documentation.
+The Bluetooth Mesh DFU subsystem in Zephyr provides a set of shell commands that can be used to substitute the need for the client.
+For the complete list of commands, see the :ref:`zephyr:bluetooth_mesh_shell_dfd_server` section of the Bluetooth Mesh shell documentation.
 
 The commands can be executed in two ways:
 
-* Through the shell management subsystem of MCU manager (for example, using the nRF Connect Device Manager mobile application or :ref:`Mcumgr command-line tool <zephyr:mcumgr_cli>`).
+* Through the shell management subsystem of MCU manager (for example, using the nRF Connect Device Manager mobile application on Android or :ref:`Mcumgr command-line tool <zephyr:mcumgr_cli>`).
 * By accessing the :ref:`zephyr:shell_api` module over UART.
 
 Provisioning and configuring the devices
 ****************************************
 
-After programming the samples onto the boards, they need to be provisioned into the same Bluetooth mesh network with an external provisioner device.
+After programming the samples onto the boards, they need to be provisioned into the same Bluetooth Mesh network with an external provisioner device.
 See the documentation for :ref:`provisioning the mesh DFU target device <ble_mesh_dfu_target_provisioning>` and :ref:`provisioning the mesh DFU distributor device <ble_mesh_dfu_distributor_provisioning>` for how this is done.
 
 After the provisioning is completed, a Configuration Client needs to add a common application key to all devices.
@@ -50,13 +49,13 @@ Uploading the firmware
 After configuring the models, a new image can be uploaded to the Distributor.
 To upload the image, follow the instructions provided in the :ref:`ble_mesh_dfu_distributor_fw_image_upload` section of the :ref:`ble_mesh_dfu_distributor` sample documentation.
 
-The uploaded image needs to be registered in the Bluetooth mesh DFU subsystem.
+The uploaded image needs to be registered in the Bluetooth Mesh DFU subsystem.
 To achieve this, issue the ``mesh models dfu slot add`` shell command specifying size in bytes of the image that was uploaded to the Distributor.
 Optionally, you can provide firmware ID, metadata and Unique Resource Identifier (URI) parameters that come with the image.
 
 For example, to allocate a slot for the :ref:`ble_mesh_dfu_target` sample with image size of 241236 bytes, with firmware ID set to ``0200000000000000``, and metadata generated as described in :ref:`bluetooth_mesh_dfu_eval_md` section below, type the following command::
 
-  mesh models dfu slot add 241236 0200000000000000 020000000100000094cf24017c26f3710100
+  mesh models dfu slot add 241236 0200000000000000 020000000000000094cf24017c26f3710100
 
 When the slot is added, the shell will print the slot ID.
 Take note of this ID as it will then be needed to start the DFU transfer::
@@ -183,10 +182,80 @@ To bring a stalled Target node to idle state, use the ``mesh models dfu cli canc
 
 .. _bluetooth_mesh_dfu_eval_md:
 
-Composing the firmware metadata
-*******************************
+Generating the firmware metadata
+********************************
 
-The Bluetooth mesh DFU subsystem provides a set of shell commands that can be used to compose a firmware metadata.
+There are two ways to generate the required DFU metadata:
+
+  * Automated generation using the DFU metadata extraction script integrated in the |NCS| build system.
+  * Manual generation by using shell commands.
+
+Using the DFU metadata extraction script is the most efficient way of generating the required DFU metadata.
+
+Automated metadata generation
+=============================
+
+By enabling the :kconfig:option:`CONFIG_BT_MESH_DFU_METADATA_ON_BUILD` option in the application, the metadata will be automatically parsed from the ``.elf`` and ``.config`` files.
+The parsed data is stored in the :file:`ble_mesh_metadata.json` file.
+The file is placed in the :file:`dfu_application.zip` archive in the build folder of the application.
+Additionally, the metadata string required by the ``mesh models dfu slot add`` command will be printed in the command line window when the application is built::
+
+  Bluetooth Mesh Composition metadata generated:
+    Encoded metadata: 020000000000000094cf24017c26f3710100
+    Full metadata written to: APPLICATION_FOLDER\build\zephyr\dfu_application.zip
+
+.. note::
+   It is required that the Composition Data is declared with the ``const`` qualifier.
+   If the application contains more than one Composition Data structure (for example, when the structure to be used is picked at runtime), the script will not print any encoded metadata.
+   In this case, use the JSON file to find the encoded metadata matching the Composition Data to be used by the device after the update.
+   Additionally, the script is hardcoded to produce a metadata string where the firmware is targeted for the application core.
+
+A separate west command can be utilized to print the metadata to the console, given that it is already generated by the build system.
+This gives the user easy access to this information, without having to enter the ``.json`` file in the build folder or to rebuild the application::
+
+  west build -t ble_mesh_dfu_metadata
+
+For this particular example, the following output is generated:
+
+  .. toggle::
+
+    .. code-block:: console
+
+      {
+        "sign_version": {
+          "major": 2,
+          "minor": 0,
+          "revision": 0,
+          "build_number": 0
+        },
+        "binary_size": 241236,
+        "composition_data": {
+          "cid": 89,
+          "pid": 0,
+          "vid": 0,
+          "crpl": 10,
+          "features": 7,
+          "elements": [
+            {
+              "location": 1,
+              "sig_models": [
+                0,
+                2,
+                48962,
+                48964
+              ],
+              "vendor_models": []
+            }
+          ]
+        },
+        "composition_hash": "0x71f3267c",
+        "encoded_metadata": "020000000000000094cf24017c26f3710100"
+      }
+
+Manual metadata generation
+==========================
+
+The Bluetooth Mesh DFU subsystem provides a set of shell commands that can be used to compose a firmware metadata.
 The format of metadata is defined in the :c:struct:`bt_mesh_dfu_metadata` structure.
 For the complete list of commands, see :ref:`zephyr:bluetooth_mesh_shell_dfu_metadata`.
 
@@ -202,7 +271,7 @@ For example, for :ref:`ble_mesh_dfu_target` sample, which has only one element c
   mesh models dfu metadata comp-elem-add 1 4 0 0x0000 0x0002 0xBF42 0xBF44
 
 .. note::
-   In case of any mistakes being done during the enconding of the Composition Data, use the ``mesh models dfu metadata comp-clear`` command to clear the cached value, then start composing the metadata from the beginning.
+   In case of any mistakes during the encoding of the Composition Data, use the ``mesh models dfu metadata comp-clear`` command to clear the cached value, then start composing the metadata from the beginning.
 
 When all elements are added, generate a hash of the Composition Data using the ``mesh models dfu metadata comp-hash-get`` shell command.
 For example, using the inputs from the commands above, the output of this command should be the following::
@@ -237,4 +306,4 @@ The output of the command will be the following::
           Composition data hash: 0x71f3267c
           Elements: 1
           User data length: 0
-  Encoded metadata: 020000000100000094cf24017c26f3710100
+  Encoded metadata: 020000000000000094cf24017c26f3710100

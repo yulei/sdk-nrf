@@ -95,6 +95,7 @@
 // Parallel array data (*cluster*, attribute, privilege) for write attribute
 #define GENERATED_ACCESS_WRITE_ATTRIBUTE__CLUSTER { \
     0x00000006, /* Cluster: On/Off, Attribute: StartUpOnOff, Privilege: manage */ \
+    0x0000001E, /* Cluster: Binding, Attribute: Binding, Privilege: manage */ \
     0x0000001F, /* Cluster: Access Control, Attribute: ACL, Privilege: administer */ \
     0x0000001F, /* Cluster: Access Control, Attribute: Extension, Privilege: administer */ \
     0x00000028, /* Cluster: Basic Information, Attribute: NodeLabel, Privilege: manage */ \
@@ -107,6 +108,7 @@
 // Parallel array data (cluster, *attribute*, privilege) for write attribute
 #define GENERATED_ACCESS_WRITE_ATTRIBUTE__ATTRIBUTE { \
     0x00004003, /* Cluster: On/Off, Attribute: StartUpOnOff, Privilege: manage */ \
+    0x00000000, /* Cluster: Binding, Attribute: Binding, Privilege: manage */ \
     0x00000000, /* Cluster: Access Control, Attribute: ACL, Privilege: administer */ \
     0x00000001, /* Cluster: Access Control, Attribute: Extension, Privilege: administer */ \
     0x00000005, /* Cluster: Basic Information, Attribute: NodeLabel, Privilege: manage */ \
@@ -119,6 +121,7 @@
 // Parallel array data (cluster, attribute, *privilege*) for write attribute
 #define GENERATED_ACCESS_WRITE_ATTRIBUTE__PRIVILEGE { \
     kMatterAccessPrivilegeManage, /* Cluster: On/Off, Attribute: StartUpOnOff, Privilege: manage */ \
+    kMatterAccessPrivilegeManage, /* Cluster: Binding, Attribute: Binding, Privilege: manage */ \
     kMatterAccessPrivilegeAdminister, /* Cluster: Access Control, Attribute: ACL, Privilege: administer */ \
     kMatterAccessPrivilegeAdminister, /* Cluster: Access Control, Attribute: Extension, Privilege: administer */ \
     kMatterAccessPrivilegeManage, /* Cluster: Basic Information, Attribute: NodeLabel, Privilege: manage */ \
@@ -138,10 +141,6 @@
     0x00000004, /* Cluster: Groups, Command: RemoveGroup, Privilege: manage */ \
     0x00000004, /* Cluster: Groups, Command: RemoveAllGroups, Privilege: manage */ \
     0x00000004, /* Cluster: Groups, Command: AddGroupIfIdentifying, Privilege: manage */ \
-    0x00000005, /* Cluster: Scenes, Command: AddScene, Privilege: manage */ \
-    0x00000005, /* Cluster: Scenes, Command: RemoveScene, Privilege: manage */ \
-    0x00000005, /* Cluster: Scenes, Command: RemoveAllScenes, Privilege: manage */ \
-    0x00000005, /* Cluster: Scenes, Command: StoreScene, Privilege: manage */ \
     0x00000030, /* Cluster: General Commissioning, Command: ArmFailSafe, Privilege: administer */ \
     0x00000030, /* Cluster: General Commissioning, Command: SetRegulatoryConfig, Privilege: administer */ \
     0x00000030, /* Cluster: General Commissioning, Command: CommissioningComplete, Privilege: administer */ \
@@ -177,10 +176,6 @@
     0x00000003, /* Cluster: Groups, Command: RemoveGroup, Privilege: manage */ \
     0x00000004, /* Cluster: Groups, Command: RemoveAllGroups, Privilege: manage */ \
     0x00000005, /* Cluster: Groups, Command: AddGroupIfIdentifying, Privilege: manage */ \
-    0x00000000, /* Cluster: Scenes, Command: AddScene, Privilege: manage */ \
-    0x00000002, /* Cluster: Scenes, Command: RemoveScene, Privilege: manage */ \
-    0x00000003, /* Cluster: Scenes, Command: RemoveAllScenes, Privilege: manage */ \
-    0x00000004, /* Cluster: Scenes, Command: StoreScene, Privilege: manage */ \
     0x00000000, /* Cluster: General Commissioning, Command: ArmFailSafe, Privilege: administer */ \
     0x00000002, /* Cluster: General Commissioning, Command: SetRegulatoryConfig, Privilege: administer */ \
     0x00000004, /* Cluster: General Commissioning, Command: CommissioningComplete, Privilege: administer */ \
@@ -216,10 +211,6 @@
     kMatterAccessPrivilegeManage, /* Cluster: Groups, Command: RemoveGroup, Privilege: manage */ \
     kMatterAccessPrivilegeManage, /* Cluster: Groups, Command: RemoveAllGroups, Privilege: manage */ \
     kMatterAccessPrivilegeManage, /* Cluster: Groups, Command: AddGroupIfIdentifying, Privilege: manage */ \
-    kMatterAccessPrivilegeManage, /* Cluster: Scenes, Command: AddScene, Privilege: manage */ \
-    kMatterAccessPrivilegeManage, /* Cluster: Scenes, Command: RemoveScene, Privilege: manage */ \
-    kMatterAccessPrivilegeManage, /* Cluster: Scenes, Command: RemoveAllScenes, Privilege: manage */ \
-    kMatterAccessPrivilegeManage, /* Cluster: Scenes, Command: StoreScene, Privilege: manage */ \
     kMatterAccessPrivilegeAdminister, /* Cluster: General Commissioning, Command: ArmFailSafe, Privilege: administer */ \
     kMatterAccessPrivilegeAdminister, /* Cluster: General Commissioning, Command: SetRegulatoryConfig, Privilege: administer */ \
     kMatterAccessPrivilegeAdminister, /* Cluster: General Commissioning, Command: CommissioningComplete, Privilege: administer */ \

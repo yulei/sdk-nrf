@@ -34,7 +34,8 @@ The following Kconfig options are also available for this module:
 * :kconfig:option:`CONFIG_CAF_BLE_STATE_EXCHANGE_MTU` - This option can be used for GATT client (:kconfig:option:`CONFIG_BT_GATT_CLIENT`) to set the Maximum Transmission Unit (MTU) to the maximum possible size that the buffers can hold.
   This option is enabled by default.
 * :kconfig:option:`CONFIG_CAF_BLE_USE_LLPM` - This option enables the Low Latency Packet Mode (LLPM).
-  This option is enabled by default and depends on :kconfig:option:`CONFIG_BT_CTLR_SDC_LLPM` and :kconfig:option:`CONFIG_BT_LL_SOFTDEVICE`.
+  If the Bluetooth controller is enabled as part of the application, this option is enabled by default and depends on :kconfig:option:`CONFIG_BT_CTLR_SDC_LLPM`.
+  Otherwise, this option is disabled and can be enabled manually.
 * :kconfig:option:`CONFIG_CAF_BLE_STATE_SECURITY_REQ` - This option enables setting the security level 2 for a Bluetooth LE connection automatically, right after the connection is established.
   The security level 2 or higher enables connection encryption.
   The device disconnects if establishing the connection security level 2 fails.
@@ -53,22 +54,14 @@ Connection state change
 =======================
 
 The module propagates information about the connection state changes using :c:struct:`ble_peer_event`.
-In this event, :c:member:`ble_peer_event.id` is a pointer to the connection object and :c:member:`ble_peer_event.state` is the connection state.
 
 .. figure:: images/caf_ble_state_transitions.svg
    :alt: Bluetooth connection state handling in CAF
 
    Bluetooth connection state handling in CAF
 
-The connection state can be set to one of the following values:
-
-* :c:enum:`PEER_STATE_CONNECTED` - Bluetooth stack successfully connected to the remote peer.
-* :c:enum:`PEER_STATE_CONN_FAILED` - Bluetooth stack failed to connect the remote peer.
-* :c:enum:`PEER_STATE_SECURED` - Bluetooth stack set the connection security to at least level 2 (that is, encryption and no authentication).
-* :c:enum:`PEER_STATE_DISCONNECTED` - Bluetooth stack disconnected from the remote peer.
-
 Other application modules can call :c:func:`bt_conn_disconnect` to disconnect the remote peer.
-The application module can submit a :c:struct:`ble_peer_event` with :c:member:`ble_peer_event.state` set to :c:enum:`PEER_STATE_DISCONNECTING` to let other application modules prepare for the disconnection.
+The application module can submit a :c:struct:`ble_peer_event` with :c:member:`ble_peer_event.state` set to :c:enumerator:`PEER_STATE_DISCONNECTING` to let other application modules prepare for the disconnection.
 
 Connection parameter change
 ===========================

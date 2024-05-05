@@ -1,11 +1,10 @@
 top_table:
   Sidewalk: SIDEWALK
   Bluetooth: BT_CTLR
-  Bluetooth mesh: BT_MESH
+  Bluetooth Mesh: BT_MESH
   Zigbee: ZIGBEE
   Thread: NET_L2_OPENTHREAD
   LTE: LTE_LINK_CONTROL
-  HomeKit: HOMEKIT
   Matter: CHIP
   Wi-Fi:
     rule: WIFI && WIFI_NRF700X
@@ -19,9 +18,12 @@ top_table:
 features:
   sidewalk:
     Sidewalk over BLE: SIDEWALK && SIDEWALK_LINK_MASK_BLE
-    Sidewalk over FSK: SIDEWALK && SIDEWALK_LINK_MASK_FSK
-    Sidewalk over LORA: SIDEWALK && SIDEWALK_LINK_MASK_LORA
+    Sidewalk over FSK: SIDEWALK && CONFIG_SIDEWALK_SUBGHZ_SUPPORT
+    Sidewalk over LORA: SIDEWALK && CONFIG_SIDEWALK_SUBGHZ_SUPPORT
     Sidewalk - OTA DFU over Bluetooth LE: SIDEWALK && SIDEWALK_DFU_SERVICE_BLE
+    Sidewalk on-device certification: SIDEWALK
+    Sidewalk Multi-link + Auto-connect: SIDEWALK && CONFIG_SIDEWALK_SUBGHZ_SUPPORT
+    Sidewalk File Transfer (FUOTA): SIDEWALK && SIDEWALK_FILE_TRANSFER
   bluetooth:
     Bluetooth LE Peripheral/Central: BT_CTLR && (BT_CENTRAL || BT_PERIPHERAL)
     LLPM: BT_CTLR_SDC_LLPM
@@ -62,16 +64,8 @@ features:
     Matter commissioning over Bluetooth LE with NFC onboarding: CHIP && BT && CHIP_NFC_COMMISSIONING
     Matter - OTA DFU over Bluetooth LE: CHIP && BT && MCUMGR_TRANSPORT_BT
     OTA DFU over Matter: CHIP && CHIP_OTA_REQUESTOR
-    Matter Sleepy End Device: CHIP && CHIP_ENABLE_SLEEPY_END_DEVICE_SUPPORT &&
+    Matter Intermittently Connected Device: CHIP && CHIP_ENABLE_ICD_SUPPORT &&
       NET_L2_OPENTHREAD && OPENTHREAD_MTD_SED
-  homekit:
-    HomeKit over Bluetooth LE: HOMEKIT && BT && !CONFIG_HAP_HAVE_THREAD
-    HomeKit over Thread FTD: HOMEKIT && BT && OPENTHREAD_FTD
-    HomeKit over Thread MTD SED: HOMEKIT && BT && OPENTHREAD_MTD_SED
-    HomeKit commissioning over Bluetooth LE with QR code: HOMEKIT && BT && !CONFIG_HAP_HAVE_NFC
-    HomeKit commissioning over Bluetooth LE with NFC: HOMEKIT && BT && CONFIG_HAP_HAVE_NFC
-    HomeKit - OTA DFU over Bluetooth LE: HOMEKIT && HOMEKIT_NORDIC_DFU
-    HomeKit - OTA DFU over HomeKit: HOMEKIT && BT && CONFIG_HAP_FIRMWARE_UPDATE
   wifi:
     STA Mode:
       rule: WPA_SUPP && WIFI_NRF700X
@@ -92,7 +86,42 @@ features:
         - BOARD_NRF7002DK_NRF5340_CPUAPP
         - BOARD_NRF7002DK_NRF7001_NRF5340_CPUAPP
     Bluetooth LE Co-existence:
-      rule: WIFI_NRF700X && NRF700X_BT_COEX
+      rule: WIFI_NRF700X && NRF700X_SR_COEX
+      boards_and_shields:
+        - SHIELD_NRF7002EK
+        - SHIELD_NRF7002EK_NRF7001
+        - SHIELD_NRF7002EB
+        - BOARD_NRF7002DK_NRF5340_CPUAPP
+        - BOARD_NRF7002DK_NRF7001_NRF5340_CPUAPP
+    SoftAP Mode:
+      rule: WIFI_NRF700X && NRF700X_AP_MODE && WPA_SUPP_AP
+      boards_and_shields:
+        - SHIELD_NRF7002EK
+        - SHIELD_NRF7002EK_NRF7000
+        - SHIELD_NRF7002EK_NRF7001
+        - SHIELD_NRF7002EB
+        - BOARD_NRF7002DK_NRF5340_CPUAPP
+        - BOARD_NRF7002DK_NRF7001_NRF5340_CPUAPP
+    Monitor Mode:
+      rule: WIFI_NRF700X && NRF700X_RAW_DATA_RX
+      boards_and_shields:
+        - SHIELD_NRF7002EK
+        - SHIELD_NRF7002EK_NRF7000
+        - SHIELD_NRF7002EK_NRF7001
+        - SHIELD_NRF7002EB
+        - BOARD_NRF7002DK_NRF5340_CPUAPP
+        - BOARD_NRF7002DK_NRF7001_NRF5340_CPUAPP
+    TX injection Mode:
+      rule: WIFI_NRF700X && NRF700X_RAW_DATA_TX
+      boards_and_shields:
+        - SHIELD_NRF7002EK
+        - SHIELD_NRF7002EK_NRF7000
+        - SHIELD_NRF7002EK_NRF7001
+        - SHIELD_NRF7002EB
+        - BOARD_NRF7002DK_NRF5340_CPUAPP
+        - BOARD_NRF7002DK_NRF7001_NRF5340_CPUAPP
+    Promiscuous Mode:
+      rule: WIFI_NRF700X && NRF700X_PROMISC_DATA_RX
       boards_and_shields:
         - SHIELD_NRF7002EK
         - SHIELD_NRF7002EK_NRF7001
@@ -108,3 +137,17 @@ features:
     Immutable Bootloader as part of build: SECURE_BOOT
   hw_unique_key:
     Key Derivation from Hardware Unique Key: HW_UNIQUE_KEY
+  trusted_storage:
+    Trusted storage implements the PSA Certified Secure Storage APIs without TF-M: TRUSTED_STORAGE
+  power_management:
+    nPM1100: REGULATOR_NPM1100
+    nPM1300: MFD_NPM1300
+    nPM6001: MFD_NPM6001
+
+display_names:
+  SHIELD_NRF7002EK: nRF7002 EK
+  SHIELD_NRF7002EK_NRF7000: nRF7002 EK in nRF7000 emulation mode
+  SHIELD_NRF7002EK_NRF7001: nRF7002 EK in nRF7001 emulation mode
+  SHIELD_NRF7002EB: nRF7002 EB
+  BOARD_NRF7002DK_NRF5340_CPUAPP: nRF7002 DK
+  BOARD_NRF7002DK_NRF7001_NRF5340_CPUAPP: nRF7002 DK in nRF7001 emulation mode

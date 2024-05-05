@@ -7,22 +7,22 @@ Vendor model development overview
    :local:
    :depth: 2
 
-To implement a new Bluetooth® mesh model, apply the steps described in this step-by-step model development process overview.
+To implement a new Bluetooth® Mesh model, apply the steps described in this step-by-step model development process overview.
 
 Defining a model identifier
 ***************************
 
-Models define basic functionality of a node in the Bluetooth mesh network.
+Models define basic functionality of a node in the Bluetooth Mesh network.
 Once it is decided on what functionality the model will define, its identifier must be specified to be able to recognize it among the other models in the mesh network.
 
-As defined by the `Bluetooth mesh profile specification`_, the vendor model identifiers are composed of two unique 16-bit values specifying a company identifier (Company ID), and a vendor-assigned model identifier (Model ID) tied to this Company ID.
+As defined by the `Bluetooth Mesh profile specification`_, the vendor model identifiers are composed of two unique 16-bit values specifying a company identifier (Company ID), and a vendor-assigned model identifier (Model ID) tied to this Company ID.
 
 .. code-block:: c
 
     #define YOUR_COMPANY_ID 0x1234
     #define YOUR_MODEL_ID   0x5678
 
-The Company ID must be registered with the Bluetooth® Special Interest Group (SIG), and the vendor owning the Company ID may freely allocate the model IDs for its Company ID.
+The Company ID must be registered with the Bluetooth Special Interest Group (SIG), and the vendor owning the Company ID may freely allocate the model IDs for its Company ID.
 See `Bluetooth SIG company identifiers`_ for a list of Company IDs.
 
 Adding the model to the node composition data
@@ -75,7 +75,7 @@ Defining opcodes for the messages
 The communication between the nodes within a mesh network is done by means of message exchange.
 Therefore, if you want to implement your own node behavior, you need to define your own set of messages that will be associated with this behavior.
 To do that, you need to define vendor-specific opcodes for new messages, using the :c:macro:`BT_MESH_MODEL_OP_3` macro.
-This macro encodes an opcode into the special format defined by the `Bluetooth mesh profile specification`_.
+This macro encodes an opcode into the special format defined by the `Bluetooth Mesh profile specification`_.
 Each vendor-specific message must be tied with a Company ID, passed as a second parameter to the macro:
 
 .. code-block:: c
@@ -290,9 +290,9 @@ The Access API provides a set of callbacks that are called when certain events o
 These callbacks are defined in :c:struct:`bt_mesh_model_cb`.
 
 .. figure:: images/bt_mesh_model_callbacks.svg
-    :alt: A diagram representing the callbacks for Bluetooth mesh models.
+    :alt: A diagram representing the callbacks for Bluetooth Mesh models.
 
-    Bluetooth mesh model callbacks
+    Bluetooth Mesh model callbacks
 
 :c:member:`bt_mesh_model_cb.settings_set`
    This handler is called when the model data is restored from the persistent storage.

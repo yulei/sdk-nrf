@@ -110,8 +110,8 @@ static struct cfg_option configs[] = {
 };
 
 static const char file_contents_header[] =
-"==========================================\r\n"
-"  Nordic Thingy:91 Configuration options\r\n"
+"=========================\r\n"
+"          Configuration options\r\n"
 "==========================================\r\n"
 "The parameters below can be changed at runtime.\r\n"
 "\r\n"

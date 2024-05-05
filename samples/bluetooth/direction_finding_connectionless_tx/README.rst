@@ -48,12 +48,12 @@ Configuration
 Angle of arrival mode
 =====================
 
-To build this sample with AoA mode only, set ``OVERLAY_CONFIG`` to the :file:`overlay-aoa.conf` file.
+To build this sample with AoA mode only, set ``EXTRA_CONF_FILE`` to the :file:`overlay-aoa.conf` file.
 
 See :ref:`cmake_options` for instructions on how to add this option.
 For more information about using configuration overlay files, see :ref:`zephyr:important-build-vars` in the Zephyr documentation.
 
-To build this sample for :ref:`nRF5340 DK <ug_nrf5340>`, with AoA mode only, add content of :file:`overlay-aoa.conf` file to :file:`child_image/hci_rpmsg.conf` file.
+To build this sample for :ref:`nRF5340 DK <ug_nrf5340>`, with AoA mode only, add content of :file:`overlay-aoa.conf` file to :file:`child_image/hci_ipc.conf` file.
 
 .. bt_dir_finding_tx_aoa_mode_end
 

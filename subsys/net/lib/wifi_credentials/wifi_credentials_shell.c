@@ -45,7 +45,8 @@ static void print_network_info(void *cb_arg, const char *ssid, size_t ssid_len)
 
 	if (creds.header.type == WIFI_SECURITY_TYPE_PSK ||
 	    creds.header.type == WIFI_SECURITY_TYPE_PSK_SHA256 ||
-	    creds.header.type == WIFI_SECURITY_TYPE_SAE) {
+	    creds.header.type == WIFI_SECURITY_TYPE_SAE ||
+	    creds.header.type == WIFI_SECURITY_TYPE_WPA_PSK) {
 		shell_fprintf(shell, SHELL_VT100_COLOR_DEFAULT,
 			      ", password: \"%.*s\", password_len: %d",
 			      creds.password_len, creds.password, creds.password_len);
@@ -66,8 +67,21 @@ static void print_network_info(void *cb_arg, const char *ssid, size_t ssid_len)
 		shell_fprintf(shell, SHELL_VT100_COLOR_DEFAULT, ", band: 5GHz");
 	}
 
+	if (creds.header.channel) {
+		shell_fprintf(shell, SHELL_VT100_COLOR_DEFAULT, ", channel: %d",
+			      creds.header.channel);
+	}
+
 	if (creds.header.flags & WIFI_CREDENTIALS_FLAG_FAVORITE) {
 		shell_fprintf(shell, SHELL_VT100_COLOR_DEFAULT, ", favorite");
+	}
+
+	if (creds.header.flags & WIFI_CREDENTIALS_FLAG_MFP_REQUIRED) {
+		shell_fprintf(shell, SHELL_VT100_COLOR_DEFAULT, ", MFP_REQUIRED");
+	} else if (creds.header.flags & WIFI_CREDENTIALS_FLAG_MFP_DISABLED) {
+		shell_fprintf(shell, SHELL_VT100_COLOR_DEFAULT, ", MFP_DISABLED");
+	} else {
+		shell_fprintf(shell, SHELL_VT100_COLOR_DEFAULT, ", MFP_OPTIONAL");
 	}
 	shell_fprintf(shell, SHELL_VT100_COLOR_DEFAULT, "\n");
 }
@@ -85,6 +99,9 @@ static enum wifi_security_type parse_sec_type(const char *s)
 	}
 	if (strcmp("WPA3-SAE", s) == 0) {
 		return WIFI_SECURITY_TYPE_SAE;
+	}
+	if (strcmp("WPA-PSK", s) == 0) {
+		return WIFI_SECURITY_TYPE_WPA_PSK;
 	}
 	return WIFI_SECURITY_TYPE_UNKNOWN;
 }
@@ -132,7 +149,8 @@ static int cmd_add_network(const struct shell *shell, size_t argc, char *argv[])
 
 	if (creds.header.type == WIFI_SECURITY_TYPE_PSK ||
 	    creds.header.type == WIFI_SECURITY_TYPE_PSK_SHA256 ||
-	    creds.header.type == WIFI_SECURITY_TYPE_SAE) {
+	    creds.header.type == WIFI_SECURITY_TYPE_SAE ||
+	    creds.header.type == WIFI_SECURITY_TYPE_WPA_PSK) {
 		/* parse passphrase */
 		if (argc < 4) {
 			shell_error(shell, "Missing password");
@@ -179,9 +197,30 @@ static int cmd_add_network(const struct shell *shell, size_t argc, char *argv[])
 	}
 
 	if (arg_idx < argc) {
+		/* look for channel */
+		char *end;
+
+		creds.header.channel = strtol(argv[arg_idx], &end, 10);
+		if (*end == '\0') {
+			++arg_idx;
+		}
+	}
+
+	if (arg_idx < argc) {
 		/* look for favorite flag */
-		if (strcmp("favorite", argv[arg_idx]) == 0) {
+		if (strncmp("favorite", argv[arg_idx], strlen("favorite")) == 0) {
 			creds.header.flags |= WIFI_CREDENTIALS_FLAG_FAVORITE;
+			++arg_idx;
+		}
+	}
+
+	if (arg_idx < argc) {
+		/* look for mfp_disabled flag */
+		if (strncmp("mfp_disabled", argv[arg_idx], strlen("mfp_disabled")) == 0) {
+			creds.header.flags |= WIFI_CREDENTIALS_FLAG_MFP_DISABLED;
+			++arg_idx;
+		} else if (strncmp("mfp_required", argv[arg_idx], strlen("mfp_required")) == 0) {
+			creds.header.flags |= WIFI_CREDENTIALS_FLAG_MFP_REQUIRED;
 			++arg_idx;
 		}
 	}
@@ -195,11 +234,13 @@ static int cmd_add_network(const struct shell *shell, size_t argc, char *argv[])
 	return wifi_credentials_set_personal_struct(&creds);
 help:
 	shell_print(shell, "Usage: wifi_cred add \"network name\""
-		    " {OPEN, WPA2-PSK, WPA2-PSK-SHA256, WPA3-SAE}"
+		    " {OPEN, WPA2-PSK, WPA2-PSK-SHA256, WPA3-SAE, WPA-PSK}"
 		    " [psk/password]"
 		    " [bssid]"
 		    " [{2.4GHz, 5GHz}]"
-		    " [favorite]");
+		    " [channel]"
+		    " [favorite]"
+		    " [mfp_disabled|mfp_required]");
 	return -EINVAL;
 }
 

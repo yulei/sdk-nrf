@@ -26,7 +26,7 @@ extern "C" {
 #include <stddef.h>
 #include <zephyr/kernel.h>
 #include <zephyr/sys/util_macro.h>
-#include <zephyr/toolchain/common.h>
+#include <zephyr/toolchain.h>
 #include <nrf_modem_at.h>
 
 /**
@@ -49,7 +49,7 @@ int at_cmd_custom_respond(char *buf, size_t buf_size,
 		const char *response, ...);
 
 /**
- * @brief Define an custom AT command callback.
+ * @brief Define a custom AT command callback.
  *
  * @param entry The entry name.
  * @param _filter The (partial) AT command on which the callback should trigger.
@@ -61,20 +61,6 @@ int at_cmd_custom_respond(char *buf, size_t buf_size,
 		.cmd = _filter,                                                                    \
 		.callback = _callback,                                                             \
 	}
-
-/**
- * @brief Pause a custom AT command.
- *
- * @param entry Pointer to the custom AT command to pause.
- */
-void at_cmd_custom_pause(struct nrf_modem_at_cmd_custom *entry);
-
-/**
- * @brief Resume a custom AT command.
- *
- * @param entry Pointer to the custom AT command to resume.
- */
-void at_cmd_custom_resume(struct nrf_modem_at_cmd_custom *entry);
 
 /** @} */
 

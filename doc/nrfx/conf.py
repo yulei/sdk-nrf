@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2023 Nordic Semiconductor
+# Copyright (c) 2024 Nordic Semiconductor
 #
 # SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
 #
@@ -36,7 +36,7 @@ extensions.extend(["zephyr.external_content", "zephyr.doxyrunner"])
 
 # Options for HTML output ------------------------------------------------------
 
-html_static_path.append(str(NRF_BASE / "doc" / "_static"))
+html_static_path = [str(NRF_BASE / "doc" / "_static")]
 html_theme_options = {"docset": "nrfx", "docsets": utils.ALL_DOCSETS}
 
 # -- Options for doxyrunner ----------------------------------------------------

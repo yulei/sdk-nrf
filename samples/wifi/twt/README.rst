@@ -31,29 +31,22 @@ When the traffic generator module is used with this sample, the traffic generato
 The server source is available in the :file:`scripts/traffic_gen_server` file.
 This is a `python3` based server, so you must make sure that `python3` is installed on your PC.
 
-To start the server, run the following command:
+To start the server:
 
-.. code-block:: console
+1. Set the :kconfig:option:`CONFIG_TRAFFIC_GEN_REMOTE_IPV4_ADDR` Kconfig option to the IPv4 address of the host running the traffic generator server.
 
-   python3 traffic_gen_server.py
+2. Run the following command:
 
-Use the ``-h`` option to display the help message for how to use the server.
+   .. code-block:: console
+
+      python3 traffic_gen_server.py
+
+   Use the ``-h`` option to display the help message for how to use the server.
 
 Configuration
 *************
 
 |config|
-
-You must configure the following Wi-Fi credentials in the :file:`prj.conf` file:
-
-* Network name (SSID)
-* Key management
-* Password
-
-.. note::
-   You can also use ``menuconfig`` to enable ``Key management`` option.
-
-See :ref:`zephyr:menuconfig` in the Zephyr documentation for instructions on how to run ``menuconfig``.
 
 Configuration options
 =====================
@@ -62,6 +55,15 @@ The following sample-specific Kconfig options are used in this sample (located i
 
 .. options-from-kconfig::
    :show-type:
+
+You must configure the following Wi-Fi credentials in the :file:`prj.conf` file:
+
+.. include:: /includes/wifi_credentials_static.txt
+
+.. note::
+   You can also use ``menuconfig`` to configure ``Wi-Fi credentials``.
+
+See :ref:`zephyr:menuconfig` in the Zephyr documentation for instructions on how to run ``menuconfig``.
 
 IP addressing
 *************
@@ -86,12 +88,12 @@ Building and running
 
 Currently, only the nRF7002 DK is supported.
 
-To build for the nRF7002 DK, use the ``nrf7002dk_nrf5340_cpuapp`` build target.
+To build for the nRF7002 DK, use the ``nrf7002dk/nrf5340/cpuapp`` build target.
 The following is an example of the CLI command:
 
 .. code-block:: console
 
-   west build -b nrf7002dk_nrf5340_cpuapp
+   west build -b nrf7002dk/nrf5340/cpuapp
 
 Testing
 =======

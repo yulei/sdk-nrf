@@ -129,7 +129,7 @@ int nrf_cloud_init(const struct nrf_cloud_init_param *param)
 #endif
 
 	/* Initialize the transport. */
-	err = nct_init(param->client_id);
+	err = nct_initialize(param->client_id);
 	if (err) {
 		return err;
 	}
@@ -391,7 +391,7 @@ int nrf_cloud_send(const struct nrf_cloud_tx_data *msg)
 			break;
 		}
 		const struct nct_cc_data shadow_data = {
-			.opcode = NCT_CC_OPCODE_UPDATE_REQ,
+			.opcode = NCT_CC_OPCODE_UPDATE_ACCEPTED,
 			.data.ptr = send_data.ptr,
 			.data.len = send_data.len,
 			.message_id = (msg->id > 0) ? msg->id : NCT_MSG_ID_USE_NEXT_INCREMENT
@@ -478,6 +478,21 @@ int nrf_cloud_send(const struct nrf_cloud_tx_data *msg)
 	}
 
 	return err;
+}
+
+int nrf_cloud_obj_shadow_update(struct nrf_cloud_obj *const shadow_obj)
+{
+	if (!shadow_obj) {
+		return -EINVAL;
+	}
+
+	struct nrf_cloud_tx_data msg = {
+		.obj = shadow_obj,
+		.qos = MQTT_QOS_1_AT_LEAST_ONCE,
+		.topic_type = NRF_CLOUD_TOPIC_STATE,
+	};
+
+	return nrf_cloud_send(&msg);
 }
 
 int nrf_cloud_tenant_id_get(char *id_buf, size_t id_len)

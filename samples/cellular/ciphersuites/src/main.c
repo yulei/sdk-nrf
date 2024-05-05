@@ -21,7 +21,7 @@
 
 /* Certificate for `example.com` */
 static const char cert[] = {
-#include "../cert/DigiCertGlobalRootCA.pem"
+#include "DigiCertGlobalG2.pem.inc"
 };
 
 BUILD_ASSERT(sizeof(cert) < KB(4), "Certificate too large");
@@ -73,7 +73,7 @@ int cert_provision(void)
 
 	if (exists) {
 		mismatch = modem_key_mgmt_cmp(TLS_SEC_TAG, MODEM_KEY_MGMT_CRED_TYPE_CA_CHAIN, cert,
-					      strlen(cert));
+					      sizeof(cert));
 		if (!mismatch) {
 			printk("Certificate match\n");
 			return 0;
@@ -145,7 +145,7 @@ int main(void)
 		.ai_family = AF_INET,
 		.ai_socktype = SOCK_STREAM,
 	};
-	nrf_sec_cipher_t ciphersuite_list[] = { 0 };
+	int ciphersuite_list[] = { 0 };
 
 	printk("TLS Ciphersuites sample started\n\r");
 
@@ -162,7 +162,7 @@ int main(void)
 	}
 
 	printk("Waiting for network.. ");
-	err = lte_lc_init_and_connect();
+	err = lte_lc_connect();
 	if (err) {
 		printk("Failed to connect to the LTE network, err %d\n", err);
 		return 0;

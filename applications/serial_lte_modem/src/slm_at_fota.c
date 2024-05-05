@@ -16,6 +16,7 @@
 #include <zephyr/storage/stream_flash.h>
 #include <zephyr/sys/reboot.h>
 #include <net/fota_download.h>
+#include <fota_download_util.h>
 #include <dfu/dfu_target_full_modem.h>
 #include <dfu/fmfu_fdev.h>
 #include "slm_util.h"
@@ -32,7 +33,6 @@ LOG_MODULE_REGISTER(slm_fota, CONFIG_SLM_LOG_LEVEL);
 #define SCHEMA_HTTPS	"https"
 #define URI_HOST_MAX	CONFIG_DOWNLOAD_CLIENT_MAX_HOSTNAME_SIZE
 #define URI_SCHEMA_MAX	8
-#define ERASE_WAIT_TIME 30
 #define ERASE_POLL_TIME 2
 
 /* Some features need fota_download update */
@@ -47,6 +47,13 @@ enum slm_fota_operation {
 	SLM_FOTA_MFW_READ = 7,
 	SLM_FOTA_ERASE_MFW = 9
 };
+
+bool slm_modem_full_fota;
+
+uint8_t slm_fota_type = DFU_TARGET_IMAGE_TYPE_NONE;
+enum fota_stage slm_fota_stage = FOTA_STAGE_INIT;
+enum fota_status slm_fota_status;
+int32_t slm_fota_info;
 
 static char path[FILE_URI_MAX];
 static char hostname[URI_HOST_MAX];
@@ -131,9 +138,9 @@ static int do_fota_erase_mfw(void)
 			break;
 		}
 		time_elapsed += ERASE_POLL_TIME;
-	} while (time_elapsed < ERASE_WAIT_TIME);
+	} while (time_elapsed < CONFIG_DFU_TARGET_MODEM_TIMEOUT);
 
-	if (time_elapsed >= ERASE_WAIT_TIME) {
+	if (time_elapsed >= CONFIG_DFU_TARGET_MODEM_TIMEOUT) {
 		LOG_WRN("Erase timeout");
 		return -ETIME;
 	}
@@ -209,13 +216,13 @@ static int do_fota_start(int op, const char *file_uri, int sec_tag,
 	}
 
 	/* start HTTP(S) FOTA */
-	if (slm_util_cmd_casecmp(schema, SCHEMA_HTTPS)) {
+	if (slm_util_casecmp(schema, SCHEMA_HTTPS)) {
 		if (sec_tag == INVALID_SEC_TAG) {
 			LOG_ERR("Missing sec_tag");
 			return -EINVAL;
 		}
 		ret = fota_download_start_with_image_type(hostname, path, sec_tag, pdn_id, 0, type);
-	} else if (slm_util_cmd_casecmp(schema, SCHEMA_HTTP)) {
+	} else if (slm_util_casecmp(schema, SCHEMA_HTTP)) {
 		ret = fota_download_start_with_image_type(hostname, path, -1, pdn_id, 0, type);
 	} else {
 		ret = -EINVAL;
@@ -226,6 +233,7 @@ static int do_fota_start(int op, const char *file_uri, int sec_tag,
 			FOTA_STATUS_ERROR, ret);
 	}
 
+	slm_fota_init_state();
 	slm_fota_type = type;
 
 	return ret;
@@ -244,9 +252,13 @@ static void fota_dl_handler(const struct fota_download_evt *evt)
 	case FOTA_DOWNLOAD_EVT_FINISHED:
 		slm_fota_stage = FOTA_STAGE_ACTIVATE;
 		slm_fota_info = 0;
+		slm_modem_full_fota = (slm_fota_type == DFU_TARGET_IMAGE_TYPE_FULL_MODEM);
 		/* Save, in case reboot by reset */
 		slm_settings_fota_save();
 		rsp_send("\r\n#XFOTA: %d,%d\r\n", slm_fota_stage, slm_fota_status);
+		break;
+	case FOTA_DOWNLOAD_EVT_ERASE_TIMEOUT:
+		LOG_INF("Erasure timeout reached. Erasure continues.");
 		break;
 	case FOTA_DOWNLOAD_EVT_ERASE_PENDING:
 		slm_fota_stage = FOTA_STAGE_DOWNLOAD_ERASE_PENDING;
@@ -265,14 +277,14 @@ static void fota_dl_handler(const struct fota_download_evt *evt)
 		rsp_send("\r\n#XFOTA: %d,%d,%d\r\n",
 			slm_fota_stage, slm_fota_status, slm_fota_info);
 		/* FOTA session terminated */
-		slm_settings_fota_init();
+		slm_fota_init_state();
 		break;
 	case FOTA_DOWNLOAD_EVT_CANCELLED:
 		slm_fota_status = FOTA_STATUS_CANCELLED;
 		slm_fota_info = 0;
 		rsp_send("\r\n#XFOTA: %d,%d\r\n", slm_fota_stage, slm_fota_status);
 		/* FOTA session terminated */
-		slm_settings_fota_init();
+		slm_fota_init_state();
 		break;
 
 	default:
@@ -280,8 +292,9 @@ static void fota_dl_handler(const struct fota_download_evt *evt)
 	}
 }
 
-/* Handles AT#XFOTA commands. */
-int handle_at_fota(enum at_cmd_type cmd_type)
+SLM_AT_CMD_CUSTOM(xfota, "AT#XFOTA", handle_at_fota);
+static int handle_at_fota(enum at_cmd_type cmd_type, const struct at_param_list *param_list,
+			  uint32_t param_count)
 {
 	int err = -EINVAL;
 	uint16_t op;
@@ -291,7 +304,7 @@ int handle_at_fota(enum at_cmd_type cmd_type)
 
 	switch (cmd_type) {
 	case AT_CMD_TYPE_SET_COMMAND:
-		err = at_params_unsigned_short_get(&slm_at_param_list, 1, &op);
+		err = at_params_unsigned_short_get(param_list, 1, &op);
 		if (err < 0) {
 			return err;
 		}
@@ -310,12 +323,12 @@ int handle_at_fota(enum at_cmd_type cmd_type)
 			sec_tag_t sec_tag = INVALID_SEC_TAG;
 			enum dfu_target_image_type type;
 
-			err = util_string_get(&slm_at_param_list, 2, uri, &size);
+			err = util_string_get(param_list, 2, uri, &size);
 			if (err) {
 				return err;
 			}
-			if (at_params_valid_count_get(&slm_at_param_list) > 3) {
-				at_params_unsigned_int_get(&slm_at_param_list, 3, &sec_tag);
+			if (param_count > 3) {
+				at_params_unsigned_int_get(param_list, 3, &sec_tag);
 			}
 			if (op == SLM_FOTA_START_APP) {
 				type = DFU_TARGET_IMAGE_TYPE_MCUBOOT;
@@ -328,13 +341,13 @@ int handle_at_fota(enum at_cmd_type cmd_type)
 				full_modem_fota_params.dev = &fdev;
 
 				if (!device_is_ready(flash_dev)) {
-					LOG_ERR("Flash device %s not ready\n", flash_dev->name);
+					LOG_ERR("Flash device %s not ready", flash_dev->name);
 					return -ENXIO;
 				}
 
 				err = dfu_target_full_modem_cfg(&full_modem_fota_params);
 				if (err != 0 && err != -EALREADY) {
-					LOG_ERR("dfu_target_full_modem_cfg failed: %d\n", err);
+					LOG_ERR("dfu_target_full_modem_cfg failed: %d", err);
 					return err;
 				}
 
@@ -344,8 +357,8 @@ int handle_at_fota(enum at_cmd_type cmd_type)
 			else {
 				type = DFU_TARGET_IMAGE_TYPE_MODEM_DELTA;
 			}
-			if (at_params_valid_count_get(&slm_at_param_list) > 4) {
-				at_params_unsigned_short_get(&slm_at_param_list, 4, &pdn_id);
+			if (param_count > 4) {
+				at_params_unsigned_short_get(param_list, 4, &pdn_id);
 				err = do_fota_start(op, uri, sec_tag, pdn_id, type);
 			} else {
 				err = do_fota_start(op, uri, sec_tag, 0, type);
@@ -405,119 +418,98 @@ int slm_at_fota_uninit(void)
 	return 0;
 }
 
+void slm_fota_init_state(void)
+{
+	slm_modem_full_fota = false;
+	slm_fota_type = DFU_TARGET_IMAGE_TYPE_NONE;
+	slm_fota_stage = FOTA_STAGE_INIT;
+	slm_fota_status = FOTA_STATUS_OK;
+	slm_fota_info = 0;
+}
+
 void slm_fota_post_process(void)
 {
-	LOG_DBG("FOTA result %d,%d,%d", slm_fota_stage, slm_fota_status, slm_fota_info);
-	if (slm_fota_stage != FOTA_STAGE_INIT) {
-		/* report final result of last fota */
-		if (slm_fota_status == FOTA_STATUS_OK) {
-			rsp_send("\r\n#XFOTA: %d,%d\r\n", slm_fota_stage, slm_fota_status);
-		} else {
-			rsp_send("\r\n#XFOTA: %d,%d,%d\r\n", slm_fota_stage, slm_fota_status,
-				slm_fota_info);
-		}
-
-		/* This condition might not be true in case of
-		 * NRF_MODEM_DFU_RESULT_VOLTAGE_LOW. In that case we want to remember
-		 * that a firmware update is still ongoing when a reset is next done.
-		 */
-		if (slm_fota_stage != FOTA_STAGE_ACTIVATE) {
-			/* FOTA session completed */
-			slm_settings_fota_init();
-		}
-		slm_settings_fota_save();
+	if (slm_fota_stage != FOTA_STAGE_COMPLETE && slm_fota_stage != FOTA_STAGE_ACTIVATE) {
+		return;
 	}
+	LOG_INF("FOTA result %d,%d,%d", slm_fota_stage, slm_fota_status, slm_fota_info);
+
+	if (slm_fota_status == FOTA_STATUS_OK) {
+		rsp_send("\r\n#XFOTA: %d,%d\r\n", slm_fota_stage, slm_fota_status);
+	} else {
+		rsp_send("\r\n#XFOTA: %d,%d,%d\r\n", slm_fota_stage, slm_fota_status,
+			slm_fota_info);
+	}
+
+	slm_fota_init_state();
+	slm_settings_fota_save();
 }
 
 #if defined(CONFIG_SLM_FULL_FOTA)
-static void handle_full_fota_activation_fail(int ret)
+
+FUNC_NORETURN static void handle_full_fota_activation_fail(int ret)
 {
 	int err;
-	/* All errors during the new modem firmware activation are
-	 * considered irrecoverable and a reboot is needed.
-	 */
-	LOG_ERR("Modem firmware activation failed, error: %d", ret);
-	slm_fota_stage = FOTA_STAGE_COMPLETE;
+
+	/* Send the result notification and terminate the FOTA session. */
 	slm_fota_status = FOTA_STATUS_ERROR;
 	slm_fota_info = ret;
-	slm_settings_fota_save();
+	slm_fota_post_process();
+
+	LOG_ERR("Modem firmware activation failed, error: %d", ret);
 
 	/* Extenal flash needs to be erased and internal counters cleared */
 	err = dfu_target_reset();
 	if (err != 0)
-		LOG_ERR("dfu_target_reset() failed: %d\n", err);
+		LOG_ERR("dfu_target_reset() failed: %d", err);
 	else
 		LOG_INF("External flash erase succeeded");
 
-	/* slm_fota_post_process is executed after the reboot and an error is sent via AT reply */
 	LOG_WRN("Rebooting...");
 	LOG_PANIC();
 	sys_reboot(SYS_REBOOT_COLD);
 }
-#endif
 
-#if defined(CONFIG_SLM_FULL_FOTA)
-void slm_finish_modem_full_dfu(void)
+void slm_finish_modem_full_fota(void)
 {
 	int err;
 
-	if (slm_fota_type == DFU_TARGET_IMAGE_TYPE_FULL_MODEM) {
-		/* All erroneous steps in activation stage are fatal. In this case we cannot
-		 * activate the new firmware.
-		 */
-		slm_fota_status = FOTA_STATUS_ERROR;
+	/* All erroneous steps in activation stage are
+	 * considered fatal and the device is reset.
+	 */
+	slm_fota_stage = FOTA_STAGE_COMPLETE;
+	LOG_INF("Applying full modem firmware update from external flash");
 
-		/* Full fota activation differs from delta modem fota. */
-		LOG_INF("Applying full modem firmware update from external flash\n");
-
-		err = nrf_modem_lib_shutdown();
-		if (err != 0) {
-			LOG_ERR("nrf_modem_lib_shutdown() failed: %d\n", err);
-			/* The function will make a reboot. */
-			handle_full_fota_activation_fail(err);
-		}
-
-		err = nrf_modem_lib_bootloader_init();
-		if (err != 0) {
-			LOG_ERR("nrf_modem_lib_bootloader_init() failed: %d\n", err);
-			/* The function will make a reboot. */
-			handle_full_fota_activation_fail(err);
-		}
-
-		/* Loading data from external flash to modem's flash. */
-		err = fmfu_fdev_load(fmfu_buf, sizeof(fmfu_buf), flash_dev, 0);
-		if (err != 0) {
-			LOG_ERR("fmfu_fdev_load failed: %d\n", err);
-			/* The function will make a reboot. */
-			handle_full_fota_activation_fail(err);
-		}
-
-		err = nrf_modem_lib_shutdown();
-		if (err != 0) {
-			LOG_ERR("nrf_modem_lib_shutdown() failed: %d\n", err);
-			/* The function will make a reboot. */
-			handle_full_fota_activation_fail(err);
-		}
-
-		err = nrf_modem_lib_init();
-		if (err != 0) {
-			LOG_ERR("nrf_modem_lib_init() failed: %d\n", err);
-			/* The function will make a reboot. */
-			handle_full_fota_activation_fail(err);
-		}
-
-		slm_fota_stage = FOTA_STAGE_COMPLETE;
-		slm_fota_status = FOTA_STATUS_OK;
-		slm_fota_info = 0;
-		LOG_INF("Full modem firmware update succeeded. Will run new firmware");
-
-		/* Extenal flash needs to be erased and internal counters cleared */
-		err = dfu_target_reset();
-		if (err != 0)
-			LOG_ERR("dfu_target_reset() failed: %d\n", err);
-		else
-			LOG_INF("External flash erase succeeded");
+	err = nrf_modem_lib_bootloader_init();
+	if (err != 0) {
+		LOG_ERR("nrf_modem_lib_bootloader_init() failed: %d", err);
+		handle_full_fota_activation_fail(err);
 	}
 
+	/* Loading data from external flash to modem's flash. */
+	err = fmfu_fdev_load(fmfu_buf, sizeof(fmfu_buf), flash_dev, 0);
+	if (err != 0) {
+		LOG_ERR("fmfu_fdev_load failed: %d", err);
+		handle_full_fota_activation_fail(err);
+	}
+
+	err = nrf_modem_lib_shutdown();
+	if (err != 0) {
+		LOG_ERR("nrf_modem_lib_shutdown() failed: %d", err);
+		handle_full_fota_activation_fail(err);
+	}
+
+	/* Reset dfu_target to a pristine state, otherwise it has been observed to
+	 * fail when attempting a second full MFW update without application reset.
+	 */
+	err = fota_download_util_image_reset(DFU_TARGET_IMAGE_TYPE_FULL_MODEM);
+	if (err) {
+		LOG_ERR("fota_download_util_image_reset() failed: %d\n", err);
+	}
+
+	slm_fota_status = FOTA_STATUS_OK;
+	slm_fota_info = 0;
+	LOG_INF("Full modem firmware update complete.");
 }
-#endif
+
+#endif /* CONFIG_SLM_FULL_FOTA */

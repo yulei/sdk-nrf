@@ -12,6 +12,8 @@
 
 #define MAX_SSID_LEN 32
 #define MAC_ADDR_LEN 6
+#define MAC_STR_LEN 18 /* for ':' or '-' separated MAC address string */
+#define CHAN_NUM_LEN 6 /* for space-separated channel numbers string */
 
 /**
  * @brief Request a connection
@@ -139,4 +141,42 @@ int z_wpa_supplicant_filter(const struct device *dev,
  */
 int z_wpa_supplicant_channel(const struct device *dev,
 			      struct wifi_channel_info *channel);
+
+/**
+ * @brief Set Wi-Fi RTS threshold
+ *
+ * @param dev Wi-Fi interface handle to use
+ * @param rts_threshold RTS threshold to set
+ * @return 0 for OK; -1 for ERROR
+ */
+int z_wpa_supplicant_set_rts_threshold(const struct device *dev,
+				       unsigned int rts_threshold);
+
+#ifdef CONFIG_AP
+/**
+ * @brief Set Wi-Fi AP configuration
+ *
+ * @param dev Wi-Fi interface name to use
+ * @param params AP configuration parameters to set
+ * @return 0 for OK; -1 for ERROR
+ */
+int z_wpa_supplicant_ap_enable(const struct device *dev,
+				struct wifi_connect_req_params *params);
+
+/**
+ * @brief Disable Wi-Fi AP
+ * @param dev Wi-Fi interface name to use
+ * @return 0 for OK; -1 for ERROR
+ */
+int z_wpa_supplicant_ap_disable(const struct device *dev);
+
+/**
+ * @brief Set Wi-Fi AP STA disconnect
+ * @param dev Wi-Fi interface name to use
+ * @param mac_addr MAC address of the station to disconnect
+ * @return 0 for OK; -1 for ERROR
+ */
+int z_wpa_supplicant_ap_sta_disconnect(const struct device *dev,
+				       const uint8_t *mac_addr);
+#endif /* CONFIG_AP */
 #endif /* ZEPHYR_SUPP_MGMT_H */

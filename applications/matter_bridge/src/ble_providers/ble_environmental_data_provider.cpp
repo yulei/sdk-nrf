@@ -16,11 +16,12 @@ LOG_MODULE_DECLARE(app, CONFIG_CHIP_APP_LOG_LEVEL);
 
 using namespace ::chip;
 using namespace ::chip::app;
+using namespace Nrf;
 
-static bt_uuid *sServiceUuid = BT_UUID_ESS;
-static bt_uuid *sUuidTemperature = BT_UUID_TEMPERATURE;
-static bt_uuid *sUuidHumidity = BT_UUID_HUMIDITY;
-static bt_uuid *sUuidCcc = BT_UUID_GATT_CCC;
+static const bt_uuid *sServiceUuid = BT_UUID_ESS;
+static const bt_uuid *sUuidTemperature = BT_UUID_TEMPERATURE;
+static const bt_uuid *sUuidHumidity = BT_UUID_HUMIDITY;
+static const bt_uuid *sUuidCcc = BT_UUID_GATT_CCC;
 
 bt_gatt_read_params BleEnvironmentalDataProvider::sHumidityReadParams{};
 
@@ -30,7 +31,7 @@ BleEnvironmentalDataProvider *GetProvider(bt_conn *conn)
 		BLEConnectivityManager::Instance().FindBLEProvider(*bt_conn_get_dst(conn)));
 }
 
-bt_uuid *BleEnvironmentalDataProvider::GetServiceUuid()
+const bt_uuid *BleEnvironmentalDataProvider::GetServiceUuid()
 {
 	return sServiceUuid;
 }
@@ -155,12 +156,16 @@ void BleEnvironmentalDataProvider::Subscribe()
 	mGattTemperatureSubscribeParams.value_handle = mTemperatureCharacteristicHandle;
 	mGattTemperatureSubscribeParams.value = BT_GATT_CCC_NOTIFY;
 	mGattTemperatureSubscribeParams.notify = BleEnvironmentalDataProvider::GattTemperatureNotifyCallback;
+	mGattTemperatureSubscribeParams.subscribe = nullptr;
+	mGattTemperatureSubscribeParams.write = nullptr;
 
 	/* Configure subscription for the humidity characteristic */
 	mGattHumiditySubscribeParams.ccc_handle = mCccHumidityHandle;
 	mGattHumiditySubscribeParams.value_handle = mHumidityCharacteristicHandle;
 	mGattHumiditySubscribeParams.value = BT_GATT_CCC_NOTIFY;
 	mGattHumiditySubscribeParams.notify = BleEnvironmentalDataProvider::GattHumidityNotifyCallback;
+	mGattHumiditySubscribeParams.subscribe = nullptr;
+	mGattHumiditySubscribeParams.write = nullptr;
 
 	if (CheckSubscriptionParameters(&mGattTemperatureSubscribeParams)) {
 		int err = bt_gatt_subscribe(mDevice.mConn, &mGattTemperatureSubscribeParams);
@@ -270,7 +275,8 @@ uint8_t BleEnvironmentalDataProvider::HumidityGATTReadCallback(bt_conn *conn, ui
 	VerifyOrReturnValue(provider, BT_GATT_ITER_STOP, LOG_ERR("Invalid provider object"));
 
 	if (!att_err && (read_len == sizeof(provider->mHumidityValue))) {
-		const uint16_t newValue = *(static_cast<const uint16_t *>(data));
+		uint16_t newValue{};
+		memcpy(&newValue, data, sizeof(newValue));
 		if (newValue != provider->mHumidityValue) {
 			provider->mHumidityValue = newValue;
 			DeviceLayer::PlatformMgr().ScheduleWork(NotifyHumidityAttributeChange,

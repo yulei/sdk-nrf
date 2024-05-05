@@ -3,6 +3,7 @@
  *
  * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
+
 #ifndef SLM_SETTINGS_
 #define SLM_SETTINGS_
 
@@ -11,6 +12,7 @@
  * @brief Utility functions for serial LTE modem settings.
  * @{
  */
+#include "slm_trap_macros.h"
 
 /**
  * @brief Loads the SLM settings from NVM.
@@ -18,9 +20,6 @@
  * @retval 0 on success, nonzero otherwise.
  */
 int slm_settings_init(void);
-
-/** @brief Sets the FOTA settings to their default values. */
-void slm_settings_fota_init(void);
 
 /**
  * @brief Saves the FOTA settings to NVM.

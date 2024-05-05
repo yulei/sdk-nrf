@@ -33,12 +33,14 @@ Features
 
 This sample implements or demonstrates the following features:
 
-* Generic, disconnect-tolerant integration of LTE using Zephyr's ``conn_mgr`` and :kconfig:option:`CONFIG_LTE_CONNECTIVITY`.
+* Generic, disconnect-tolerant integration of LTE using Zephyr's ``conn_mgr`` and :kconfig:option:`CONFIG_NRF_MODEM_LIB_NET_IF`.
 * Error-tolerant use of the nRF Cloud CoAP API using the :ref:`lib_nrf_cloud_coap` library.
 * Error-tolerant use of the `nRF Cloud MQTT API`_ using the :ref:`lib_nrf_cloud` library.
 * Support for `Firmware-Over-The-Air (FOTA) update service <nRF Cloud Getting Started FOTA documentation_>`_ using the `nRF Cloud`_ portal.
-* Support for modem AT commands over UART using the :ref:`lib_at_host` library.
+* Support for modem AT commands over UART using the :ref:`lib_at_host` library (default) or the :ref:`lib_at_shell` library (for builds that need the :ref:`Zephyr shell <shell_api>`).
   See `nRF91x1 AT Commands Reference Guide`_ or `nRF9160 AT Commands Reference Guide`_ documentation on each AT command.
+* Support for the `nRF Cloud Provisioning Service`_ using the :ref:`lib_nrf_provisioning` library.
+  For compatibility with auto-onboarding, the device ID uses the 128 bit UUID format rather than the older nrf-<IMEI> format.
 * Support for remote execution of modem AT commands using application-specific device messages.
 * Periodic cellular, Wi-Fi, and GNSS location tracking using the :ref:`lib_location` library.
 * Periodic temperature sensor sampling on your `Nordic Thingy:91`_, or fake temperature  measurements on your `Nordic nRF9161 DK`_, or `Nordic nRF9160 DK`_.
@@ -80,7 +82,7 @@ The cloud connection loop (implemented in :file:`src/cloud_connection.c`) monito
 It starts a connection with `nRF Cloud`_ whenever the Internet becomes reachable, and closes that connection whenever Internet access is lost.
 It has error handling and timeout features to ensure that failed or lost connections are re-established after a waiting period (:ref:`CONFIG_CLOUD_CONNECTION_RETRY_TIMEOUT_SECONDS <CONFIG_CLOUD_CONNECTION_RETRY_TIMEOUT_SECONDS>`).
 
-Since the :kconfig:option:`CONFIG_LTE_CONNECTIVITY` Kconfig option is enabled, Zephyr's ``conn_mgr`` automatically enables and connects to LTE.
+Since the :kconfig:option:`CONFIG_NRF_MODEM_LIB_NET_IF` Kconfig option is enabled, Zephyr's ``conn_mgr`` automatically enables and connects to LTE.
 
 Whenever a connection to nRF Cloud is started, the cloud connection loop follows the :ref:`nRF Cloud connection process <lib_nrf_cloud_connect>`.
 The :ref:`lib_nrf_cloud` library handles most of the connection process, with exception to the following behavior:
@@ -90,8 +92,8 @@ Upon receiving this notification, the device must wait for a user association su
 Notifications of user association success are sent for every subsequent connection after this as well, so the device must only disconnect and reconnect if it previously received a user association request notification.
 This behavior is handled by the ``NRF_CLOUD_EVT_USER_ASSOCIATION_REQUEST`` and ``NRF_CLOUD_EVT_USER_ASSOCIATED`` cases inside the :c:func:`cloud_event_handler` function.
 
-When a CoAP device attempts to connect to nRF Cloud, the connection will fail to be authenticated until the device is provisioned to an nRF Cloud account.
-See :ref:`nrf_cloud_multi_service_coap_provisioning` for details.
+When a CoAP device attempts to connect to nRF Cloud, the connection will fail to be authenticated until the device is onboarded to an nRF Cloud account.
+See :ref:`nrf_cloud_multi_service_standard_onboarding` for details.
 
 Upon startup, the cloud connection loop also updates the `device shadow <nRF Cloud Device Shadows_>`_.
 This is performed in the :c:func:`update_shadow` function.
@@ -179,17 +181,17 @@ This sample supports full modem FOTA for the nRF91 Series development kit.
 Version 0.14.0 or higher is required for nRF9160 DK.
 To enable full modem FOTA, add the following parameter to your build command:
 
-``-DOVERLAY_CONFIG=overlay_full_modem_fota.conf``
+``-DEXTRA_CONF_FILE=overlay_full_modem_fota.conf``
 
 Also, specify your development kit version by appending it to the board name.
 For example, if you are using an nRF9160 DK version 1.0.1, use the following board name in your build command:
 
-``nrf9160dk_nrf9160_ns@1_0_1``
+``nrf9160dk@1.0.1/nrf9160/ns``
 
-This sample also supports placement of the MCUboot secondary partition in external flash for the nRF9161 DK, and for nRF9160 DK version 0.14.0 and higher.
+This sample also supports placement of the MCUboot secondary partition in external flash for the nRF91x1 DKs, and for nRF9160 DK version 0.14.0 and higher.
 To enable this, add the following parameter to your build command:
 
-``-DOVERLAY_CONFIG=overlay_mcuboot_ext_flash.conf``
+``-DEXTRA_CONF_FILE=overlay_mcuboot_ext_flash.conf``
 
 Then specify your development kit version as described earlier.
 
@@ -202,7 +204,7 @@ Temperature sensing is mostly implemented in the :file:`src/temperature.c` file.
 This includes generation of false temperature readings on your nRF91 Series DK, which does not have a built-in temperature sensor.
 
 Using the built-in temperature sensor of the `Nordic Thingy:91`_ requires a `devicetree overlay <Zephyr Devicetree Overlays_>`_ file, namely the :file:`boards/thingy91_nrf9160_ns.overlay` file, as well as enabling the Kconfig options :kconfig:option:`CONFIG_SENSOR` and :kconfig:option:`CONFIG_BME680`.
-The devicetree overlay file is automatically applied during compilation whenever the ``thingy91_nrf9160_ns`` target is selected.
+The devicetree overlay file is automatically applied during compilation whenever the ``thingy91/nrf9160/ns`` target is selected.
 The required Kconfig options are implicitly enabled by :ref:`CONFIG_TEMP_DATA_USE_SENSOR <CONFIG_TEMP_DATA_USE_SENSOR>`.
 
 .. note::
@@ -236,12 +238,12 @@ This sample supports placing P-GPS data in external flash for the nRF91 Series d
 Version 0.14.0 or later is required for the nRF9160 DK.
 To enable this, add the following parameter to your build command:
 
-``-DOVERLAY_CONFIG=overlay_pgps_ext_flash.conf``
+``-DEXTRA_CONF_FILE=overlay_pgps_ext_flash.conf``
 
 Also, specify your development kit version by appending it to the board name.
 For example, if you are using an nRF9160 development kit version 1.0.1, use the following board name in your build command:
 
-``nrf9160dk_nrf9160_ns@1_0_1``
+``nrf9160dk@1.0.1/nrf9160/ns``
 
 .. _nrf_cloud_multi_service_remote_at:
 
@@ -284,7 +286,7 @@ This is performed by a background thread implemented in the :file:`src/led_contr
 Other threads may request either a temporary or indefinite LED pattern.
 This wakes up the ``led_thread``, which begins animating the requested pattern, sleeping for 100 milliseconds at a time between animation frames, until the requested pattern has completed (if it is temporary), or until a new pattern is requested in its place.
 
-This feature is enabled by default for the ``thingy91_nrf9160_ns`` (Thingy:91), ``nrf9161dk_nrf9161_ns`` (nRF9161 DK), and ``nrf9160dk_nrf9160_ns`` (nRF9160 DK) targets.
+This feature is enabled by default for the *build_target* mentioned in the `Requirements`_ sections.
 
 The patterns displayed, the states they describe, and the options required for them to appear are as follows:
 
@@ -316,11 +318,23 @@ See :ref:`nrf_cloud_multi_service_led_third_party` for details on configuring LE
 Test counter
 ============
 
-You can enable a test counter by enabling the :ref:`CONFIG_TEST_COUNTER <CONFIG_TEST_COUNTER>` option.
 Every time a sensor sample is sent, this counter is incremented by one, and its current value is sent to `nRF Cloud`_.
 A plot of the value of the counter over time is automatically shown in the nRF Cloud portal.
 This plot is useful for tracking, visualizing, and debugging connection loss, resets, and re-establishment behavior.
 
+You can enable or disable the test counter using the device shadow.
+In the desired config section, set ``"counterEnable"`` to ``true`` to enable or ``false`` to disable the test counter.
+
+.. code-block:: json
+
+   "desired": {
+      "config": {
+         "counterEnable": true
+      }
+   }
+
+You can perform the shadow update by clicking the :guilabel:`View Config` button on the **Device** page in the nRF Cloud portal or through the ``UpdateDeviceState`` endpoint in the `nRF Cloud Rest API`_.
+To ignore the shadow setting so that the test counter is always active, enable the :ref:`CONFIG_TEST_COUNTER <CONFIG_TEST_COUNTER>` Kconfig option.
 
 .. _nrf_cloud_multi_service_device_message_formatting:
 
@@ -348,17 +362,32 @@ Configuration
 Disabling key features
 ======================
 
-The following key features of this sample may be independently disabled:
+You can independently disable the following key features of this sample by setting their respective Kconfig option disabled:
 
-* GNSS-based location tracking - by setting the :ref:`CONFIG_LOCATION_TRACKING_GNSS <CONFIG_LOCATION_TRACKING_GNSS>` option to disabled.
-* Cellular-based location tracking - by setting the :ref:`CONFIG_LOCATION_TRACKING_CELLULAR <CONFIG_LOCATION_TRACKING_CELLULAR>` option to disabled.
-* Wi-Fi-based location tracking - by setting the :ref:`CONFIG_LOCATION_TRACKING_WIFI <CONFIG_LOCATION_TRACKING_WIFI>` option to disabled.
-* Temperature tracking - by setting the :ref:`CONFIG_TEMP_TRACKING <CONFIG_TEMP_TRACKING>` option to disabled.
-* GNSS assistance (A-GNSS) - by setting the :kconfig:option:`CONFIG_NRF_CLOUD_AGNSS` option to disabled.
-* Predictive GNSS assistance (P-GPS) - by setting the :kconfig:option:`CONFIG_NRF_CLOUD_PGPS` option to disabled.
-* FOTA when using MQTT - by setting the :kconfig:option:`CONFIG_NRF_CLOUD_FOTA` option to disabled.
-* FOTA when using CoAP - by setting the :ref:`CONFIG_COAP_FOTA <CONFIG_COAP_FOTA>` option to disabled.
-* Shadow handling when using CoAP - by setting the :ref:`CONFIG_COAP_SHADOW <CONFIG_COAP_SHADOW>` option to disabled.
+.. list-table::
+   :widths: 50 50
+   :header-rows: 1
+
+   * - Feature
+     - Kconfig option
+   * - GNSS-based location tracking
+     - :ref:`CONFIG_LOCATION_TRACKING_GNSS <CONFIG_LOCATION_TRACKING_GNSS>`
+   * - Cellular-based location tracking
+     - :ref:`CONFIG_LOCATION_TRACKING_CELLULAR <CONFIG_LOCATION_TRACKING_CELLULAR>`
+   * - Wi-Fi-based location tracking
+     - :ref:`CONFIG_LOCATION_TRACKING_WIFI <CONFIG_LOCATION_TRACKING_WIFI>`
+   * - Temperature tracking
+     - :ref:`CONFIG_TEMP_TRACKING <CONFIG_TEMP_TRACKING>`
+   * - GNSS assistance (A-GNSS)
+     - :kconfig:option:`CONFIG_NRF_CLOUD_AGNSS`
+   * - Predictive GNSS assistance (P-GPS)
+     - :kconfig:option:`CONFIG_NRF_CLOUD_PGPS`
+   * - FOTA when using MQTT
+     - :kconfig:option:`CONFIG_NRF_CLOUD_FOTA`
+   * - FOTA when using CoAP
+     - :ref:`CONFIG_COAP_FOTA <CONFIG_COAP_FOTA>`
+   * - Shadow handling when using CoAP
+     - :ref:`CONFIG_COAP_SHADOW <CONFIG_COAP_SHADOW>`
 
 If you disable GNSS, Wi-Fi-based, and cellular-based location tracking, location tracking is completely disabled.
 In that case, also set the :ref:`CONFIG_LOCATION_TRACKING <CONFIG_LOCATION_TRACKING>` option to disabled.
@@ -366,14 +395,14 @@ In that case, also set the :ref:`CONFIG_LOCATION_TRACKING <CONFIG_LOCATION_TRACK
 For examples, see the related minimal overlays in the :ref:`nrf_cloud_multi_service_minimal` section.
 
 .. note::
-  MQTT should only be used with applications that need to stay connected constantly or transfer data frequently.
-  While this sample does allow its core features to be slowed or completely disabled, in real-world applications, you should carefully consider your data throughput and whether MQTT is an appropriate solution.
-  If you want to disable or excessively slow all of these features for a real-world application, other solutions, such as the `nRF Cloud Rest API`_, may be more appropriate.
+   MQTT should only be used with applications that need to stay connected constantly or transfer data frequently.
+   While this sample does allow its core features to be slowed or completely disabled, in real-world applications, you should carefully consider your data throughput and whether MQTT is an appropriate solution.
+   If you want to disable or excessively slow all of these features for a real-world application, other solutions, such as the `nRF Cloud Rest API`_, may be more appropriate.
 
 Customizing GNSS antenna configuration
 ======================================
 
-This sample uses the :ref:`lib_modem_antenna` library, which is enabled by default for builds targeting the ``nrf9161dk_nrf9161_ns``, ``nrf9160dk_nrf9160_ns``, or ``thingy91_nrf9160_ns`` board names.
+This sample uses the :ref:`lib_modem_antenna` library, which is enabled by default for the *build_target* mentioned in the `Requirements`_ sections.
 
 If you are using a different board or build target, or would like to use a custom or external GNSS antenna, see the :ref:`lib_modem_antenna` library documentation for configuration instructions.
 
@@ -409,7 +438,13 @@ To add your own LED indication implementations, you can add values to the ``LED_
 
 To disable LED indication, enable the :ref:`CONFIG_LED_INDICATION_DISABLED <CONFIG_LED_INDICATION_DISABLED>` option.
 
-For examples of how to set up devicetree entries compatible with the Zephyr ``gpio-leds`` and ``pwm-leds`` drivers, see the files :file:`zephyr/boards/arm/nrf9160dk_nrf9160/nrf9160dk_nrf9160_common.dts`, :file:`zephyr/boards/arm/nrf9161dk_nrf9161/nrf9161dk_nrf9161_common.dts` and :file:`zephyr/boards/arm/thingy91_nrf9160/thingy91_nrf9160_common.dts`.
+For examples of how to set up devicetree entries compatible with the Zephyr ``gpio-leds`` and ``pwm-leds`` drivers, see the following files, depending on the DK you are using:
+
+* :file:`zephyr/boards/nordic/nrf9161dk/nrf9151dk_nrf9151_common.dts`
+* :file:`zephyr/boards/nordic/nrf9161dk/nrf9161dk_nrf9161_common.dts`
+* :file:`zephyr/boards/nordic/nrf9160dk/nrf9160dk_nrf9160_common.dts`
+* :file:`zephyr/boards/arm/thingy91_nrf9160/thingy91_nrf9160_common.dts`
+
 Search for nodes with ``compatible = "gpio-leds";`` and ``compatible = "pwm-leds";`` respectively.
 
 Useful debugging options
@@ -420,196 +455,6 @@ To see all debug output for this sample, enable the :ref:`CONFIG_MULTI_SERVICE_L
 To monitor the GNSS module (for instance, to see whether A-GNSS or P-GPS assistance data is being consumed), enable the :kconfig:option:`CONFIG_NRF_CLOUD_GPS_LOG_LEVEL_DBG` option.
 
 See also the :ref:`nrf_cloud_multi_service_test_counter`.
-
-
-.. _nrf_cloud_multi_service_hardcoded_certs:
-
-Provisioning with hard-coded CA and device certificates
-=======================================================
-
-The :kconfig:option:`CONFIG_NRF_CLOUD_PROVISION_CERTIFICATES` Kconfig option allows you to use hard-coded CA and device certificates stored in unprotected program memory for connecting to nRF Cloud.
-
-.. important::
-   The :kconfig:option:`CONFIG_NRF_CLOUD_PROVISION_CERTIFICATES` Kconfig option is not secure, and should be used only for demonstration purposes!
-   Because this setting stores your device's private key in unprotected program memory, using it makes your device vulnerable to impersonation.
-
-If you are certain you understand the inherent security risks, you can provision your device with :kconfig:option:`CONFIG_NRF_CLOUD_PROVISION_CERTIFICATES` as follows:
-
-First, generate a self-managed CA certificate:
-
-1. Download and install the `nRF Cloud Utilities <nRF Cloud Utilities documentation_>`_ repo.
-#. Use the nRF Cloud Utilities :file:`create_ca_cert.py` Python script to generate the certificate:
-
-   .. code-block:: console
-
-      python3 create_ca_cert.py -c US -f self_ca_
-
-   Remember to set ``-c`` to your two-letter country code.
-   See the `Create CA Cert <nRF Cloud Utilities Create CA Cert_>`_ section in the nRF Cloud Utilities documentation for more details.
-
-   You should now have three files:
-
-     * :file:`self_ca_<certificate_serial>_ca.pem`
-     * :file:`self_ca_<certificate_serial>_prv.pem`
-     * :file:`self_ca_<certificate_serial>_pub.pem`
-
-   Where ``<certificate_serial>`` is your certificate's serial number in hex.
-   You will use these files to sign device certificates.
-
-   You only need to generate these three files once.
-   They can be used to sign as many device certificates as you need.
-
-Next, complete the following steps for each device you wish to provision:
-
-1. Create a globally unique `device ID <nRF Cloud Device ID_>`_ for the device.
-
-   The ID can be anything you want, as long as it is not prefixed with ``nrf-`` and is globally unique.
-
-   Each device should have its own device ID, and you must use this device ID exactly in all of the remaining steps for that device, otherwise provisioning will fail.
-
-#. Use the :file:`create_device_credentials.py` Python script to generate a self-signed certificate for the device:
-
-   .. code-block:: console
-
-      python3 create_device_credentials.py -ca "self_ca_<certificate_serial>_ca.pem" -ca_key "self_ca_<certificate_serial>_prv.pem" -c US -cn "<device_uuid>" -f cred_
-
-   Where ``<device_uuid>`` is the device ID you created, and :file:`self_ca_<certificate_serial>_ca.pem`, and :file:`self_ca_<certificate_serial>_prv.pem` are the corresponding file names from the previous step.
-
-   Remember to set ``-c`` to your two-letter country code.
-   See the `Create Device Credentials <nRF Cloud Utilities Create Device Credentials_>`_ section in the nRF Cloud Utilities documentation for more details.
-
-   You should now have an additional three files:
-
-     * :file:`cred_<device_uuid>_crt.pem`
-     * :file:`cred_<device_uuid>_pub.pem`
-     * :file:`cred_<device_uuid>_prv.pem`
-
-   These three files can only be used by a single device.
-
-   .. important::
-
-      If an attacker obtains the private key contained in :file:`cred_<device_uuid>_prv.pem`, they will be able to impersonate your device.
-      Since using hard-coded certificates does not protect this private key from extraction, this option should not be used in production!
-
-#. Create a CSV file named :file:`<device_uuid>_cred.csv` and give it the following contents:
-
-   .. code-block:: none
-
-      <device_uuid>,,,,"<device_cert>"
-
-   Where ``<device_uuid>`` is replaced by the device ID you created, and ``<device_cert>`` is replaced by the exact contents of :file:`<device_uuid>_crt.pem`.
-
-   For example, if the device ID you created is ``698d4c11-0ccc-4f04-89cd-6882724e3f6f``:
-
-   .. code-block:: none
-
-      698d4c11-0ccc-4f04-89cd-6882724e3f6f,,,,"-----BEGIN CERTIFICATE-----
-      sCC8AtbNQhzbp4y01FEzXaf5Fko3Qdq0o5LbuNpVA7S6AKAkjt17QzKJAiGWHakh
-      RnwzoA2dF4wR0rMP5vR6dqBblaGAA5hN7GE2vPBHTDNZGJ6tZ9dnO6446dg9gGds
-      eeadE1HdVnUj8nb+7CGm39vJ4fuNk9vogH0nMdxjCnXAinoOMRx8EklQsR747+Gz
-      sxcdVYuNEb/E2vWBHTDNZGJ6tZC1JC9d6/RC3Vb1JC4tWnK9mk/Jw984ZuYugpMc
-      1t9umoGFYCz0nMdxjCnXAbnoOMC5A0RxcWPzxfC5A0RH+j+mwoMxwhgfFY4EhVxp
-      oCC8labNQhzRC3Vc1JC4tWnK9mpVA7k/o5LbuNpVA7S6AKAkjt17QzKJAiGWHakh
-      RXwcoAndF4wPzxfC5A0RHponmwBHTDoM7GE2vPBHTDNZGJ6tZ9dnO6446dg9gGds
-      eefdE1HcVnULbuNpVA7S6AKAkjxjCnt1gH0nMdxjCnXAinoOMRx8EklQsR747+Fz
-      srm/VYaNEb/E2vPBHTDNZGJ6tZc1JC9d6/RC3Vc1JC4tWnK9mk/Jr984ZuYugpMc
-      nt9uZTGFYCzZD0FFAA5NAC4i1PARStFycWPzxfC5A0RqodhswoMxwhgfFY4EhVx=
-      -----END CERTIFICATE-----
-      "
-
-   Do not attempt to use this example directly, it has been filled with dummy data.
-   See `nRF Cloud REST API ProvisionDevices`_ for more details.
-
-#. Navigate to the `Provision Devices <nRF Cloud Portal Provision Devices_>`_ page of the nRF Cloud portal and upload the :file:`<device_uuid>_cred.csv` file you created.
-
-   You should see a message stating that the file was uploaded successfully, and a device with the device ID you created should appear in the `Devices <nRF Cloud Portal Devices_>`_ page.
-
-#. Download `Amazon Root CA 1`_ and save it as :file:`AmazonRootCA1.pem`.
-
-   See `CA certificates for server authentication in AWS IoT Core`_ for more details.
-   Do not confuse this CA cert with your self-managed CA cert.
-
-#. Prepare the :file:`cred_<device_uuid>_crt.pem`, :file:`cred_<device_uuid>_prv.pem`, and :file:`AmazonRootCA1.pem` files for use by the device.
-
-   Your device needs these files in order to connect to nRF Cloud.
-   To be usable by your device, they need to be reformatted as C strings and given specific names (:file:`client-cert.pem`, :file:`private-key.pem` and :file:`ca-cert.pem` respectively).
-
-   You can perform the reformatting and renaming as follows:
-
-   .. tabs::
-
-      .. group-tab:: Bash
-
-         .. code-block:: console
-
-           awk 'NF { print "\""$0"\\n\""}' "cred_<device_uuid>_crt.pem" > client-cert.pem
-           awk 'NF { print "\""$0"\\n\""}' "cred_<device_uuid>_prv.pem" > private-key.pem
-           awk 'NF { print "\""$0"\\n\""}' AmazonrootCA1.pem > ca-cert.pem
-
-         Where ``<device_uuid>`` is replaced with the device ID you created.
-
-      .. group-tab:: PowerShell
-
-         .. code-block:: console
-
-            gc ".\cred_<device_uuid>_crt.pem" | %{"""$_\n"""} | out-file -encoding utf8 client-cert.pem
-            gc ".\cred_<device_uuid>_prv.pem" | %{"""$_\n"""} | out-file -encoding utf8 private-key.pem
-            gc .\AmazonrootCA1.pem | %{"""$_\n"""} | out-file -encoding utf8 ca-cert.pem
-
-         Where ``<device_uuid>`` is replaced with the device ID you created.
-
-   You should now have the following three files:
-
-     * :file:`client-cert.pem`
-     * :file:`private-key.pem`
-     * :file:`ca-cert.pem`
-
-   And the contents of each file should be similar to the following:
-
-   .. code-block:: C
-
-      "-----BEGIN CERTIFICATE-----\n"
-      "sCC8AtbNQhzbp4y01FEzXaf5Fko3Qdq0o5LbuNpVA7S6AKAkjt17QzKJAiGWHakh\n"
-      "RnwzoA2dF4wR0rMP5vR6dqBblaGAA5hN7GE2vPBHTDNZGJ6tZ9dnO6446dg9gGds\n"
-      "eeadE1HdVnUj8nb+7CGm39vJ4fuNk9vogH0nMdxjCnXAinoOMRx8EklQsR747+Gz\n"
-      "sxcdVYuNEb/E2vWBHTDNZGJ6tZC1JC9d6/RC3Vb1JC4tWnK9mk/Jw984ZuYugpMc\n"
-      "1t9umoGFYCz0nMdxjCnXAbnoOMC5A0RxcWPzxfC5A0RH+j+mwoMxwhgfFY4EhVxp\n"
-      "oCC8labNQhzRC3Vc1JC4tWnK9mpVA7k/o5LbuNpVA7S6AKAkjt17QzKJAiGWHakh\n"
-      "RXwcoAndF4wPzxfC5A0RHponmwBHTDoM7GE2vPBHTDNZGJ6tZ9dnO6446dg9gGds\n"
-      "eefdE1HcVnULbuNpVA7S6AKAkjxjCnt1gH0nMdxjCnXAinoOMRx8EklQsR747+Fz\n"
-      "srm/VYaNEb/E2vPBHTDNZGJ6tZc1JC9d6/RC3Vc1JC4tWnK9mk/Jr984ZuYugpMc\n"
-      "nt9uZTGFYCzZD0FFAA5NAC4i1PARStFycWPzxfC5A0RqodhswoMxwhgfFY4EhVx=\n"
-      "-----END CERTIFICATE-----\n"
-
-   Do not attempt to use this example directly, it has been filled with dummy data.
-
-#. Create a :file:`certs` folder directly in the :file:`nrf_cloud_multi_service` folder, and copy :file:`client-cert.pem`, :file:`private-key.pem` and :file:`ca-cert.pem` into it.
-
-   Be sure not to place the new folder in the :file:`nrf_cloud_multi_service/src` folder by accident.
-
-   Now these certs are automatically used if the :kconfig:option:`CONFIG_NRF_CLOUD_PROVISION_CERTIFICATES` Kconfig option is enabled.
-
-#. Build the sample with the :kconfig:option:`CONFIG_NRF_CLOUD_PROVISION_CERTIFICATES` Kconfig option enabled and the device ID you created configured.
-
-   This is required for provisioning to succeed.
-
-   Enable the :kconfig:option:`CONFIG_NRF_CLOUD_CLIENT_ID_SRC_COMPILE_TIME` Kconfig option and set the :kconfig:option:`CONFIG_NRF_CLOUD_CLIENT_ID` Kconfig option to the device ID.
-
-   For example, if the device ID is ``698d4c11-0ccc-4f04-89cd-6882724e3f6f``:
-
-   .. tabs::
-
-      .. group-tab:: Bash
-
-         .. code-block:: console
-
-           west build --board your_board -p always -- -DCONFIG_NRF_CLOUD_PROVISION_CERTIFICATES=y -DCONFIG_NRF_CLOUD_CLIENT_ID_SRC_COMPILE_TIME=y -DCONFIG_NRF_CLOUD_CLIENT_ID="698d4c11-0ccc-4f04-89cd-6882724e3f6f"
-
-      .. group-tab:: PowerShell
-
-         .. code-block:: console
-
-            west build --board your_board -p always -- -DCONFIG_NRF_CLOUD_PROVISION_CERTIFICATES=y -DCONFIG_NRF_CLOUD_CLIENT_ID_SRC_COMPILE_TIME=y  "-DCONFIG_NRF_CLOUD_CLIENT_ID=\`"698d4c11-0ccc-4f04-89cd-6882724e3f6f\`""
 
 Configuration options
 =====================
@@ -786,7 +631,8 @@ CONFIG_LED_CONTINUOUS_INDICATION - Continuous LED status indication
 .. _CONFIG_TEST_COUNTER:
 
 CONFIG_TEST_COUNTER - Enable test counter
-   Enables the test counter.
+   Enable the test counter.
+   When enabled, the test counter configuration setting in the shadow is ignored.
 
 .. _CONFIG_AT_CMD_REQUESTS:
 
@@ -862,57 +708,6 @@ CONFIG_COAP_FOTA_THREAD_STACK_SIZE - CoAP FOTA Thread Stack Size (bytes)
    :start-after: modem_lib_sending_traces_UART_start
    :end-before: modem_lib_sending_traces_UART_end
 
-.. _nrf_cloud_multi_service_coap_provisioning:
-
-Provisioning a CoAP device on nRF Cloud
-***************************************
-
-For more information, see `nRF Cloud Utilities documentation`_.
-A device that connects to nRF Cloud using CoAP requires chained root CA certificates in the :kconfig:option:`CONFIG_NRF_CLOUD_SEC_TAG` security tag (``sec_tag``).
-CoAP connectivity uses one root CA certificate, and HTTPS download for P-GPS and FOTA use the other.
-The :file:`device_credentials_installer.py` script installs the chained root CA certificates when given the ``--coap`` option.
-See below.
-
-First, create a self-signed CA certificate using the following command:
-
-.. code-block:: console
-
-   python3 create_ca_cert.py -c US -st OR -l Portland -o "My Company" -ou "RD" -cn example.com -e admin@example.com -f CA
-
-Remember to set all the variables with your own information.
-
-You should now have three files:
-
-* :file:`<certificate_serial>_ca.pem`
-* :file:`<certificate_serial>_prv.pem`
-* :file:`<certificate_serial>_pub.pem`
-
-Where ``<certificate_serial>`` is your certificate's serial number in hex.
-You will use these files to sign device certificates.
-
-You only need to generate these three files once.
-They can be used to sign as many device certificates as you need.
-
-Next, for each device you wish to provision, execute the following command in the same folder as the above command:
-
-.. note::
-   The options used below assume that the sample is built with the default :kconfig:option:`CONFIG_NRF_CLOUD_CLIENT_ID_SRC_IMEI` option enabled and :kconfig:option:`CONFIG_NRF_CLOUD_CLIENT_ID_PREFIX` option set to ``nrf-``.
-   See :ref:`configuration_device_id` to use other device ID formats.
-
-.. code-block:: console
-
-   python3 device_credentials_installer.py --ca <certificate_serial>_ca.pem \
-   --ca_key <certificate_serial>_prv.pem --id_str nrf- --id_imei -s -d --coap
-   ...
-   <- OK
-   Saving provisioning endpoint CSV file provision.csv...
-   Provisioning CSV file saved
-
-Where ``<certificate_serial>`` is your certificate's serial number in hex.
-
-Once the script creates the :file:`provision.csv` file, visit the `Provision Devices`_ page in the nRF Cloud portal to provision the device.
-Provisioning registers the device with nRF Cloud, allowing it to use any nRF Cloud services through CoAP, MQTT, or REST connectivity.
-
 .. _nrf_cloud_multi_service_building_and_running:
 
 Building and running
@@ -922,51 +717,100 @@ Building and running
 
 .. include:: /includes/build_and_run_ns.txt
 
-.. _nrf_cloud_multi_service_building_coap:
+.. _nrf_cloud_multi_service_building_lte:
 
-Building with CoAP Support
-==========================
+Building with LTE connectivity
+==============================
 
-To build the sample to use CoAP instead of MQTT, use the ``-DOVERLAY_CONFIG=overlay_coap.conf`` option.
+You can build the sample to connect over LTE as follows:
 
 .. tabs::
 
-   .. group-tab:: nRF9161 DK
+   .. group-tab:: MQTT
+
+      .. parsed-literal::
+         :class: highlight
+
+         west build -p -b *build_target*
+
+      |build_target|
+
+   .. group-tab:: CoAP
+
+      To build the sample to use CoAP instead of MQTT, use the ``-DEXTRA_CONF_FILE=overlay_coap.conf`` option.
+
+      .. parsed-literal::
+         :class: highlight
+
+         west build -p -b *build_target* -- -DEXTRA_CONF_FILE="overlay_coap.conf"
+
+      |build_target|
+
+Once the sample is built and flashed, proceed to :ref:`nrf_cloud_multi_service_standard_onboarding` for instructions on how to onboard your device.
+
+.. _nrf_cloud_multi_service_building_provisioning_service:
+
+Building with nRF Cloud Provisioning Service Support
+====================================================
+
+The `nRF Cloud Provisioning Service`_ allows you to securely provision and onboard your Nordic Semiconductor devices entirely over-the-air (after you have obtained an `attestation token <nRF Cloud Generating attestation tokens_>`_ for the device).
+
+.. note::
+
+   This service is not compatible with devices that use the nRF9160, but only for the nRF9161 device.
+
+You can enable support for this service by building the sample as follows:
+
+.. tabs::
+
+   .. group-tab:: MQTT
 
       .. code-block:: console
 
-          west build -p -b nrf9161dk_nrf9161_ns -- -DOVERLAY_CONFIG="overlay_coap.conf"
+         west build -p -b nrf9161dk/nrf9161/ns -- -DEXTRA_CONF_FILE="overlay-http_nrf_provisioning.conf"
 
-   .. group-tab:: nRF9160 DK
+      The :file:`overlay-http_nrf_provisioning.conf` overlay enables the :ref:`lib_nrf_provisioning` library, and its shell interface to use HTTP for communication.
+      A side-effect of this is that the sample will use the :ref:`lib_at_shell` library instead of the :ref:`lib_at_host` library, so AT commands must be issued using the ``at`` shell command.
+
+   .. group-tab:: CoAP
+
+      To build the sample to use CoAP instead of MQTT, use the ``-DEXTRA_CONF_FILE=overlay_coap.conf`` option.
 
       .. code-block:: console
 
-         west build -p -b nrf9160dk_nrf9160_ns -- -DOVERLAY_CONFIG="overlay_coap.conf"
+         west build -p -b nrf9161dk/nrf9161/ns -- -DEXTRA_CONF_FILE="overlay-coap_nrf_provisioning.conf;overlay_coap.conf"
+
+      The :file:`overlay-coap_nrf_provisioning.conf` overlay enables the :ref:`lib_nrf_provisioning` library to use CoAP for communication.
+      It does not enable the shell.
+
+      The :file:`overlay_coap.conf` overlay causes the sample to use CoAP instead of MQTT for normal communication.
+
+Once the sample is built and flashed, proceed to :ref:`nrf_cloud_multi_service_provisioning_service` for instructions on how to provision your device with the Provisioning Service.
+The device is identified using its UUID rather than its IMEI, since both overlays set the :kconfig:option:`CONFIG_NRF_CLOUD_CLIENT_ID_SRC_INTERNAL_UUID` Kconfig option.
 
 .. _nrf_cloud_multi_service_building_wifi_scan:
 
 Building with nRF7002 EK Wi-Fi scanning support (for nRF91 Series DK)
 =====================================================================
 
-To build the sample with nRF7002 EK Wi-Fi scanning support, use the ``-DSHIELD=nrf7002ek``, ``-DEXTRA_DTC_OVERLAY_FILE=nrf91xxdk_with_nrf7002ek.overlay`` and  ``-DEXTRA_CONF_FILE=overlay-nrf7002ek-wifi-scan-only.conf`` options.
+To build the sample with nRF7002 EK Wi-Fi scanning support, use the ``-DSHIELD=nrf7002ek`` and  ``-DEXTRA_CONF_FILE=overlay-nrf7002ek-wifi-scan-only.conf`` options.
 
 This enables the Wi-Fi location tracking method automatically.
 
-.. tabs::
+.. parsed-literal::
+   :class: highlight
 
-   .. group-tab:: nRF9161 DK
+   west build -p -b *build_target* -- -DSHIELD=nrf7002ek -DEXTRA_CONF_FILE="overlay-nrf7002ek-wifi-scan-only.conf"
 
-      .. code-block:: console
-
-         west build -p -b nrf9161dk_nrf9161_ns -- -DSHIELD=nrf7002ek -DEXTRA_DTC_OVERLAY_FILE="nrf91xxdk_with_nrf7002ek.overlay" -DEXTRA_CONF_FILE="overlay-nrf7002ek-wifi-scan-only.conf"
-
-   .. group-tab:: nRF9160 DK
-
-      .. code-block:: console
-
-         west build -p -b nrf9160dk_nrf9160_ns -- -DSHIELD=nrf7002ek -DEXTRA_DTC_OVERLAY_FILE="nrf91xxdk_with_nrf7002ek.overlay" -DEXTRA_CONF_FILE="overlay-nrf7002ek-wifi-scan-only.conf"
+|build_target|
 
 See also :ref:`the paragraphs on the Wi-Fi location tracking method <nrf_cloud_multi_service_wifi_location_tracking>`.
+
+Once the sample is built and flashed, proceed to :ref:`nrf_cloud_multi_service_standard_onboarding` for instructions on how to onboard your device.
+
+.. note::
+
+   This option enables Wi-Fi scanning, but still uses LTE connectivity.
 
 .. _nrf_cloud_multi_service_building_wifi_conn:
 
@@ -976,16 +820,23 @@ Building with experimental support for Wi-Fi connectivity for nRF5340 DK with nR
 This sample :ref:`experimentally <software_maturity>` supports connecting to nRF Cloud using Wi-Fi instead of using LTE.
 
 An overlay for this is only provided for the nRF5340 DK with the nRF7002 EK shield attached.
+
 It is possible to use Wi-Fi with other hardware combinations (such as the nRF7002 DK), but you must adjust heap and stack usage accordingly.
 See the :file:`src/prj.conf` configuration file and the :file:`overlay_nrf7002ek_wifi_no_lte.conf` overlay for additional details.
 
-Connecting to nRF Cloud using Wi-Fi is currently only possible with MQTT, and only by using the experimental and insecure Kconfig option :kconfig:option:`CONFIG_NRF_CLOUD_PROVISION_CERTIFICATES`.
-See :ref:`nrf_cloud_multi_service_hardcoded_certs` for details on setting it up.
+.. important::
+   Connecting to nRF Cloud using Wi-Fi currently requires that device credentials are used insecurely.
 
-Once it is set up, you can configure your build to use Wi-Fi connectivity on the nRF5340 DK with the nRF7002 EK shield by using the ``--board nrf5340dk_nrf5340_cpuapp`` target and the ``-DSHIELD=nrf7002ek`` and ``-DOVERLAY_CONFIG=overlay_nrf7002ek_wifi_no_lte.conf`` options.
-These options must be used in addition to the options required by the :kconfig:option:`CONFIG_NRF_CLOUD_PROVISION_CERTIFICATES` Kconfig option.
+   The provided overlay for Wi-Fi connectivity uses the :ref:`TLS Credentials Subsystem <zephyr:sockets_tls_credentials_subsys>` (with the PSA Protected Storage backend, see :kconfig:option:`CONFIG_TLS_CREDENTIALS_BACKEND_PROTECTED_STORAGE`) to store credentials when not in use.
+   Even though this is more secure than :ref:`hard-coded credentials <nrf_cloud_multi_service_build_hardcoded>`, the device private key still has to be loaded into unprotected memory during TLS connections.
 
-For example, for a device provisioned with the device ID ``698d4c11-0ccc-4f04-89cd-6882724e3f6f``:
+This overlay also enables the :ref:`TLS Credentials Shell <zephyr:tls_credentials_shell>` for run-time credential installation.
+
+If you are certain you understand the risks, you can configure your build to use Wi-Fi connectivity on the nRF5340 DK with the nRF7002 EK shield by using the ``--board nrf5340dk/nrf5340/cpuapp/ns`` target and the ``-DSHIELD=nrf7002ek`` and ``-DEXTRA_CONF_FILE=overlay_nrf7002ek_wifi_no_lte.conf`` options.
+
+You must also configure a (globally unique) device ID at build time by enabling the :kconfig:option:`CONFIG_NRF_CLOUD_CLIENT_ID_SRC_COMPILE_TIME` Kconfig option and setting :kconfig:option:`CONFIG_NRF_CLOUD_CLIENT_ID` to the device ID.
+
+For example, for a device with the device ID ``698d4c11-0ccc-4f04-89cd-6882724e3f6f``:
 
 .. tabs::
 
@@ -993,27 +844,84 @@ For example, for a device provisioned with the device ID ``698d4c11-0ccc-4f04-89
 
       .. code-block:: console
 
-        west build --board nrf5340dk_nrf5340_cpuapp -p always -- -DSHIELD=nrf7002ek -DOVERLAY_CONFIG=overlay_nrf7002ek_wifi_no_lte.conf -DCONFIG_NRF_CLOUD_PROVISION_CERTIFICATES=y -DCONFIG_NRF_CLOUD_CLIENT_ID_SRC_COMPILE_TIME=y -DCONFIG_NRF_CLOUD_CLIENT_ID="698d4c11-0ccc-4f04-89cd-6882724e3f6f"
+        west build --board nrf5340dk/nrf5340/cpuapp/ns -p always -- -DSHIELD=nrf7002ek -DEXTRA_CONF_FILE=overlay_nrf7002ek_wifi_no_lte.conf -DCONFIG_NRF_CLOUD_CLIENT_ID_SRC_COMPILE_TIME=y -DCONFIG_NRF_CLOUD_CLIENT_ID="698d4c11-0ccc-4f04-89cd-6882724e3f6f"
 
    .. group-tab:: PowerShell
 
       .. code-block:: console
 
-         west build --board nrf5340dk_nrf5340_cpuapp -p always -- -DSHIELD=nrf7002ek "-DOVERLAY_CONFIG=overlay_nrf7002ek_wifi_no_lte.conf" -DCONFIG_NRF_CLOUD_PROVISION_CERTIFICATES=y -DCONFIG_NRF_CLOUD_CLIENT_ID_SRC_COMPILE_TIME=y  "-DCONFIG_NRF_CLOUD_CLIENT_ID=\`"698d4c11-0ccc-4f04-89cd-6882724e3f6f\`""
+         west build --board nrf5340dk/nrf5340/cpuapp/ns -p always -- -DSHIELD=nrf7002ek "-DEXTRA_CONF_FILE=overlay_nrf7002ek_wifi_no_lte.conf" -DCONFIG_NRF_CLOUD_CLIENT_ID_SRC_COMPILE_TIME=y  "-DCONFIG_NRF_CLOUD_CLIENT_ID=\`"698d4c11-0ccc-4f04-89cd-6882724e3f6f\`""
 
-Configuring Wi-Fi access point credentials
-==========================================
+Once the sample is built and flashed, proceed to :ref:`nrf_cloud_multi_service_standard_onboarding` for instructions on how to onboard your device.
+
+Once your device is onboarded, proceed to :ref:`nrf_cloud_multi_service_setup_wifi_cred` for instructions on configuring your device to connect to a specific access point.
+
+.. _nrf_cloud_multi_service_build_hardcoded:
+
+Building with hard-coded CA and device credentials
+==================================================
+
+The :kconfig:option:`CONFIG_NRF_CLOUD_PROVISION_CERTIFICATES` Kconfig option allows you to use hard-coded CA and device credentials stored in unprotected program memory for connecting to nRF Cloud.
+
+.. important::
+   The :kconfig:option:`CONFIG_NRF_CLOUD_PROVISION_CERTIFICATES` Kconfig option is not secure, and should be used only for demonstration purposes!
+   Because this setting stores your device's private key in unprotected program memory, using it makes your device vulnerable to impersonation.
+
+.. note::
+   This is only one of several mutually exclusive ways to install credentials to your device.
+   See :ref:`nrf_cloud_multi_service_provisioning_onboarding` for a list of other methods.
+
+If you are certain you understand the inherent security risks, you can use this option as follows:
+
+1. Follow the instructions under :ref:`nrf_cloud_multi_service_onboard_hardcoded`.
+
+#. Create a :file:`certs` folder directly in the :file:`nrf_cloud_multi_service` folder, and copy :file:`client-cert.pem`, :file:`private-key.pem`, and :file:`ca-cert.pem` files into it.
+
+   Make sure not to place the new folder in the :file:`nrf_cloud_multi_service/src` folder by accident.
+
+   Now, these certificates are automatically used if the :kconfig:option:`CONFIG_NRF_CLOUD_PROVISION_CERTIFICATES` Kconfig option is enabled.
+
+#. Build the sample with the :kconfig:option:`CONFIG_NRF_CLOUD_PROVISION_CERTIFICATES` Kconfig option enabled and the device ID you created configured.
+
+   This is required for onboarding to succeed.
+
+   Enable the :kconfig:option:`CONFIG_NRF_CLOUD_CLIENT_ID_SRC_COMPILE_TIME` Kconfig option and set :kconfig:option:`CONFIG_NRF_CLOUD_CLIENT_ID` to the device ID.
+
+   For example, if the device ID is ``698d4c11-0ccc-4f04-89cd-6882724e3f6f``:
+
+   .. tabs::
+
+      .. group-tab:: Bash
+
+         .. parsed-literal::
+            :class: highlight
+
+            west build --board *your_board* -p always -- -DCONFIG_NRF_CLOUD_PROVISION_CERTIFICATES=y -DCONFIG_NRF_CLOUD_CLIENT_ID_SRC_COMPILE_TIME=y -DCONFIG_NRF_CLOUD_CLIENT_ID="698d4c11-0ccc-4f04-89cd-6882724e3f6f"
+
+      .. group-tab:: PowerShell
+
+         .. parsed-literal::
+            :class: highlight
+
+            west build --board *your_board* -p always -- -DCONFIG_NRF_CLOUD_PROVISION_CERTIFICATES=y -DCONFIG_NRF_CLOUD_CLIENT_ID_SRC_COMPILE_TIME=y  "-DCONFIG_NRF_CLOUD_CLIENT_ID=\`"698d4c11-0ccc-4f04-89cd-6882724e3f6f\`""
+
+
+.. _nrf_cloud_multi_service_setup_wifi_cred:
+
+Setting up Wi-Fi access point credentials
+=========================================
 
 This sample uses the :ref:`lib_wifi_credentials` library to manage Wi-Fi credentials.
-Before the sample can connect to a Wi-Fi network, you must configure at least one credential set.
+Before the sample can connect to a Wi-Fi network, you must add at least one credential set.
 
 Once your device has been flashed with this sample, you can add a credential by connecting to your device's UART interface and then entering the following command:
 
-.. code-block:: console
+.. parsed-literal::
+   :class: highlight
 
-      wifi_cred add <NetworkSSID> WPA2-PSK <NetworkPassword>
+   wifi_cred add *NetworkSSID* WPA2-PSK *NetworkPassword*
 
-Where ``<NetworkSSID>`` is replaced with the SSID of the Wi-Fi access point you want your device to connect to, and ``<NetworkPassword>`` is its password.
+Where *NetworkSSID* is replaced with the SSID of the Wi-Fi access point you want your device to connect to, and *NetworkPassword* is its password.
 Then either reboot the device or use the ``wifi_cred auto_connect`` command to manually trigger a connection attempt.
 
 From now on, these credentials will automatically be used when the configured network is reachable.
@@ -1025,7 +933,7 @@ Building with nRF Cloud logging support
 
 To enable transmission of `logs <Zephyr Logging_>`_ to nRF Cloud using the :ref:`lib_nrf_cloud_log` library, add the following parameter to your build command:
 
-``-DOVERLAY_CONFIG=overlay_nrfcloud_logging.conf``
+``-DEXTRA_CONF_FILE=overlay_nrfcloud_logging.conf``
 
 This overlay enables transmission of `logs <Zephyr Logging_>`_ to nRF Cloud.
 Set the :kconfig:option:`CONFIG_NRF_CLOUD_LOG_OUTPUT_LEVEL` Kconfig option to the log level of messages to send to nRF Cloud, such as ``4`` for debug log messages.
@@ -1043,13 +951,395 @@ Building with minimal services
 
 To build the sample with only temperature tracking enabled for either MQTT or CoAP, add the following parameter to your build command:
 
-``-DOVERLAY_CONFIG=overlay_min_mqtt.conf``
+``-DEXTRA_CONF_FILE=overlay_min_mqtt.conf``
 
 or
 
-``-DOVERLAY_CONFIG=overlay_min_coap.conf``
+``-DEXTRA_CONF_FILE=overlay_min_coap.conf``
 
 These overlays show all the Kconfig settings changes needed to properly disable all but a single sensor.
+
+.. _nrf_cloud_multi_service_provisioning_onboarding:
+
+Provisioning and onboarding
+***************************
+
+For your device to successfully connect to nRF Cloud, you must `onboard it <nRF Cloud Onboarding_>`_.
+The following sections outline the various onboarding methods that this sample supports.
+
+  * If you are building with :ref:`provisioning service support <nrf_cloud_multi_service_building_provisioning_service>`, proceed to :ref:`nrf_cloud_multi_service_provisioning_service`.
+    Use this method for nRF91x1-based devices.
+  * If you are not building with Provisioning Service support, proceed to :ref:`nrf_cloud_multi_service_standard_onboarding`.
+    Use this method for nRF9160-based devices.
+  * If you are building with :ref:`hard-coded credentials <nrf_cloud_multi_service_build_hardcoded>`, proceed to :ref:`nrf_cloud_multi_service_onboard_hardcoded`.
+
+.. note::
+   You only need to perform one of the above methods.
+   Select the one that best matches your needs, then build and run the sample with the required build configuration.
+
+.. _nrf_cloud_multi_service_install_nrf_utils:
+
+Download and install nRF Cloud Utilities
+========================================
+
+To perform many of the actions in the other sections, you will need to install the `nRF Cloud Utilities <nRF Cloud Utilities documentation_>`_ repository.
+This is not necessary if you are using the `auto-onboarding <nRF Cloud Auto-onboarding_>`_ feature of the nRF Cloud Provisioning Service.
+
+To install the repository, clone or download it and `install the required packages <nRF Cloud Utilities Prerequisites_>`_.
+
+.. _nrf_cloud_multi_service_provisioning_service:
+
+Provisioning with the nRF Cloud Provisioning Service
+====================================================
+
+The nRF Cloud Provisioning Service is only compatible with nRF91x1 devices.
+For devices using the nRF9160, proceed to :ref:`nrf_cloud_multi_service_standard_onboarding`.
+
+If you have :ref:`enabled support <nrf_cloud_multi_service_building_provisioning_service>` for the `provisioning service <nRF Cloud Provisioning Service_>`_, you can provision and onboard your device in one of two ways:
+
+* Using auto-onboarding, the easiest method.
+
+   The nRF Cloud Provisioning Service auto-onboarding is currently compatible with CoAP and REST but not MQTT connectivity to nRF Cloud; for that, use scripted onboarding.
+
+   With this method, use the nRF Connect Serial Terminal program and the nRF Cloud portal.
+   The device ID used in nRF Cloud portal requires the UUID format and not the 'nrf-\ *IMEI*\ ' format.
+   See `device claiming <nRF Cloud device claiming_>`_ for more information.
+
+* Using scripted onboarding, as follows:
+
+   First, :ref:`create a self-signed CA certificate <nrf_cloud_multi_service_create_self_signed_ca>`.
+
+   Then, complete the following steps for each device you wish to onboard:
+
+   1. Make sure that your device is plugged in and this sample has been flashed to it.
+   #. Use the :file:`claim_and_provision_device.py` Python script :ref:`you installed <nrf_cloud_multi_service_install_nrf_utils>` to provision and onboard your device
+
+      .. tabs::
+
+         .. group-tab:: MQTT
+
+               .. parsed-literal::
+                  :class: highlight
+
+                  python3 claim_and_provision_device.py --api_key "\ *your_api_key*\ " --ca="self\_\ *self_cert_serial*\ \_ca.pem" --ca_key="self\_\ *self_cert_serial*\ \_prv.pem" --install_ca --unclaim --id_imei --id_str "nrf-"
+
+               Where the :file:`.pem` files are the self-signed CA certificate and private key files :ref:`you created <nrf_cloud_multi_service_create_device_cred_locally>` and *your_api_key* is your `nRF Cloud REST API key`_.
+
+         .. group-tab:: CoAP
+
+               .. parsed-literal::
+                  :class: highlight
+
+                  python3 claim_and_provision_device.py --api_key "\ *your_api_key*\ " --ca="self\_\ *self_cert_serial*\ \_ca.pem" --ca_key="self\_\ *self_cert_serial*\ \_prv.pem" --install_ca --unclaim --id_imei --id_str "nrf-" --coap
+
+               Where the :file:`.pem` files are the self-signed CA certificate and private key files :ref:`you created <nrf_cloud_multi_service_create_device_cred_locally>` and *your_api_key* is your `nRF Cloud REST API key`_.
+               The ``--coap`` option indicates that the device needs the CoAP root CA installed.
+               See below for more details.
+
+      .. note::
+         This command assumes you have left the :kconfig:option:`CONFIG_NRF_CLOUD_CLIENT_ID_SRC_IMEI` option enabled and the :kconfig:option:`CONFIG_NRF_CLOUD_CLIENT_ID_PREFIX` option set to ``nrf-``.
+         See :ref:`configuration_device_id` to use other device ID formats.
+
+      This script automatically performs the following steps:
+
+      1. Obtains an `attestation token <nRF Cloud Generating attestation tokens_>`_ from your device over UART using the :ref:`lib_nrf_provisioning` library shell, and then *claims* your device on nRF Cloud.
+      2. Generates, signs, and installs a device credential for your device.
+
+         * This happens entirely over-the-air.
+         * The private key for this credential is generated by the device itself.
+           It is stored securely and never leaves the device.
+
+      3. Installs any necessary root CA certificates.
+
+         * CoAP connections use one root CA certificate, whereas HTTPS and MQTT use another.
+         * Devices using CoAP need both installed, since HTTPS is used for FOTA and P-GPS on CoAP devices.
+
+      This script may take a few minutes.
+      When it succeeds, you should see several provisioning commands be issued and succeed, and some additional final output:
+
+      .. parsed-literal::
+         :class: highlight
+
+         Adding device 'nrf-\ *IMEI*\ ' to cloud account...
+         ProvisionDevices API call response: 202 - Accepted
+         Done.
+
+      Where *IMEI* is the IMEI of your device.
+
+      The device should also appear in the devices list in the nRF Cloud portal.
+
+      Once the script is complete, you can connect to your device with a UART terminal to monitor its activity.
+
+      Within a few minutes of script completion, it should successfully connect to nRF Cloud and begin demonstrating the :ref:`supported nRF Cloud features <nrf_cloud_multi_service_features>`.
+
+.. _nrf_cloud_multi_service_standard_onboarding:
+
+Onboarding a device without the nRF Cloud Provisioning Service
+==============================================================
+
+If you are not using :ref:`provisioning service support <nrf_cloud_multi_service_building_provisioning_service>`, you can onboard your devices as follows:
+
+First, :ref:`create a self-signed CA certificate <nrf_cloud_multi_service_create_self_signed_ca>`.
+
+Then, complete the following steps for each device you wish to onboard:
+
+1. Make sure your device is plugged in and that this sample has been flashed to it.
+#. Install the device and server credentials using the :file:`device_credentials_installer.py` Python script :ref:`you installed <nrf_cloud_multi_service_install_nrf_utils>`:
+
+   (Select the protocol (MQTT or CoAP) and connectivity technology (LTE or Wi-Fi) you built the sample for)
+
+   .. tabs::
+
+      .. group-tab:: MQTT
+
+            .. tabs::
+
+               .. group-tab:: LTE
+
+                  .. parsed-literal::
+                     :class: highlight
+
+                     python3 device_credentials_installer.py --ca self\_\ *self_cert_serial*\ \_ca.pem --ca_key self\_\ *self_cert_serial*\ \_prv.pem --id_str nrf- --id_imei -s -d --verify
+
+                  Where the :file:`.pem` files are the self-signed CA certificate and private key files :ref:`you created <nrf_cloud_multi_service_create_device_cred_locally>`.
+
+                  .. note::
+                     This command assumes you have left the :kconfig:option:`CONFIG_NRF_CLOUD_CLIENT_ID_SRC_IMEI` option enabled and the :kconfig:option:`CONFIG_NRF_CLOUD_CLIENT_ID_PREFIX` option set to ``nrf-``.
+                     See :ref:`configuration_device_id` to use other device ID formats.
+
+               .. group-tab:: Wi-Fi
+
+                  .. parsed-literal::
+                     :class: highlight
+
+                     python3 device_credentials_installer.py --ca self\_\ *self_cert_serial*\ \_ca.pem --ca_key self\_\ *self_cert_serial*\ \_prv.pem --id_str "\ *device_id*\ " -s -d --verify --local_cert --cmd_type tls_cred_shell --port *device_port*
+
+                  Where:
+
+                    * *device id* is the (globally unique) ID for your device.
+                      You must use the same device ID that you configured for the sample at build time.
+                      See :ref:`nrf_cloud_multi_service_building_wifi_conn` for details.
+                    * The :file:`.pem` files are the self-signed CA certificate and private key files :ref:`you created <nrf_cloud_multi_service_create_device_cred_locally>`.
+                    * *device port* is the serial port your device is attached to.
+
+                  The ``--cmd_type tls_cred_shell`` option indicates that the device is using the :ref:`TLS Credentials Shell <zephyr:tls_credentials_shell>` for run-time credentials management instead of AT commands.
+
+                  The ``--local_cert`` option indicates that the device private key and certificate should be generated on the host machine, not on-device.
+                  This is necessary because the TLS Credentials Shell does not support CSR generation currently.
+                  Delete the device private key from your machine after it is installed to the device by this script.
+
+      .. group-tab:: CoAP
+
+         .. tabs::
+
+               .. group-tab:: LTE
+
+                  .. parsed-literal::
+                     :class: highlight
+
+                     python3 device_credentials_installer.py --ca self\_\ *self_cert_serial*\ \_ca.pem --ca_key self\_\ *self_cert_serial*\ \_prv.pem --id_str nrf- --id_imei -s -d --verify --coap
+
+                  Where the :file:`.pem` files are the self-signed CA certificate and private key files :ref:`you created <nrf_cloud_multi_service_create_device_cred_locally>`.
+                  The ``--coap`` option indicates that the device needs the CoAP root CA installed.
+                  See below for more details.
+
+                  .. note::
+                     This command assumes you have left the :kconfig:option:`CONFIG_NRF_CLOUD_CLIENT_ID_SRC_IMEI` option enabled and the :kconfig:option:`CONFIG_NRF_CLOUD_CLIENT_ID_PREFIX` option set to ``nrf-``.
+                     See :ref:`configuration_device_id` to use other device ID formats.
+
+   This script generates, signs, and installs a device credential for your device.
+   The private key for this credential is generated by the device itself, and stored on the modem.
+
+   This script also installs any nRF Cloud root CA certificates required in a single chain to the :kconfig:option:`CONFIG_NRF_CLOUD_SEC_TAG` security tag (``sec_tag``).
+   CoAP connections use one root CA certificate, whereas HTTPS and MQTT use another.
+   Devices using CoAP need both installed, since HTTPS is used for FOTA and P-GPS on CoAP devices.
+
+   If the script succeeds, you should see the following output:
+
+   .. code-block:: console
+
+      Saving provisioning endpoint CSV file provision.csv...
+      Provisioning CSV file saved
+
+   And a new file, :file:`provision.csv` should be created.
+   This file will be used in the next step.
+
+#. Navigate to the `Bulk Onboard Devices`_ page of the nRF Cloud portal and upload the :file:`provision.csv` file to onboard the device.
+
+   To get there from the :guilabel:`Dashboard`, click :guilabel:`Devices` under :guilabel:`Device Management` in the navigation pane on the left, then click :guilabel:`Add Devices` and select **Bulk Onboard**.
+
+   Once the `Bulk Onboard Devices`_ page is open, drag in the :file:`provision.csv` file and click **Onboard**.
+
+   You should see a message stating that the file was uploaded successfully, and your device should appear in the `Devices <nRF Cloud Portal Devices_>`_ page.
+
+.. _nrf_cloud_multi_service_onboard_hardcoded:
+
+Onboarding with hard-coded device credentials
+=============================================
+
+It is possible to onboard your devices using hard-coded device credentials.
+If you are certain you understand the inherent security risks, you can do so as follows:
+
+First, create a :ref:`self-signed CA certificate <nrf_cloud_multi_service_create_self_signed_ca>`.
+
+Next, complete the following steps for each device you wish to onboard:
+
+1. :ref:`Locally generate a device credential <nrf_cloud_multi_service_create_device_cred_locally>`
+
+   In addition to the arguments prescribed in that section, also include the ``-embed_save`` argument when running the :file:`create_device_credentials.py` Python script:
+
+   .. parsed-literal::
+      :class: highlight
+
+      python3 create_device_credentials.py -ca "self\_\ *self_cert_serial*\ \_ca.pem" -ca_key "self\_\ *self_cert_serial*\ \_prv.pem" -c US -cn "\ *device_id*\ " -f cred\_ -embed_save
+
+   This automatically generates the following three files that are needed for the next step:
+
+     * :file:`client-cert.pem`
+     * :file:`private-key.pem`
+     * :file:`ca-cert.pem`
+
+   The :file:`client-cert.pem` and :file:`private-key.pem` files are specially formatted versions of the :file:`cred_<device_id>_crt.pem` and :file:`cred_<device_id>_prv.pem` files respectively.
+   The :file:`ca-cert.pem` is a copy of the nRF Cloud root CA in the same format.
+   Do not confuse this CA certificate with your :ref:`self-signed CA certificate <nrf_cloud_multi_service_create_self_signed_ca>`.
+   See `CA certificates for server authentication in AWS IoT Core`_ for more details.
+
+   Your device needs these three credentials to connect successfully with nRF Cloud.
+
+#. :ref:`Manually onboard the device to nRF Cloud <nrf_cloud_multi_service_onboard_device_manually>`
+
+#. Follow the instructions under :ref:`nrf_cloud_multi_service_build_hardcoded`.
+
+.. _nrf_cloud_multi_service_create_self_signed_ca:
+
+Creating a self-signed CA certificate for device certificate signing
+====================================================================
+
+Before a device can connect to nRF Cloud, it must have device credentials.
+Unless you are using `Just-in-Time provisioning <nRF Cloud Just-In-Time-Provisioning_>`_, you need to sign these credentials yourself using a CA certificate you create.
+This is referred to as your self-signed CA certificate.
+
+To create your self-signed CA certificate:
+
+1. :ref:`Download and install <nrf_cloud_multi_service_install_nrf_utils>` the `nRF Cloud Utilities <nRF Cloud Utilities documentation_>`_ repository.
+#. Use the nRF Cloud Utilities :file:`create_ca_cert.py` Python script to generate the certificate:
+
+   .. code-block:: console
+
+      python3 create_ca_cert.py -c US -f self_
+
+   Remember to set ``-c`` to your two-letter country code.
+   See the `Create CA Cert <nRF Cloud Utilities Create CA Cert_>`_ section in the nRF Cloud Utilities documentation for more details.
+
+   You should now have the following three files:
+
+     * :file:`self_<self_cert_serial>_ca.pem`
+     * :file:`self_<self_cert_serial>_prv.pem`
+     * :file:`self_<self_cert_serial>_pub.pem`
+
+   Where ``<self_cert_serial>`` is your self-signed CA certificate's serial number in hex.
+   These three files are your self-signed CA certificate and private/public keypair.
+   You will use them to sign device credentials.
+
+   If you were directed here as part of other instructions, proceed to the next step of those instructions.
+
+   .. note::
+      You only need to generate these three files once.
+      You can be use them to sign as many device credentials as you need.
+
+.. _nrf_cloud_multi_service_create_device_cred_locally:
+
+Generating device credentials locally
+=====================================
+
+To generate and sign a device credential locally using your :ref:`self-signed CA certificate <nrf_cloud_multi_service_create_self_signed_ca>`, perform the following steps:
+
+1. Create a globally unique `device ID <nRF Cloud Device ID_>`_ for the device.
+
+   The ID can be anything you want, as long as it is not prefixed with ``nrf-`` and is globally unique.
+   Alternatively, if your device is an LTE development kit from Nordic Semiconductor, you can use ``nrf-<IMEI>`` where ``<IMEI>`` is the IMEI of the device.
+   See `nRF Cloud Device ID`_ for details.
+
+   Each device should have its own device ID, and you must use it exactly for all other actions involving that device, otherwise onboarding will fail.
+   This ID is referred to in other steps using the term *device_id*.
+
+#. Navigate to the folder where you :ref:`created your self-signed CA certificate <nrf_cloud_multi_service_create_self_signed_ca>`, and use the :file:`create_device_credentials.py` Python script :ref:`you installed <nrf_cloud_multi_service_install_nrf_utils>` to generate a self-signed certificate for the device:
+
+   .. parsed-literal::
+      :class: highlight
+
+      python3 create_device_credentials.py -ca "self\_\ *self_cert_serial*\ \_ca.pem" -ca_key "self\_\ *self_cert_serial*\ \_prv.pem" -c US -cn "\ *device_id*\ " -f cred\_
+
+   Where *device_id* is the device ID you created, and the :file:`.pem` files are the self-signed CA certificate and private key files :ref:`you created <nrf_cloud_multi_service_create_self_signed_ca>`.
+
+   Remember to set ``-c`` to your two-letter country code.
+   See the `Create Device Credentials <nRF Cloud Utilities Create Device Credentials_>`_ section in the nRF Cloud Utilities documentation for more details.
+
+   You should now have the following three files:
+
+     * :file:`cred_<device_id>_crt.pem`
+     * :file:`cred_<device_id>_pub.pem`
+     * :file:`cred_<device_id>_prv.pem`
+
+   These three files are your device credentials, and can only be used by a single device.
+
+   If you were directed here as part of other instructions, proceed to the next step of those instructions.
+
+   .. important::
+
+      If an attacker obtains the private key contained in :file:`cred_<device_id>_prv.pem`, they will be able to impersonate your device.
+
+.. _nrf_cloud_multi_service_onboard_device_manually:
+
+Onboarding a device manually
+============================
+
+Once you have obtained device credentials for your device, it can be `onboarded <nRF Cloud Onboarding_>`_.
+
+To onboard devices manually, you can use the `Bulk Onboard Devices <nRF Cloud Portal Bulk Onboard Devices_>`_ page of the nRF Cloud portal as follows:
+
+1. Create an onboarding CSV file named :file:`<device_id>_onboard.csv` and give it the following contents:
+
+   .. parsed-literal::
+      :class: highlight
+
+      *device_id*\ ,,,,"\ *device_cert*\ "
+
+   Where *device_id* is replaced by the device ID :ref:`you created <nrf_cloud_multi_service_create_device_cred_locally>`, and *device_cert* is replaced by the exact contents of :file:`<device_id>_crt.pem`.
+
+   For example, if the device ID you created is ``698d4c11-0ccc-4f04-89cd-6882724e3f6f``:
+
+   .. code-block:: none
+
+      698d4c11-0ccc-4f04-89cd-6882724e3f6f,,,,"-----BEGIN CERTIFICATE-----
+      sCC8AtbNQhzbp4y01FEzXaf5Fko3Qdq0o5LbuNpVA7S6AKAkjt17QzKJAiGWHakh
+      RnwzoA2dF4wR0rMP5vR6dqBblaGAA5hN7GE2vPBHTDNZGJ6tZ9dnO6446dg9gGds
+      eeadE1HdVnUj8nb+7CGm39vJ4fuNk9vogH0nMdxjCnXAinoOMRx8EklQsR747+Gz
+      sxcdVYuNEb/E2vWBHTDNZGJ6tZC1JC9d6/RC3Vb1JC4tWnK9mk/Jw984ZuYugpMc
+      1t9umoGFYCz0nMdxjCnXAbnoOMC5A0RxcWPzxfC5A0RH+j+mwoMxwhgfFY4EhVxp
+      oCC8labNQhzRC3Vc1JC4tWnK9mpVA7k/o5LbuNpVA7S6AKAkjt17QzKJAiGWHakh
+      RXwcoAndF4wPzxfC5A0RHponmwBHTDoM7GE2vPBHTDNZGJ6tZ9dnO6446dg9gGds
+      eefdE1HcVnULbuNpVA7S6AKAkjxjCnt1gH0nMdxjCnXAinoOMRx8EklQsR747+Fz
+      srm/VYaNEb/E2vPBHTDNZGJ6tZc1JC9d6/RC3Vc1JC4tWnK9mk/Jr984ZuYugpMc
+      nt9uZTGFYCzZD0FFAA5NAC4i1PARStFycWPzxfC5A0RqodhswoMxwhgfFY4EhVx=
+      -----END CERTIFICATE-----
+      "
+
+   Do not attempt to use this example directly, it has been filled with dummy data.
+   See `nRF Cloud REST API ProvisionDevices`_ for more details.
+
+   If you are onboarding more than a single device at once, you can repeat this format (separated by a newline) for each device you are onboarding.
+   Alternatively, you can create a separate CSV file for each device you wish to onboard, and upload them individually.
+
+#. Navigate to the `Bulk Onboard Devices`_ page of the nRF Cloud portal and upload the :file:`<device_id>_onboard.csv` file you created.
+
+   To get there from the :guilabel:`Dashboard`, click :guilabel:`Devices` under :guilabel:`Device Management` in the navigation pane on the left, then click :guilabel:`Add Devices` and select **Bulk Onboard**.
+
+   Once the `Bulk Onboard Devices`_ page is open, drag in the :file:`<device_id>_onboard.csv` file and click **Onboard**.
+
+   You should see a message stating that the file was uploaded successfully, and a device with the device ID(s) you created should appear in the `Devices <nRF Cloud Portal Devices_>`_ page.
+
+If you were directed here as part of other instructions, proceed to the next step of those instructions.
 
 .. _nrf_cloud_multi_service_dependencies:
 

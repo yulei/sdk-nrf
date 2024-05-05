@@ -1,13 +1,13 @@
 .. _bluetooth_ble_peripheral_lbs_coex:
 
-Bluetooth mesh: Coexistence with other LE services
+Bluetooth Mesh: Coexistence with other LE services
 ##################################################
 
 .. contents::
    :local:
    :depth: 2
 
-This sample demonstrates how to combine Bluetooth® mesh and another Bluetooth Low Energy (LE) service in a single application.
+This sample demonstrates how to combine Bluetooth® Mesh and another Bluetooth Low Energy (LE) service in a single application.
 
 Requirements
 ************
@@ -24,17 +24,17 @@ The sample also requires a smartphone with `nRF Connect for Mobile`_ and one of 
 Overview
 ********
 
-The purpose of this sample is to showcase an application where another Bluetooth LE service can operate independently of Bluetooth mesh.
+The purpose of this sample is to showcase an application where another Bluetooth LE service can operate independently of Bluetooth Mesh.
 It combines the features of the :ref:`peripheral_lbs` sample and the :ref:`bluetooth_mesh_light` sample into a single application.
 
 The :ref:`lbs_readme` controls the state of a LED and monitors the state of a button on the device.
-Bluetooth mesh controls and monitors the state of a separate LED on the device.
-The LBS and Bluetooth mesh do not share any states on the device and operate independently of each other.
+Bluetooth Mesh controls and monitors the state of a separate LED on the device.
+The LBS and Bluetooth Mesh do not share any states on the device and operate independently of each other.
 
-To be truly independent, the LBS must be able to advertise its presence independently of Bluetooth mesh.
-Because Bluetooth mesh uses the advertiser as its main channel of communication, you must configure the application to allow sharing of this resource.
+To be truly independent, the LBS must be able to advertise its presence independently of Bluetooth Mesh.
+Because Bluetooth Mesh uses the advertiser as its main channel of communication, you must configure the application to allow sharing of this resource.
 To achieve this, extended advertising is enabled with two simultaneous advertising sets.
-One of these sets is used to handle all Bluetooth mesh communication, while the other is used for advertising the LBS.
+One of these sets is used to handle all Bluetooth Mesh communication, while the other is used for advertising the LBS.
 
 .. note::
    Extended advertising is a requirement for achieving multiple advertisers in this sample.
@@ -120,11 +120,11 @@ Building and running
 
 .. include:: /includes/build_and_run.txt
 
-Testing Generic OnOff Server (Bluetooth mesh)
+Testing Generic OnOff Server (Bluetooth Mesh)
 =============================================
 
 After programming the sample to your development kit, you can test it by using a smartphone with `nRF Mesh mobile app`_ installed.
-Testing consists of provisioning the device and configuring it for communication with the Bluetooth mesh models.
+Testing consists of provisioning the device and configuring it for communication with the Bluetooth Mesh models.
 
 Provisioning the device
 -----------------------
@@ -167,6 +167,10 @@ After programming the sample to your development kit, test it by performing the 
 
    * Value ``OFF`` to switch the **LED 2** on the development kit off.
    * Value ``ON`` to switch the **LED 2** on the development kit on.
+
+.. note::
+   Once connected, the device will not advertise with the LBS Service UUID until the device is rebooted.
+   Reboot the device to restart the LBS Service UUID advertisements.
 
 Dependencies
 ************

@@ -6,19 +6,58 @@
 
 # This file contains extra images which can be used with sysbuild based builds.
 
-config PARTITION_MANAGER
+menuconfig PARTITION_MANAGER
 	bool "Partition Manager"
-	default y
+	default y if (!BOARD_QEMU_CORTEX_M0 && \
+		      !BOARD_QEMU_CORTEX_M3 && \
+		      !BOARD_NATIVE_POSIX && \
+		      !BOARD_NATIVE_POSIX_NATIVE_64 && \
+		      !BOARD_NATIVE_SIM && \
+		      !BOARD_NATIVE_SIM_NATIVE_64 && \
+		      !BOARD_MPS2 && \
+		      !BOARD_QEMU_X86 && \
+		      !BOARD_QEMU_X86_64 && \
+		      !BOARD_QEMU_X86_TINY && \
+		      !BOARD_NRF52_BSIM && \
+		      !BOARD_NRF5340BSIM && \
+		      !BOARD_NRF54H20DK_NRF54H20_CPUAPP)
+	depends on !EXTERNAL_CONFIGURED_NETCORE
 
 config PM_MCUBOOT_PAD
 	hex "Memory reserved for MCUBOOT_PAD"
+	default 0x800 if BOARD_NRF54L15PDK_NRF54L15_CPUAPP
 	default 0x200
 	depends on BOOTLOADER_MCUBOOT
+	depends on PARTITION_MANAGER
 	help
 	  MCUBOOT_PAD size in partition file.
 	  This value is default 0x200 but if using static partitions having a
 	  different padding size, then this value must be updated to correspond
 	  to the value in the static partition file.
+
+config PM_OVERRIDE_EXTERNAL_DRIVER_CHECK
+	bool "Override external driver check"
+	depends on PARTITION_MANAGER
+	help
+	  When enabled, will include all external flash stroage areas without
+	  being gated on the NORDIC_QSPI_NOR Kconfig, can be enabled to use
+	  non-QSPI external flash chips from partition manager.
+
+config BUILD_OUTPUT_BIN
+	bool "Build a binary in BIN format"
+	default y
+	help
+	  Build a "raw" binary zephyr/zephyr.bin in the build directory.
+	  The name of this file can be customized with CONFIG_KERNEL_BIN_NAME.
+	  This will be applied to all target images.
+
+config BUILD_OUTPUT_HEX
+	bool "Build a binary in HEX format"
+	default y
+	help
+	  Build an Intel HEX binary zephyr/zephyr.hex in the build directory.
+	  The name of this file can be customized with CONFIG_KERNEL_BIN_NAME.
+	  This will be applied to all target images.
 
 if BOOTLOADER_MCUBOOT
 
@@ -31,4 +70,7 @@ endif
 
 rsource "Kconfig.netcore"
 rsource "Kconfig.secureboot"
+rsource "Kconfig.mcuboot"
 rsource "Kconfig.dfu"
+rsource "Kconfig.xip"
+rsource "Kconfig.bt_fast_pair"

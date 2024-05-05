@@ -46,9 +46,7 @@ The module selects the following configurations:
 
   MCUmgr notifications hooks:
 
-    * :kconfig:option:`CONFIG_MCUMGR_GRP_IMG_UPLOAD_CHECK_HOOK` - This option enables the MCUmgr upload check hook, which sends image upload requests to the registered callbacks.
-    * :kconfig:option:`CONFIG_MCUMGR_GRP_IMG_STATUS_HOOKS` - This option enables the MCUmgr image status hooks, which report the DFU status to the registered callbacks.
-    * :kconfig:option:`CONFIG_MCUMGR_GRP_OS_RESET_HOOK` - This option enables the MCUmgr OS reset hook, which sends reset requests to the registered callbacks.
+    * :kconfig:option:`CONFIG_MCUMGR_SMP_COMMAND_STATUS_HOOKS` - This option enables the MCUmgr SMP command status callbacks, which inform when an SMP command is received or processed.
 
 * MCUmgr dependencies:
 
@@ -72,7 +70,7 @@ You must also enable the preferred transport for the MCUmgr's SMP protocol (for 
 With the :kconfig:option:`CONFIG_MCUMGR_TRANSPORT_BT` Kconfig option enabled, the module enables the :kconfig:option:`CONFIG_CAF_BLE_SMP_TRANSFER_EVENTS` event.
 The event can be used to lower Bluetooth connection latency during the DFU process.
 
-The DFU module leverages the :ref:`nrf_desktop_dfu_lock` to synchronize flash access with other DFU methods (for example, the :ref:`nrf_desktop_dfu`).
+The DFU module leverages the :ref:`nrf_desktop_dfu_lock` to synchronize non-volatile memory access with other DFU methods (for example, the :ref:`nrf_desktop_dfu`).
 Set the :ref:`CONFIG_DESKTOP_DFU_LOCK <config_desktop_app_options>` Kconfig option to enable this feature.
 Make sure that the DFU lock utility is enabled if your nRF Desktop application configuration uses multiple DFU transports.
 
@@ -82,7 +80,7 @@ In other words, you cannot simultaneously enable the :ref:`CONFIG_DESKTOP_DFU_MC
 Implementation details
 **********************
 
-The module uses MCUmgr's image notification callbacks for the following purposes:
+The module uses MCUmgr's SMP command received callback for the following purposes:
 
 * To periodically submit a :c:struct:`ble_smp_transfer_event` while image upload over Bluetooth LE is in progress.
   The module registers itself as the final subscriber of the event to track the number of submitted events.
@@ -90,8 +88,8 @@ The module uses MCUmgr's image notification callbacks for the following purposes
 * To reject image upload or system reboot request if :ref:`nrf_desktop_dfu_lock` is already taken by another DFU transport.
 
 The DFU MCUmgr implementation uses the :ref:`nrf_desktop_dfu_lock`.
-On each DFU attempt, the module attempts to claim ownership over the DFU flash using the :ref:`nrf_desktop_dfu_lock` API.
+On each DFU attempt, the module attempts to claim ownership over the DFU non-volatile memory using the :ref:`nrf_desktop_dfu_lock` API.
 It holds the DFU owner status until the DFU process is completed or timed out.
 The module assumes that DFU is timed out if the registered MCUmgr notification hooks are not called for 5 seconds.
-If the module is not the current DFU owner, it rejects the DFU commands that either write to the DFU flash or reboot the device.
+If the module is not the current DFU owner, it rejects the DFU commands that either write to the DFU non-volatile memory or reboot the device.
 The module also resets the MCUmgr DFU progress once the lock is claimed by a different owner.

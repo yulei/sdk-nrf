@@ -92,11 +92,7 @@ int memfault_ncs_metrics_thread_add(struct memfault_ncs_metrics_thread *thread)
 	return 0;
 }
 
-/* Overriding weak implementation in Memfault SDK.
- * The function is run on every heartbeat and can be used to get fresh updates
- * of metrics.
- */
-void memfault_metrics_heartbeat_collect_data(void)
+void memfault_ncs_metrics_collect_data(void)
 {
 	if (IS_ENABLED(CONFIG_MEMFAULT_NCS_STACK_METRICS)) {
 		k_thread_foreach_unlocked(stack_check, NULL);
@@ -105,9 +101,24 @@ void memfault_metrics_heartbeat_collect_data(void)
 	if (IS_ENABLED(CONFIG_MEMFAULT_NCS_BT_METRICS)) {
 		memfault_bt_metrics_update();
 	}
+
+	if (IS_ENABLED(CONFIG_MEMFAULT_NCS_LTE_METRICS)) {
+		memfault_lte_metrics_update();
+	}
 }
 
-void memfault_ncs_metrcics_init(void)
+#if defined(CONFIG_MEMFAULT_NCS_IMPLEMENT_METRICS_COLLECTION)
+/* Overriding weak implementation in Memfault SDK.
+ * The function is run on every heartbeat and can be used to get fresh updates
+ * of metrics.
+ */
+void memfault_metrics_heartbeat_collect_data(void)
+{
+	memfault_ncs_metrics_collect_data();
+}
+#endif
+
+void memfault_ncs_metrics_init(void)
 {
 	if (IS_ENABLED(CONFIG_MEMFAULT_NCS_LTE_METRICS)) {
 		memfault_lte_metrics_init();

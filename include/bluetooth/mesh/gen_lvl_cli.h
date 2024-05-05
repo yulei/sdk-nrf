@@ -3,6 +3,7 @@
  *
  * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
+
 /**
  * @file
  * @defgroup bt_mesh_lvl_cli Generic Level Client model
@@ -52,7 +53,7 @@ struct bt_mesh_lvl_cli;
  */
 struct bt_mesh_lvl_cli {
 	/** Model entry. */
-	struct bt_mesh_model *model;
+	const struct bt_mesh_model *model;
 	/** Publish parameters. */
 	struct bt_mesh_model_pub pub;
 	/* Publication buffer */

@@ -47,6 +47,8 @@ static struct udp_proxy {
 	int sock;		/* Socket descriptor. */
 	int family;		/* Socket address family */
 	sec_tag_t sec_tag;	/* Security tag of the credential */
+	int peer_verify;	/* Peer verification level for DTLS connection. */
+	bool hostname_verify;	/* Verify hostname against the certificate. */
 	int dtls_cid;		/* DTLS connection identifier. */
 	enum slm_udp_role role;	/* Client or Server proxy */
 	union {			/* remote host */
@@ -72,10 +74,10 @@ static int do_udp_server_start(uint16_t port)
 	proxy.sock = ret;
 	/* Bind to local port */
 	if (proxy.family == AF_INET) {
-		char ipv4_addr[NET_IPV4_ADDR_LEN] = {0};
+		char ipv4_addr[INET_ADDRSTRLEN];
 
 		util_get_ip_addr(0, ipv4_addr, NULL);
-		if (strlen(ipv4_addr) == 0) {
+		if (!*ipv4_addr) {
 			LOG_ERR("Unable to obtain local IPv4 address");
 			close(proxy.sock);
 			return -EAGAIN;
@@ -93,10 +95,10 @@ static int do_udp_server_start(uint16_t port)
 		}
 		ret = bind(proxy.sock, (struct sockaddr *)&local, sizeof(struct sockaddr_in));
 	} else {
-		char ipv6_addr[NET_IPV6_ADDR_LEN] = {0};
+		char ipv6_addr[INET6_ADDRSTRLEN];
 
 		util_get_ip_addr(0, NULL, ipv6_addr);
-		if (strlen(ipv6_addr) == 0) {
+		if (!*ipv6_addr) {
 			LOG_ERR("Unable to obtain local IPv6 address");
 			close(proxy.sock);
 			return -EAGAIN;
@@ -206,10 +208,27 @@ static int do_udp_client_connect(const char *url, uint16_t port)
 				goto cli_exit;
 			}
 		}
+		ret = setsockopt(proxy.sock, SOL_TLS, TLS_PEER_VERIFY, &proxy.peer_verify,
+				 sizeof(proxy.peer_verify));
+		if (ret) {
+			LOG_ERR("setsockopt(TLS_PEER_VERIFY) error: %d", errno);
+			ret = -errno;
+			goto cli_exit;
+		}
+		if (proxy.hostname_verify) {
+			ret = setsockopt(proxy.sock, SOL_TLS, TLS_HOSTNAME, url, strlen(url));
+		} else {
+			ret = setsockopt(proxy.sock, SOL_TLS, TLS_HOSTNAME, NULL, 0);
+		}
+		if (ret) {
+			LOG_ERR("setsockopt(TLS_HOSTNAME) error: %d", errno);
+			ret = -errno;
+			goto cli_exit;
+		}
 	}
 
 	/* Connect to remote host */
-	ret = util_resolve_host(0, url, port, proxy.family, Z_LOG_OBJECT_PTR(slm_udp), &sa);
+	ret = util_resolve_host(0, url, port, proxy.family, &sa);
 	if (ret) {
 		goto cli_exit;
 	}
@@ -485,8 +504,9 @@ static bool socket_is_in_use(void)
 	return true;
 }
 
-/* Handles AT#XUDPSVR commands. */
-int handle_at_udp_server(enum at_cmd_type cmd_type)
+SLM_AT_CMD_CUSTOM(xudpsvr, "AT#XUDPSVR", handle_at_udp_server);
+static int handle_at_udp_server(enum at_cmd_type cmd_type, const struct at_param_list *param_list,
+				uint32_t)
 {
 	int err = -EINVAL;
 	uint16_t op;
@@ -494,7 +514,7 @@ int handle_at_udp_server(enum at_cmd_type cmd_type)
 
 	switch (cmd_type) {
 	case AT_CMD_TYPE_SET_COMMAND:
-		err = at_params_unsigned_short_get(&slm_at_param_list, 1, &op);
+		err = at_params_unsigned_short_get(param_list, 1, &op);
 		if (err) {
 			return err;
 		}
@@ -502,7 +522,7 @@ int handle_at_udp_server(enum at_cmd_type cmd_type)
 			if (socket_is_in_use()) {
 				return -EINVAL;
 			}
-			err = at_params_unsigned_short_get(&slm_at_param_list, 2, &port);
+			err = at_params_unsigned_short_get(param_list, 2, &port);
 			if (err) {
 				return err;
 			}
@@ -530,15 +550,16 @@ int handle_at_udp_server(enum at_cmd_type cmd_type)
 	return err;
 }
 
-/* Handles AT#XUDPCLI commands. */
-int handle_at_udp_client(enum at_cmd_type cmd_type)
+SLM_AT_CMD_CUSTOM(xudpcli, "AT#XUDPCLI", handle_at_udp_client);
+static int handle_at_udp_client(enum at_cmd_type cmd_type, const struct at_param_list *param_list,
+				uint32_t param_count)
 {
 	int err = -EINVAL;
 	uint16_t op;
 
 	switch (cmd_type) {
 	case AT_CMD_TYPE_SET_COMMAND:
-		err = at_params_unsigned_short_get(&slm_at_param_list, 1, &op);
+		err = at_params_unsigned_short_get(param_list, 1, &op);
 		if (err) {
 			return err;
 		}
@@ -550,32 +571,49 @@ int handle_at_udp_client(enum at_cmd_type cmd_type)
 			if (socket_is_in_use()) {
 				return -EINVAL;
 			}
-			err = util_string_get(&slm_at_param_list, 2, url, &size);
+			err = util_string_get(param_list, 2, url, &size);
 			if (err) {
 				return err;
 			}
-			err = at_params_unsigned_short_get(&slm_at_param_list, 3, &port);
+			err = at_params_unsigned_short_get(param_list, 3, &port);
 			if (err) {
 				return err;
 			}
 			proxy.sec_tag = INVALID_SEC_TAG;
-			proxy.dtls_cid = INVALID_DTLS_CID;
-			const uint32_t param_count = at_params_valid_count_get(&slm_at_param_list);
 
 			if (param_count > 4) {
-				if (at_params_int_get(&slm_at_param_list, 4, &proxy.sec_tag)
+				if (at_params_int_get(param_list, 4, &proxy.sec_tag)
 				|| proxy.sec_tag == INVALID_SEC_TAG || proxy.sec_tag < 0) {
 					return -EINVAL;
 				}
-				if (param_count > 5) {
-					if (at_params_int_get(
-						&slm_at_param_list, 5, &proxy.dtls_cid)
-					|| !(proxy.dtls_cid == TLS_DTLS_CID_DISABLED
-						|| proxy.dtls_cid == TLS_DTLS_CID_SUPPORTED
-						|| proxy.dtls_cid == TLS_DTLS_CID_ENABLED)) {
-						return -EINVAL;
-					}
+			}
+			proxy.dtls_cid = INVALID_DTLS_CID;
+			if (param_count > 5) {
+				if (at_params_int_get(param_list, 5, &proxy.dtls_cid)
+				|| !(proxy.dtls_cid == TLS_DTLS_CID_DISABLED
+					|| proxy.dtls_cid == TLS_DTLS_CID_SUPPORTED
+					|| proxy.dtls_cid == TLS_DTLS_CID_ENABLED)) {
+					return -EINVAL;
 				}
+			}
+			proxy.peer_verify = TLS_PEER_VERIFY_REQUIRED;
+			if (param_count > 6) {
+				if (at_params_int_get(param_list, 6, &proxy.peer_verify) ||
+				    (proxy.peer_verify != TLS_PEER_VERIFY_NONE &&
+				     proxy.peer_verify != TLS_PEER_VERIFY_OPTIONAL &&
+				     proxy.peer_verify != TLS_PEER_VERIFY_REQUIRED)) {
+					return -EINVAL;
+				}
+			}
+			proxy.hostname_verify = true;
+			if (param_count > 7) {
+				uint16_t hostname_verify;
+
+				if (at_params_unsigned_short_get(param_list, 7, &hostname_verify) ||
+				    (hostname_verify != 0 && hostname_verify != 1)) {
+					return -EINVAL;
+				}
+				proxy.hostname_verify = (bool)hostname_verify;
 			}
 			proxy.family = (op == CLIENT_CONNECT) ? AF_INET : AF_INET6;
 			err = do_udp_client_connect(url, port);
@@ -589,8 +627,9 @@ int handle_at_udp_client(enum at_cmd_type cmd_type)
 		break;
 
 	case AT_CMD_TYPE_TEST_COMMAND:
-		rsp_send("\r\n#XUDPCLI: (%d,%d,%d),<url>,<port>,<sec_tag>,<use_dtls_cid>\r\n",
-			CLIENT_DISCONNECT, CLIENT_CONNECT, CLIENT_CONNECT6);
+		rsp_send("\r\n#XUDPCLI: (%d,%d,%d),<url>,<port>,<sec_tag>,"
+			 "<use_dtls_cid>,<peer_verify>,<hostname_verify>\r\n",
+			 CLIENT_DISCONNECT, CLIENT_CONNECT, CLIENT_CONNECT6);
 		err = 0;
 		break;
 
@@ -601,8 +640,9 @@ int handle_at_udp_client(enum at_cmd_type cmd_type)
 	return err;
 }
 
-/* Handles AT#XUDPSEND command. */
-int handle_at_udp_send(enum at_cmd_type cmd_type)
+SLM_AT_CMD_CUSTOM(xudpsend, "AT#XUDPSEND", handle_at_udp_send);
+static int handle_at_udp_send(enum at_cmd_type cmd_type, const struct at_param_list *param_list,
+			      uint32_t param_count)
 {
 	int err = -EINVAL;
 	char data[SLM_MAX_PAYLOAD_SIZE + 1] = {0};
@@ -614,9 +654,9 @@ int handle_at_udp_send(enum at_cmd_type cmd_type)
 			LOG_ERR("Not connected yet");
 			return -ENOTCONN;
 		}
-		if (at_params_valid_count_get(&slm_at_param_list) > 1) {
+		if (param_count > 1) {
 			size = sizeof(data);
-			err = util_string_get(&slm_at_param_list, 1, data, &size);
+			err = util_string_get(param_list, 1, data, &size);
 			if (err) {
 				return err;
 			}

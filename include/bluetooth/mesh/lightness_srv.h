@@ -129,7 +129,7 @@ struct bt_mesh_lightness_srv_handlers {
 	 * The user may implement this handler to subscribe to change to the
 	 * Light Range state. If the change in range causes the current Light
 	 * state to be out of range, the Light state should be changed to the
-	 * nearest value inside the range. It's recommended to call
+	 * nearest value inside the range. It is recommended to call
 	 * @ref bt_mesh_lightness_srv_pub to notify the mesh if the Light state
 	 * changes.
 	 *
@@ -158,9 +158,9 @@ struct bt_mesh_lightness_srv {
 	/** Internal flag state. */
 	atomic_t flags;
 	/** Pointer to the model entry in the composition data. */
-	struct bt_mesh_model *lightness_model;
+	const struct bt_mesh_model *lightness_model;
 	/** Pointer to the Setup Server model entry in the composition data. */
-	struct bt_mesh_model *lightness_setup_model;
+	const struct bt_mesh_model *lightness_setup_model;
 	/** Model publication parameters. */
 	struct bt_mesh_model_pub pub;
 	/* Publication buffer */

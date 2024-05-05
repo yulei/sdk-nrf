@@ -41,20 +41,20 @@ See :ref:`thread_device_types` for more information on device types, and :ref:`t
 nRF5340 DK RAM and flash memory requirements
 *********************************************
 
-The following tables present memory requirements for samples running on the :ref:`nRF5340 DK <programming_board_names>` (:ref:`nrf5340dk_nrf5340 <zephyr:nrf5340dk_nrf5340>`) with the software cryptography support provided by the :ref:`nrfxlib:nrf_oberon_readme` module.
+The following tables present memory requirements for samples running on the :ref:`nRF5340 DK <programming_board_names>` (:ref:`nrf5340dk <zephyr:nrf5340dk_nrf5340>`) with the software cryptography support provided by the :ref:`nrfxlib:nrf_oberon_readme` module.
 
 .. table:: nRF5340 single protocol Thread 1.3 memory requirements
 
    +-----------------------------+-------+-------+
    |                             |   FTD |   MTD |
    +=============================+=======+=======+
-   | ROM OT stack + App [kB]     |   383 |   332 |
+   | ROM OT stack + App [kB]     |   327 |   274 |
    +-----------------------------+-------+-------+
    | ROM Bluetooth LE stack [kB] |     0 |     0 |
    +-----------------------------+-------+-------+
    | Persistent storage [kB]     |    24 |    24 |
    +-----------------------------+-------+-------+
-   | Free ROM [kB]               |   617 |   668 |
+   | Free ROM [kB]               |   673 |   726 |
    +-----------------------------+-------+-------+
    | RAM OT stack + App [kB]     |   100 |    90 |
    +-----------------------------+-------+-------+
@@ -62,19 +62,18 @@ The following tables present memory requirements for samples running on the :ref
    +-----------------------------+-------+-------+
    | Free RAM [kB]               |   412 |   422 |
    +-----------------------------+-------+-------+
-
 .. table:: nRF5340 multiprotocol Thread 1.3 memory requirements
 
    +-----------------------------+-------+-------+
    |                             |   FTD |   MTD |
    +=============================+=======+=======+
-   | ROM OT stack + App [kB]     |   383 |   332 |
+   | ROM OT stack + App [kB]     |   327 |   274 |
    +-----------------------------+-------+-------+
-   | ROM Bluetooth LE stack [kB] |    29 |    29 |
+   | ROM Bluetooth LE stack [kB] |    29 |    30 |
    +-----------------------------+-------+-------+
    | Persistent storage [kB]     |    24 |    24 |
    +-----------------------------+-------+-------+
-   | Free ROM [kB]               |   588 |   639 |
+   | Free ROM [kB]               |   644 |   696 |
    +-----------------------------+-------+-------+
    | RAM OT stack + App [kB]     |   100 |    90 |
    +-----------------------------+-------+-------+
@@ -95,37 +94,36 @@ The following tables present memory requirements for samples running on the :ref
    +-----------------------------+----------+-------+-------+
    |                             |   master |   FTD |   MTD |
    +=============================+==========+=======+=======+
-   | ROM OT stack + App [kB]     |      452 |   426 |   375 |
+   | ROM OT stack + App [kB]     |      453 |   357 |   305 |
    +-----------------------------+----------+-------+-------+
    | ROM Bluetooth LE stack [kB] |        0 |     0 |     0 |
    +-----------------------------+----------+-------+-------+
    | Persistent storage [kB]     |       32 |    32 |    32 |
    +-----------------------------+----------+-------+-------+
-   | Free ROM [kB]               |      540 |   566 |   617 |
+   | Free ROM [kB]               |      539 |   635 |   687 |
    +-----------------------------+----------+-------+-------+
-   | RAM OT stack + App [kB]     |       99 |    96 |    86 |
+   | RAM OT stack + App [kB]     |      102 |    93 |    83 |
    +-----------------------------+----------+-------+-------+
    | RAM Bluetooth LE stack [kB] |        0 |     0 |     0 |
    +-----------------------------+----------+-------+-------+
-   | Free RAM [kB]               |      157 |   160 |   170 |
+   | Free RAM [kB]               |      154 |   163 |   173 |
    +-----------------------------+----------+-------+-------+
-
 .. table:: nRF52840 multiprotocol Thread 1.3 memory requirements
 
    +-----------------------------+----------+-------+-------+
    |                             |   master |   FTD |   MTD |
    +=============================+==========+=======+=======+
-   | ROM OT stack + App [kB]     |      452 |   426 |   375 |
+   | ROM OT stack + App [kB]     |      453 |   357 |   305 |
    +-----------------------------+----------+-------+-------+
-   | ROM Bluetooth LE stack [kB] |       84 |    84 |    84 |
+   | ROM Bluetooth LE stack [kB] |       77 |    77 |    76 |
    +-----------------------------+----------+-------+-------+
    | Persistent storage [kB]     |       32 |    32 |    32 |
    +-----------------------------+----------+-------+-------+
-   | Free ROM [kB]               |      456 |   482 |   533 |
+   | Free ROM [kB]               |      462 |   558 |   611 |
    +-----------------------------+----------+-------+-------+
-   | RAM OT stack + App [kB]     |       99 |    96 |    86 |
+   | RAM OT stack + App [kB]     |      102 |    93 |    83 |
    +-----------------------------+----------+-------+-------+
-   | RAM Bluetooth LE stack [kB] |       17 |    16 |    16 |
+   | RAM Bluetooth LE stack [kB] |       16 |    16 |    15 |
    +-----------------------------+----------+-------+-------+
-   | Free RAM [kB]               |      140 |   144 |   154 |
+   | Free RAM [kB]               |      138 |   147 |   158 |
    +-----------------------------+----------+-------+-------+

@@ -9,47 +9,23 @@
 #include <zephyr/net/lwm2m.h>
 #include <modem/lte_lc.h>
 #include <nrf_modem_at.h>
+#include <modem/nrf_modem_lib.h>
 #include <zephyr/logging/log.h>
 #include <net/lwm2m_client_utils.h>
 
 LOG_MODULE_REGISTER(lwm2m_rai, CONFIG_LWM2M_CLIENT_UTILS_LOG_LEVEL);
-static void lte_rrc_event_handler(const struct lte_lc_evt *const evt);
+static void lwm2m_set_socket_state(int sock_fd, enum lwm2m_socket_states state);
 
-static bool rrc_connected;
+static bool activate_rai;
 
 static int set_rel14feat(void)
 {
 	int ret;
 
 	ret = nrf_modem_at_printf("AT%%REL14FEAT=0,1,0,0,0");
-	if (ret) {
+	if (ret < 0) {
 		LOG_ERR("AT command failed, error code: %d", ret);
 		return -EFAULT;
-	}
-
-	return 0;
-}
-
-int lwm2m_rai_get(enum lwm2m_rai_mode *mode)
-{
-	uint16_t rai_tmp;
-	int ret;
-
-	if (mode == NULL) {
-		return -EINVAL;
-	}
-
-	ret = nrf_modem_at_scanf("AT%RAI?", "%%RAI: %hu", &rai_tmp);
-	if (ret != 1) {
-		LOG_ERR("Failed to read RAI, error code: %d", ret);
-		return ret;
-	}
-
-	LOG_DBG("AS RAI: %d", rai_tmp);
-	if (rai_tmp) {
-		*mode = LWM2M_RAI_MODE_ENABLED;
-	} else {
-		*mode = LWM2M_RAI_MODE_DISABLED;
 	}
 
 	return 0;
@@ -68,134 +44,109 @@ int lwm2m_rai_req(enum lwm2m_rai_mode mode)
 	return 0;
 }
 
-static void lwm2m_lte_handler_register(void)
+NRF_MODEM_LIB_ON_INIT(lwm2m_init_rai, lwm2m_init_rai, NULL);
+static void lwm2m_init_rai(int ret, void *ctx)
 {
-	lte_lc_register_handler(lte_rrc_event_handler);
-}
+	ARG_UNUSED(ret);
+	ARG_UNUSED(ctx);
 
-static inline const char *lte_lc_rrc_mode2str(enum lte_lc_rrc_mode rrc_mode)
-{
-#if CONFIG_LWM2M_CLIENT_UTILS_LOG_LEVEL >= LOG_LEVEL_DBG
-	switch (rrc_mode) {
-	case LTE_LC_RRC_MODE_IDLE:
-		return "Idle";
-	case LTE_LC_RRC_MODE_CONNECTED:
-		return "Connected";
-	default:
-		break;
+	int r;
+
+	r = set_rel14feat();
+	if (r) {
+		LOG_ERR("set_rel14feat failed, error code: %d", r);
 	}
 
-	return "<Unknown>";
-#else
-	ARG_UNUSED(rrc_mode);
-
-	return "";
-#endif /* CONFIG_LWM2M_CLIENT_UTILS_LOG_LEVEL >= LOG_LEVEL_DBG */
+	r = lwm2m_rai_req(LWM2M_RAI_MODE_ENABLED);
+	if (r) {
+		LOG_ERR("RAI request failed, error code: %d", r);
+	}
 }
 
-static void lte_rrc_event_handler(const struct lte_lc_evt *const evt)
+void lwm2m_utils_rai_event_cb(struct lwm2m_ctx *client,
+				      enum lwm2m_rd_client_event *client_event)
 {
-	switch (evt->type) {
-	case LTE_LC_EVT_RRC_UPDATE:
-		if (evt->rrc_mode == LTE_LC_RRC_MODE_CONNECTED) {
-			rrc_connected = true;
+	switch (*client_event) {
+	case LWM2M_RD_CLIENT_EVENT_QUEUE_MODE_RX_OFF:
+	case LWM2M_RD_CLIENT_EVENT_REG_UPDATE_COMPLETE:
+	case LWM2M_RD_CLIENT_EVENT_ENGINE_SUSPENDED:
+	case LWM2M_RD_CLIENT_EVENT_REG_UPDATE:
+	case LWM2M_RD_CLIENT_EVENT_SERVER_DISABLED:
+		/* RAI can be enabled as we are now registered and server have refreshed all the
+		 * data
+		 */
+		if (!activate_rai) {
+			LOG_INF("RAI enabled");
+			client->set_socket_state = lwm2m_set_socket_state;
+			activate_rai = true;
+		}
+		break;
+
+
+	default:
+		/* Stop RAI hints until we have properly registered and server have
+		 * refreshed all the data
+		 */
+		if (activate_rai) {
+			LOG_INF("RAI disabled");
+			activate_rai = false;
+			client->set_socket_state = NULL;
+			lwm2m_set_socket_state(client->sock_fd, LWM2M_SOCKET_STATE_ONGOING);
+		}
+		break;
+	}
+}
+
+static void lwm2m_set_socket_state(int sock_fd, enum lwm2m_socket_states state)
+{
+	int optval = -1;
+	int ret;
+	static enum lwm2m_socket_states last_state;
+	static const char * const opt_names[] = {
+		"ONGOING",
+		"ONE_RESP",
+		"LAST",
+		"NO_DATA",
+	};
+
+	if (!activate_rai || sock_fd < 0) {
+		return;
+	}
+	switch (state) {
+	case LWM2M_SOCKET_STATE_ONGOING:
+		optval = RAI_ONGOING;
+		break;
+	case LWM2M_SOCKET_STATE_ONE_RESPONSE:
+		optval = RAI_ONE_RESP;
+		break;
+	case LWM2M_SOCKET_STATE_LAST:
+		if (last_state == LWM2M_SOCKET_STATE_NO_DATA) {
+			/* Special case: Special case: We have already told the modem to release the
+			 * connection but the server has sent us something and we are responding.
+			 * (CoAP Ack == LAST)
+			 * We don't know how many packets are coming, so indicate that
+			 * communication is ongoing and disable until we go back to RX_OFF.
+			 */
+			optval = RAI_ONGOING;
+			state = LWM2M_SOCKET_STATE_ONGOING;
+			activate_rai = false;
+			LOG_INF("Ongoing traffic, RAI disabled");
 		} else {
-			rrc_connected = false;
+			optval = RAI_LAST;
 		}
-		LOG_DBG("LTE RRC mode: %s", lte_lc_rrc_mode2str(evt->rrc_mode));
 		break;
-	default:
+	case LWM2M_SOCKET_STATE_NO_DATA:
+		optval = RAI_NO_DATA;
 		break;
 	}
-}
 
-int lwm2m_rai_no_data(void)
-{
-	int ret;
-	struct lwm2m_ctx *ctx;
+	LOG_DBG("Set socket option SO_RAI with value %s\n", opt_names[state]);
+	ret = setsockopt(sock_fd, SOL_SOCKET, SO_RAI, &optval, sizeof(optval));
 
-	if (rrc_connected) {
-		ctx = lwm2m_rd_client_ctx();
-		if (!ctx) {
-			LOG_ERR("No context");
-			return -EPERM;
-		}
-
-		if (ctx->sock_fd >= 0) {
-			LOG_DBG("Set socket option SO_RAI_NO_DATA");
-			ret = setsockopt(ctx->sock_fd, SOL_SOCKET, SO_RAI_NO_DATA, NULL, 0);
-
-			if (ret < 0) {
-				ret = -errno;
-				LOG_ERR("Failed to set RAI socket option, error code: %d", ret);
-				return ret;
-			}
-		}
+	if (ret < 0) {
+		ret = -errno;
+		LOG_ERR("Failed to set RAI socket option, error code: %d", ret);
+		return;
 	}
-
-	return 0;
-}
-
-int lwm2m_rai_last(void)
-{
-	int ret;
-	struct lwm2m_ctx *ctx;
-	u_int8_t data = 0;
-
-	if (rrc_connected) {
-		ctx = lwm2m_rd_client_ctx();
-		if (!ctx) {
-			LOG_ERR("No context");
-			return -EPERM;
-		}
-
-		if (ctx->sock_fd >= 0) {
-			LOG_DBG("Set socket option SO_RAI_LAST");
-			ret = setsockopt(ctx->sock_fd, SOL_SOCKET, SO_RAI_LAST, NULL, 0);
-
-			if (ret < 0) {
-				ret = -errno;
-				LOG_ERR("Failed to set RAI socket option, error code: %d", ret);
-				return ret;
-			}
-
-			ret = send(ctx->sock_fd, &data, sizeof(data), 0);
-
-			if (ret < 0) {
-				ret = -errno;
-				LOG_ERR("Failed to send dummy packet, error code: %d", ret);
-				return ret;
-			}
-		}
-	}
-
-	return 0;
-}
-
-int lwm2m_init_rai(void)
-{
-	int ret;
-	enum lwm2m_rai_mode mode;
-
-	ret = set_rel14feat();
-	if (ret) {
-		LOG_ERR("set_rel14feat failed, error code: %d", ret);
-		return ret;
-	}
-
-	ret = lwm2m_rai_req(LWM2M_RAI_MODE_ENABLED);
-	if (ret) {
-		LOG_ERR("RAI request failed, error code: %d", ret);
-		return ret;
-	}
-
-	ret = lwm2m_rai_get(&mode);
-	if (ret) {
-		LOG_ERR("Get RAI mode failed, error code: %d", ret);
-		return ret;
-	}
-
-	lwm2m_lte_handler_register();
-
-	return 0;
+	last_state = state;
 }

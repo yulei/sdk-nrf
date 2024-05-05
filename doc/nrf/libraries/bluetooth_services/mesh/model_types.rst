@@ -1,13 +1,13 @@
 .. _bt_mesh_models_overview:
 
-Bluetooth mesh models overview
+Bluetooth Mesh models overview
 ##############################
 
 .. contents::
    :local:
    :depth: 2
 
-A Bluetooth® mesh model is a standardized component that defines a series of states and related behaviors.
+A Bluetooth® Mesh model is a standardized component that defines a series of states and related behaviors.
 Models encapsulate a single feature of a mesh node, and expose this feature to the mesh network.
 Each mesh-based product implements several models.
 
@@ -62,7 +62,7 @@ If a state change is non-instantaneous, for example when :c:func:`bt_mesh_model_
 Common types for all models
 ***************************
 
-All models in the Bluetooth mesh model specification share some common types, which are collected in a single header file.
+All models in the Bluetooth Mesh model specification share some common types, which are collected in a single header file.
 These include transitions, common IDs and other types that are rarely actively used.
 
 Each model can also contain its own common types, listed in the respective documentation pages.

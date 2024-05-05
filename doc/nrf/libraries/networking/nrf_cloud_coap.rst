@@ -52,7 +52,7 @@ Requirements
 
 You must first preprovision the device on nRF Cloud as follows:
 
-1. Use the `device_credentials_installer.py`_ and `nrf_cloud_provision.py`_ scripts.
+1. Use the `device_credentials_installer.py`_ and `nrf_cloud_onboard.py`_ scripts.
 #. Specify the ``--coap`` option to ``device_credentials_installer.py`` to have the proper root CA certificates installed in the device.
 
 Call the :c:func:`nrf_cloud_coap_init` function once to initialize the library.
@@ -68,7 +68,6 @@ Additionally, the following Kconfig options are available:
 * :kconfig:option:`CONFIG_NRF_CLOUD_COAP_SERVER_HOSTNAME`
 * :kconfig:option:`CONFIG_NRF_CLOUD_COAP_SEC_TAG`
 * :kconfig:option:`CONFIG_NRF_CLOUD_COAP_RESPONSE_TIMEOUT_MS`
-* :kconfig:option:`CONFIG_NON_RESP_RETRIES`
 * :kconfig:option:`CONFIG_NRF_CLOUD_COAP_SEND_SSIDS`
 * :kconfig:option:`CONFIG_NRF_CLOUD_SEND_DEVICE_STATUS`
 * :kconfig:option:`CONFIG_NRF_CLOUD_SEND_DEVICE_STATUS_NETWORK`

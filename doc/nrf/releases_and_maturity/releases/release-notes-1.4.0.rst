@@ -196,7 +196,7 @@ nRF5340 SoC
   * :ref:`nrf_rpc_entropy_nrf53` sample - This sample demonstrates how to use the entropy driver in a dual core device such as nRF5340 PDK.
   * :ref:`nrfxlib:nrf_rpc` - This standalone library enables inter-processor communication on Nordic Semiconductor devices.
 
-* Zephyr's :ref:`zephyr:smp_svr_sample` now works on nRF5340 PDK.
+* Zephyr's :zephyr:code-sample:`smp-svr` now works on nRF5340 PDK.
 
 Bluetooth Low Energy
 --------------------
@@ -239,7 +239,7 @@ nRF Desktop
 
   * :ref:`Serial recovery DFU though USB <nrf_desktop_bootloader_serial_dfu>`
   * :ref:`Background DFU <nrf_desktop_bootloader_background_dfu>` through :ref:`nrf_desktop_smp`
-  * Background DFU with secondary slot on the :ref:`external flash <nrf_desktop_flash_memory_layout>`
+  * Background DFU with secondary slot on the :ref:`external flash <nrf_desktop_memory_layout>`
 
 * Dongle updates:
 
@@ -482,7 +482,7 @@ Build system
   * Added the ``ncs_add_partition_manager_config`` function that allows out-of-tree users to specify partition manager configuration files.
   * Added a warning if no static partition manager configuration is provided when one image (or more) is not built from source in a multi-image build.
 
-* Enabled choosing a build strategy for Zephyr's :ref:`zephyr:bluetooth-hci-rpmsg-sample` sample when it is built as a child image.
+* Enabled choosing a build strategy for Zephyr's :ref:`zephyr:bluetooth-hci-ipc-sample` sample when it is built as a child image.
   See :ref:`ug_multi_image` for details.
 * Improved multi-core builds by disassociating domain names from board names.
 * Bugfixes:

@@ -26,15 +26,26 @@ endmacro()
 # Load static configuration if found.
 # Try user defined file first, then file found in configuration directory,
 # finally file from board directory.
+if(SYSBUILD)
+  zephyr_get(PM_STATIC_YML_FILE SYSBUILD GLOBAL)
+endif()
+
 if(DEFINED PM_STATIC_YML_FILE)
   string(CONFIGURE "${PM_STATIC_YML_FILE}" user_def_pm_static)
 endif()
 
-ncs_file(CONF_FILES ${APPLICATION_CONFIG_DIR}
-         PM conf_dir_pm_static
-         DOMAIN ${DOMAIN}
-         BUILD ${CONF_FILE_BUILD_TYPE}
-)
+zephyr_get(COMMON_CHILD_IMAGE_CONFIG_DIR)
+string(CONFIGURE "${COMMON_CHILD_IMAGE_CONFIG_DIR}" COMMON_CHILD_IMAGE_CONFIG_DIR)
+foreach(config_dir ${APPLICATION_CONFIG_DIR} ${COMMON_CHILD_IMAGE_CONFIG_DIR})
+  ncs_file(CONF_FILES ${config_dir}
+           PM conf_dir_pm_static
+           DOMAIN ${DOMAIN}
+           BUILD ${CONF_FILE_BUILD_TYPE}
+  )
+  if(EXISTS ${conf_dir_pm_static})
+    break()
+  endif()
+endforeach()
 
 ncs_file(CONF_FILES ${BOARD_DIR}
          PM board_dir_pm_static
@@ -206,6 +217,14 @@ elseif (DEFINED CONFIG_SOC_NRF5340_CPUAPP)
   set(otp_size 764)  # 191 * 4
 endif()
 
+if (DEFINED CONFIG_SOC_SERIES_NRF54LX)
+  set(soc_nvs_controller rram_controller)
+  set(soc_nvs_controller_driver_kc CONFIG_SOC_FLASH_NRF_RRAM)
+else()
+  set(soc_nvs_controller flash_controller)
+  set(soc_nvs_controller_driver_kc CONFIG_SOC_FLASH_NRF)
+endif()
+
 add_region(
   NAME sram_primary
   SIZE ${CONFIG_PM_SRAM_SIZE}
@@ -229,8 +248,8 @@ add_region(
   SIZE ${flash_size}
   BASE ${CONFIG_FLASH_BASE_ADDRESS}
   PLACEMENT complex
-  DEVICE flash_controller
-  DEFAULT_DRIVER_KCONFIG CONFIG_SOC_FLASH_NRF
+  DEVICE ${soc_nvs_controller}
+  DEFAULT_DRIVER_KCONFIG ${soc_nvs_controller_driver_kc}
   )
 
 dt_chosen(ext_flash_dev PROPERTY nordic,pm-ext-flash)
@@ -484,6 +503,33 @@ if (CONFIG_SECURE_BOOT AND CONFIG_BOOTLOADER_MCUBOOT)
     TARGET partition_manager
     PROPERTY s1_TO_SECONDARY
     ${s1_offset}
+    )
+endif()
+
+# Calculate absolute address for the wi-fi firmware patch location.
+if (CONFIG_WIFI_NRF700X AND CONFIG_NRF_WIFI_PATCHES_EXT_FLASH_STORE)
+  if(DEFINED ext_flash_dev)
+    get_filename_component(qspi_node ${ext_flash_dev} DIRECTORY)
+  else()
+    dt_nodelabel(qspi_node NODELABEL "qspi")
+  endif()
+  if(DEFINED qspi_node)
+    dt_reg_addr(xip_addr PATH ${qspi_node} NAME qspi_mm)
+    if(NOT DEFINED xip_addr)
+      message(WARNING "\
+      Could not find memory mapped address for XIP. Generated update hex files will \
+      not have the correct base address. Hence they can not be programmed directly \
+      to the external flash")
+    endif()
+  else()
+    set(xip_addr 0)
+  endif()
+
+  math(EXPR wifi_fw_abs_addr "${xip_addr} + ${PM_NRF70_WIFI_FW_OFFSET}")
+  set_property(
+    TARGET partition_manager
+    PROPERTY nrf70_wifi_fw_XIP_ABS_ADDR
+    ${wifi_fw_abs_addr}
     )
 endif()
 

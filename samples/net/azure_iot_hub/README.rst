@@ -10,6 +10,9 @@ Azure IoT Hub
 The Azure IoT Hub sample shows the communication of an Internet-connected device with an `Azure IoT Hub`_ instance.
 This sample uses the :ref:`lib_azure_iot_hub` library to communicate with the IoT hub and the :ref:`lib_azure_fota` library to provide firmware over-the-air (FOTA) functionality.
 
+.. |wifi| replace:: Wi-Fi®
+
+.. include:: /includes/net_connection_manager.txt
 
 Requirements
 ************
@@ -56,7 +59,7 @@ See :ref:`lib_azure_fota` for more details on the content of the firmware inform
 
 .. note::
    This sample requires a file server instance that hosts the new firmware image.
-   The :ref:`lib_azure_fota` library does not require a specific host, but it has been tested using `Azure Blob Storage`_ that shares the same root certificate as the Azure IoT Hub instance.
+   The :ref:`lib_azure_fota` library does not require a specific host, but it has been tested using `Azure Blob Storage`_.
 
 Configuration
 *************
@@ -67,11 +70,14 @@ Setup
 =====
 
 For the sample to work as intended, you must set up and configure an Azure IoT Hub instance.
-See :ref:`configure_options_azure_iot` for information on the configuration options that you can use to create an Azure IoT Hub instance.
-Also, for a successful TLS connection to the Azure IoT Hub instance, the device needs to have certificates provisioned.
+See :ref:`prereq_connect_to_azure_iot_hub` for information on creating an Azure IoT Hub instance and :ref:`configure_options_azure_iot` for additional information on the configuration options that are available.
+Also, for a successful TLS connection to the Azure IoT Hub instance, the device needs to have credentials provisioned.
 If you want to test FOTA, ensure that also the required credentials for the file server are provisioned and the :kconfig:option:`CONFIG_AZURE_FOTA_SEC_TAG` Kconfig option is set accordingly.
-See :ref:`prereq_connect_to_azure_iot_hub` for information on provisioning the certificates.
+See :ref:`prereq_connect_to_azure_iot_hub` for information on provisioning the credentials.
 
+.. include:: /includes/wifi_credentials_shell.txt
+
+.. include:: /includes/wifi_credentials_static.txt
 
 .. _configure_options_azure_iot:
 
@@ -84,11 +90,11 @@ Check and configure the following library options that are used by the sample:
 * :kconfig:option:`CONFIG_AZURE_IOT_HUB_HOSTNAME` - Sets the Azure IoT Hub host name. If DPS is used, the sample assumes that the IoT hub host name is unknown, and the configuration is ignored. The configuration can also be omitted and the hostname provided at run time.
 
 If DPS is used, use the Kconfig fragment found in the :file:`overlay-dps.conf` file and change the desired configurations there.
-As an example, the following compiles with DPS for nRF9160DK:
+As an example, the following compiles with DPS for the nRF9160 DK:
 
 .. code-block:: console
 
-	west build -p -b nrf9160dk_nrf9160_ns -- -DOVERLAY_CONFIG=overlay-dps.conf
+	west build -p -b nrf9160dk/nrf9160/ns -- -DEXTRA_CONF_FILE=overlay-dps.conf
 
 * :kconfig:option:`CONFIG_AZURE_IOT_HUB_DPS` - Enables Azure IoT Hub DPS.
 * :kconfig:option:`CONFIG_AZURE_IOT_HUB_DPS_REG_ID` - Sets the Azure IoT Hub DPS registration ID. It can be provided at run time. By default, the sample uses the device ID as the registration ID and sets it at run time.

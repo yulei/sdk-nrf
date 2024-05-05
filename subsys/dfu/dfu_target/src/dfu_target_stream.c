@@ -219,16 +219,30 @@ int dfu_target_stream_done(bool successful)
 
 int dfu_target_stream_reset(void)
 {
-	int ret;
+	int err;
 
 	stream.buf_bytes = 0;
 	stream.bytes_written = 0;
 
+#ifdef CONFIG_DFU_TARGET_STREAM_SAVE_PROGRESS
+	err = settings_delete(current_name_key);
+	if (err != 0) {
+		LOG_ERR("settings_delete error %d", err);
+	}
+#endif
+
+	/* No flash device specified, nothing to erase. */
+	if (stream.fdev == NULL) {
+		current_id = NULL;
+		return 0;
+	}
+
 	/* Erase just the first page. Stream write will take care of erasing remaining pages
 	 * on a next buffered_write round
 	 */
-	ret = stream_flash_erase_page(&stream, stream.offset);
+	err = stream_flash_erase_page(&stream, stream.offset);
 
 	current_id = NULL;
-	return ret;
+
+	return err;
 }

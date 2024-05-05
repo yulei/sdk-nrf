@@ -33,14 +33,9 @@ LOG_MODULE_REGISTER(nrf_provisioning_coap, CONFIG_NRF_PROVISIONING_LOG_LEVEL);
 
 #define AUTH_MVER "mver=%s"
 #define AUTH_CVER "cver=%s"
-#define AUTH_PATH "p/auth"
 #define AUTH_PATH_JWT "p/auth-jwt"
 
-#if defined(CONFIG_NRF_PROVISIONING_ATTESTTOKEN)
-#define AUTH_API_TEMPLATE (AUTH_PATH "?" AUTH_MVER "&" AUTH_CVER)
-#else
 #define AUTH_API_TEMPLATE (AUTH_PATH_JWT "?" AUTH_MVER "&" AUTH_CVER)
-#endif
 
 #define CMDS_PATH "p/cmd"
 #define CMDS_AFTER "after=%s"
@@ -75,6 +70,7 @@ int nrf_provisioning_coap_init(struct nrf_provisioning_mm_change *mmode)
 	}
 
 	LOG_INF("Init CoAP client");
+	client.fd = -1;
 	ret = coap_client_init(&client, NULL);
 	if (ret) {
 		LOG_ERR("Failed to initialize CoAP client, error: %d", ret);
@@ -138,7 +134,7 @@ static int dtls_setup(int fd)
 	}
 
 	/* Enable connection ID */
-	uint32_t dtls_cid = TLS_DTLS_CID_ENABLED;
+	uint32_t dtls_cid = TLS_DTLS_CID_SUPPORTED;
 
 	err = zsock_setsockopt(fd, SOL_TLS, TLS_DTLS_CID, &dtls_cid, sizeof(dtls_cid));
 	if (err) {
@@ -167,6 +163,7 @@ static int socket_connect(int *const fd)
 	hints.ai_family = AF_UNSPEC;
 #endif /* defined(CONFIG_NET_IPV6) && defined(CONFIG_NET_IPV4) */
 
+	LOG_DBG("CoAP host: %s", COAP_HOST);
 	hints.ai_socktype = SOCK_DGRAM;
 	st = zsock_getaddrinfo(COAP_HOST, PEER_PORT, &hints, &address);
 	LOG_DBG("getaddrinfo status: %d", st);
@@ -228,11 +225,13 @@ static int socket_close(int *const fd)
 	int ret;
 
 	if (*fd > -1) {
-		ret = zsock_close(*fd);
+		int temp = *fd;
+
+		*fd = client.fd = -1;
+		ret = zsock_close(temp);
 		if (ret) {
 			LOG_WRN("Failed to close socket, error: %d", errno);
 		}
-		*fd = -1;
 	}
 
 	return 0;
@@ -307,7 +306,7 @@ static int send_coap_request(struct coap_client *client, uint8_t method, const c
 		client_request.len = len;
 	}
 
-	while (coap_client_req(client, coap_ctx->connect_socket, NULL, &client_request, -1) ==
+	while (coap_client_req(client, coap_ctx->connect_socket, NULL, &client_request, NULL) ==
 	       -EAGAIN) {
 		if (retries > RETRY_AMOUNT) {
 			break;
@@ -325,13 +324,7 @@ static int max_token_len(void)
 {
 	int token_len = 0;
 
-#if defined(CONFIG_NRF_PROVISIONING_AT_ATTESTTOKEN_MAX_LEN)
-	token_len = MAX(token_len, CONFIG_NRF_PROVISIONING_AT_ATTESTTOKEN_MAX_LEN);
-#endif
-
-#if defined(CONFIG_MODEM_JWT_MAX_LEN)
 	token_len = MAX(token_len, CONFIG_MODEM_JWT_MAX_LEN);
-#endif
 
 	return token_len;
 }
@@ -357,26 +350,11 @@ static int generate_auth_token(char **auth_token)
 	memset(*auth_token, 0x0, tok_len);
 	tok_ptr = *auth_token;
 
-	if (IS_ENABLED(CONFIG_NRF_PROVISIONING_ATTESTTOKEN)) {
-		ret = nrf_provisioning_at_attest_token_get(tok_ptr, tok_len);
+	ret = nrf_provisioning_jwt_generate(0, tok_ptr, tok_len + 1);
 
-		if (ret != 0) {
-			LOG_ERR("Failed to generate attestation token, error: %d", ret);
-			if (IS_ENABLED(CONFIG_NRF_PROVISIONING_JWT)) {
-				goto a_alt_tok;
-			}
-			goto fail;
-		}
-	}
-
-a_alt_tok:
-	if (IS_ENABLED(CONFIG_NRF_PROVISIONING_JWT)) {
-		ret = nrf_provisioning_jwt_generate(0, tok_ptr, tok_len + 1);
-
-		if (ret < 0) {
-			LOG_ERR("Failed to generate JWT, error: %d", ret);
-			goto fail;
-		}
+	if (ret < 0) {
+		LOG_ERR("Failed to generate JWT, error: %d", ret);
+		goto fail;
 	}
 
 	return 0;

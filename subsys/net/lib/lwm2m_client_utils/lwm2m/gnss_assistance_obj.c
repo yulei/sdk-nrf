@@ -199,6 +199,12 @@ void gnss_assistance_prepare_download(void)
 	request_ongoing = true;
 }
 
+void gnss_assistance_download_cancel(void)
+{
+	bytes_downloaded = 0;
+	request_ongoing = false;
+}
+
 bool location_assist_gnss_is_busy(void)
 {
 	return request_ongoing;
@@ -396,4 +402,4 @@ static int lwm2m_gnss_assist_init(void)
 	return 0;
 }
 
-SYS_INIT(lwm2m_gnss_assist_init, APPLICATION, CONFIG_KERNEL_INIT_PRIORITY_DEFAULT);
+LWM2M_OBJ_INIT(lwm2m_gnss_assist_init);

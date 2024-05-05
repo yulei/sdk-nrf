@@ -34,10 +34,10 @@ static int status_decode(struct bt_mesh_light_hsl_cli *cli,
 	return 0;
 }
 
-static int handle_hsl_status(struct bt_mesh_model *model, struct bt_mesh_msg_ctx *ctx,
+static int handle_hsl_status(const struct bt_mesh_model *model, struct bt_mesh_msg_ctx *ctx,
 			     struct net_buf_simple *buf)
 {
-	struct bt_mesh_light_hsl_cli *cli = model->user_data;
+	struct bt_mesh_light_hsl_cli *cli = model->rt->user_data;
 	struct bt_mesh_light_hsl_status status;
 	int err;
 
@@ -54,10 +54,10 @@ static int handle_hsl_status(struct bt_mesh_model *model, struct bt_mesh_msg_ctx
 	return 0;
 }
 
-static int handle_hsl_target_status(struct bt_mesh_model *model, struct bt_mesh_msg_ctx *ctx,
+static int handle_hsl_target_status(const struct bt_mesh_model *model, struct bt_mesh_msg_ctx *ctx,
 				    struct net_buf_simple *buf)
 {
-	struct bt_mesh_light_hsl_cli *cli = model->user_data;
+	struct bt_mesh_light_hsl_cli *cli = model->rt->user_data;
 	struct bt_mesh_light_hsl_status status;
 	int err;
 
@@ -74,7 +74,7 @@ static int handle_hsl_target_status(struct bt_mesh_model *model, struct bt_mesh_
 	return 0;
 }
 
-static int handle_default_status(struct bt_mesh_model *model, struct bt_mesh_msg_ctx *ctx,
+static int handle_default_status(const struct bt_mesh_model *model, struct bt_mesh_msg_ctx *ctx,
 				 struct net_buf_simple *buf)
 {
 	if (buf->len != BT_MESH_LIGHT_HSL_MSG_MINLEN_STATUS &&
@@ -82,7 +82,7 @@ static int handle_default_status(struct bt_mesh_model *model, struct bt_mesh_msg
 		return -EMSGSIZE;
 	}
 
-	struct bt_mesh_light_hsl_cli *cli = model->user_data;
+	struct bt_mesh_light_hsl_cli *cli = model->rt->user_data;
 	struct bt_mesh_light_hsl status;
 	struct bt_mesh_light_hsl *rsp;
 
@@ -101,10 +101,10 @@ static int handle_default_status(struct bt_mesh_model *model, struct bt_mesh_msg
 	return 0;
 }
 
-static int handle_range_status(struct bt_mesh_model *model, struct bt_mesh_msg_ctx *ctx,
+static int handle_range_status(const struct bt_mesh_model *model, struct bt_mesh_msg_ctx *ctx,
 			       struct net_buf_simple *buf)
 {
-	struct bt_mesh_light_hsl_cli *cli = model->user_data;
+	struct bt_mesh_light_hsl_cli *cli = model->rt->user_data;
 	struct bt_mesh_light_hsl_range_status status;
 	struct bt_mesh_light_hsl_range_status *rsp;
 
@@ -124,10 +124,10 @@ static int handle_range_status(struct bt_mesh_model *model, struct bt_mesh_msg_c
 	return 0;
 }
 
-static int handle_hue_status(struct bt_mesh_model *model, struct bt_mesh_msg_ctx *ctx,
+static int handle_hue_status(const struct bt_mesh_model *model, struct bt_mesh_msg_ctx *ctx,
 			     struct net_buf_simple *buf)
 {
-	struct bt_mesh_light_hsl_cli *cli = model->user_data;
+	struct bt_mesh_light_hsl_cli *cli = model->rt->user_data;
 	struct bt_mesh_light_hue_status status;
 	struct bt_mesh_light_hue_status *rsp;
 
@@ -159,10 +159,10 @@ static int handle_hue_status(struct bt_mesh_model *model, struct bt_mesh_msg_ctx
 	return 0;
 }
 
-static int handle_saturation_status(struct bt_mesh_model *model, struct bt_mesh_msg_ctx *ctx,
+static int handle_saturation_status(const struct bt_mesh_model *model, struct bt_mesh_msg_ctx *ctx,
 				    struct net_buf_simple *buf)
 {
-	struct bt_mesh_light_hsl_cli *cli = model->user_data;
+	struct bt_mesh_light_hsl_cli *cli = model->rt->user_data;
 	struct bt_mesh_light_sat_status status;
 	struct bt_mesh_light_sat_status *rsp;
 
@@ -228,9 +228,9 @@ const struct bt_mesh_model_op _bt_mesh_light_hsl_cli_op[] = {
 	BT_MESH_MODEL_OP_END,
 };
 
-static int bt_mesh_light_hsl_cli_init(struct bt_mesh_model *model)
+static int bt_mesh_light_hsl_cli_init(const struct bt_mesh_model *model)
 {
-	struct bt_mesh_light_hsl_cli *cli = model->user_data;
+	struct bt_mesh_light_hsl_cli *cli = model->rt->user_data;
 
 	cli->model = model;
 	cli->pub.msg = &cli->buf;
@@ -241,9 +241,9 @@ static int bt_mesh_light_hsl_cli_init(struct bt_mesh_model *model)
 	return 0;
 }
 
-static void bt_mesh_light_hsl_cli_reset(struct bt_mesh_model *model)
+static void bt_mesh_light_hsl_cli_reset(const struct bt_mesh_model *model)
 {
-	struct bt_mesh_light_hsl_cli *cli = model->user_data;
+	struct bt_mesh_light_hsl_cli *cli = model->rt->user_data;
 
 	net_buf_simple_reset(cli->pub.msg);
 	bt_mesh_msg_ack_ctx_reset(&cli->ack_ctx);

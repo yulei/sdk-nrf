@@ -26,7 +26,7 @@ extern "C" {
 #include <zephyr/types.h>
 #include <zephyr/kernel.h>
 #include <zephyr/sys/util_macro.h>
-#include <zephyr/toolchain/common.h>
+#include <zephyr/toolchain.h>
 
 /** Max size of AT command response is 2100 bytes. */
 #define SLM_AT_CMD_RESPONSE_MAX_LEN 2100
@@ -193,11 +193,10 @@ static inline void slm_monitor_resume(struct slm_monitor_entry *mon)
 	mon->paused = MON_ACTIVE;
 }
 
-
-/** @} */
-
 #ifdef __cplusplus
 }
 #endif
+
+/** @} */
 
 #endif /* MODEM_SLM_H_ */

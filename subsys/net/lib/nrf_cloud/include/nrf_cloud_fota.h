@@ -21,6 +21,7 @@ enum nrf_cloud_fota_evt_id {
 	NRF_CLOUD_FOTA_EVT_DONE,
 	NRF_CLOUD_FOTA_EVT_ERROR,
 	NRF_CLOUD_FOTA_EVT_ERASE_PENDING,
+	NRF_CLOUD_FOTA_EVT_ERASE_TIMEOUT,
 	NRF_CLOUD_FOTA_EVT_ERASE_DONE,
 	NRF_CLOUD_FOTA_EVT_DL_PROGRESS,
 	NRF_CLOUD_FOTA_EVT_BLE_JOB_RCVD,
@@ -211,6 +212,25 @@ int nrf_cloud_fota_ble_update_check(const bt_addr_t * const ble_id);
 int nrf_cloud_fota_ble_job_update(
 	const struct nrf_cloud_fota_ble_job * const ble_job,
 	const enum nrf_cloud_fota_status status);
+
+/** @brief Initialize FOTA settings handling. Saved FOTA job data will
+ * be loaded into the provided structure.
+ *
+ *  @param job Pointer to FOTA job settings structure.
+ *
+ *  @retval 0 If successful.
+ *           Otherwise, a (negative) error code is returned.
+ */
+int nrf_cloud_fota_settings_load(struct nrf_cloud_settings_fota_job *job);
+
+/** @brief Save FOTA job info.
+ *
+ *  @param job Pointer to FOTA job settings structure.
+ *
+ *  @retval 0 If successful.
+ *           Otherwise, a (negative) error code is returned.
+ */
+int nrf_cloud_fota_settings_save(struct nrf_cloud_settings_fota_job *job);
 
 #ifdef __cplusplus
 }

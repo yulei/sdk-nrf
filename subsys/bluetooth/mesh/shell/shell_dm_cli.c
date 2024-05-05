@@ -13,7 +13,7 @@
 #include "mesh/access.h"
 #include "shell_utils.h"
 
-static struct bt_mesh_model *mod;
+static const struct bt_mesh_model *mod;
 
 static int cmd_cfg(const struct shell *shell, size_t argc, char *argv[])
 {
@@ -40,7 +40,7 @@ static int cmd_cfg(const struct shell *shell, size_t argc, char *argv[])
 		return -ENODEV;
 	}
 
-	struct bt_mesh_dm_cli *cli = mod->user_data;
+	struct bt_mesh_dm_cli *cli = mod->rt->user_data;
 	struct bt_mesh_dm_cli_cfg_status rsp;
 
 	err = bt_mesh_dm_cli_config(cli, NULL, (argc == 1) ? NULL : &set, &rsp);
@@ -120,7 +120,7 @@ static int cmd_dm_start(const struct shell *shell, size_t argc, char *argv[])
 		return -ENODEV;
 	}
 
-	struct bt_mesh_dm_cli *cli = mod->user_data;
+	struct bt_mesh_dm_cli *cli = mod->rt->user_data;
 	struct bt_mesh_dm_cli_results rsp;
 
 	err = bt_mesh_dm_cli_measurement_start(cli, NULL, &set, &rsp);
@@ -147,7 +147,7 @@ static int cmd_result_get(const struct shell *shell, size_t argc, char *argv[])
 		return -ENODEV;
 	}
 
-	struct bt_mesh_dm_cli *cli = mod->user_data;
+	struct bt_mesh_dm_cli *cli = mod->rt->user_data;
 	struct bt_mesh_dm_cli_results rsp;
 
 	err = bt_mesh_dm_cli_results_get(cli, NULL, count, &rsp);

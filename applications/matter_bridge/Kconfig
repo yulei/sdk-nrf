@@ -17,6 +17,18 @@ config BRIDGE_HUMIDITY_SENSOR_BRIDGED_DEVICE
 	bool "Support for Humidity Sensor bridged device"
 	default y
 
+choice BRIDGE_SWITCH_BRIDGED_DEVICE
+	prompt "Bridged device switch implementation"
+	default BRIDGE_GENERIC_SWITCH_BRIDGED_DEVICE
+
+config BRIDGE_GENERIC_SWITCH_BRIDGED_DEVICE
+	bool "Support for Generic Switch bridged device"
+
+config BRIDGE_ONOFF_LIGHT_SWITCH_BRIDGED_DEVICE
+	bool "Support for OnOff Light Switch bridged device"
+
+endchoice
+
 choice BRIDGED_DEVICE_IMPLEMENTATION
 	prompt "Bridged Device implementation"
 	default BRIDGED_DEVICE_SIMULATED
@@ -35,6 +47,28 @@ choice BRIDGED_DEVICE_IMPLEMENTATION
 		  over Bluetooth LE.
 
 endchoice
+
+if BRIDGED_DEVICE_SIMULATED
+
+choice BRIDGED_DEVICE_SIMULATED_ONOFF_IMPLEMENTATION
+	prompt "Simulated bridged onoff device implementation"
+	default BRIDGED_DEVICE_SIMULATED_ONOFF_SHELL
+
+	config BRIDGED_DEVICE_SIMULATED_ONOFF_AUTOMATIC
+		bool "Automatically simulated bridged onoff device"
+		help
+		  Enables using simulated bridged onoff device that
+		  automatically changes its state periodically.
+
+	config BRIDGED_DEVICE_SIMULATED_ONOFF_SHELL
+		bool "Shell controlled simulated bridged onoff device"
+		help
+		  Enables using simulated bridged onoff device that is
+		  controlled by shell commands.
+
+endchoice
+
+endif
 
 if BRIDGED_DEVICE_BT
 
@@ -64,6 +98,30 @@ config BT_GATT_CLIENT
 config BT_GATT_DM
 	default y
 
+config BT_EXT_ADV
+	default y
+
+config BT_SMP
+	default y
+
+if BT_SMP
+
+config BT_SETTINGS
+	default y
+
+# Configure how many Bluetooth LE devices will be paired with Matter bridge. Assuming it will be only bridged devices, it should be set to BT_MAX_CONN - 1.
+config BT_MAX_PAIRED
+	default 2
+
+# Use two Bluetooth LE identities. The first one is used by the peripheral for Matter service advertising purposes, and the other is used by the Matter bridge central.
+config BT_ID_MAX
+	default 2
+
+config BT_EXT_ADV_LEGACY_SUPPORT
+	default y
+
+endif
+
 config BRIDGE_BLE_DEVICE_POLLING_INTERVAL
 	int "BLE humidity measurement readout polling interval in ms"
 	default 3000
@@ -73,11 +131,11 @@ endif
 if BRIDGE_TEMPERATURE_SENSOR_BRIDGED_DEVICE
 
 config BRIDGE_TEMPERATURE_SENSOR_MIN_MEASURED_VALUE
-	int "Default minimum measured value allowed by the bridged temperature sensor device."
+	int "Default minimum measured value allowed by the bridged temperature sensor device"
 	default -20
 
 config BRIDGE_TEMPERATURE_SENSOR_MAX_MEASURED_VALUE
-	int "Default maximum measured value allowed by the bridged temperature sensor device."
+	int "Default maximum measured value allowed by the bridged temperature sensor device"
 	default 60
 
 endif
@@ -85,19 +143,25 @@ endif
 if BRIDGE_HUMIDITY_SENSOR_BRIDGED_DEVICE
 
 config BRIDGE_HUMIDITY_SENSOR_MIN_MEASURED_VALUE
-	int "Default minimum measured value allowed by the bridged humidity sensor device."
+	int "Default minimum measured value allowed by the bridged humidity sensor device"
 	default 0
 
 config BRIDGE_HUMIDITY_SENSOR_MAX_MEASURED_VALUE
-	int "Default maximum measured value allowed by the bridged humidity sensor device."
+	int "Default maximum measured value allowed by the bridged humidity sensor device"
 	default 100
 
 endif
 
-config EXPERIMENTAL
+# Enable Read Client functionality for all build configurations.
+config CHIP_ENABLE_READ_CLIENT
+	default y
+
+config NCS_SAMPLE_MATTER_PERSISTENT_STORAGE
 	default y
 
 source "${ZEPHYR_CONNECTEDHOMEIP_MODULE_DIR}/config/nrfconnect/chip-module/Kconfig.features"
 source "${ZEPHYR_CONNECTEDHOMEIP_MODULE_DIR}/config/nrfconnect/chip-module/Kconfig.defaults"
-source "${ZEPHYR_BASE}/../nrf/samples/matter/common/src/bridge/Kconfig"
+source "${ZEPHYR_NRF_MODULE_DIR}/samples/matter/common/src/persistent_storage/Kconfig"
+source "${ZEPHYR_NRF_MODULE_DIR}/samples/matter/common/src/bridge/Kconfig"
+source "${ZEPHYR_NRF_MODULE_DIR}/samples/matter/common/src/Kconfig"
 source "Kconfig.zephyr"

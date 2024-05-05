@@ -256,9 +256,6 @@ static int cert_provision(void)
  */
 static int modem_configure_and_connect(void)
 {
-	BUILD_ASSERT(!IS_ENABLED(CONFIG_LTE_AUTO_INIT_AND_CONNECT),
-		     "This sample does not support auto init and connect");
-
 	int err;
 
 #if defined(CONFIG_USE_HTTPS)
@@ -271,7 +268,7 @@ static int modem_configure_and_connect(void)
 #endif /* CONFIG_USE_HTTPS */
 
 	printk("LTE Link Connecting ...\n");
-	err = lte_lc_init_and_connect_async(lte_lc_handler);
+	err = lte_lc_connect_async(lte_lc_handler);
 	if (err) {
 		printk("LTE link could not be established.");
 		return err;
@@ -296,7 +293,7 @@ static void fota_work_cb(struct k_work *work)
 		break;
 	case UPDATE_APPLY:
 #if !defined(CONFIG_LWM2M_CARRIER)
-		lte_lc_deinit();
+		lte_lc_power_off();
 #endif
 		sys_reboot(SYS_REBOOT_WARM);
 		break;
@@ -382,24 +379,6 @@ static int update_download(void)
 }
 
 #if defined(CONFIG_LWM2M_CARRIER)
-NRF_MODEM_LIB_ON_INIT(carrier_on_modem_lib_init, on_modem_lib_init, NULL);
-
-static void on_modem_lib_init(int ret, void *ctx)
-{
-	ARG_UNUSED(ctx);
-
-	if (ret) {
-		/* Modem initialization failed. */
-		return;
-	}
-
-	/* LTE LC is uninitialized on every modem shutdown. */
-	ret = lte_lc_init();
-	if (ret != 0) {
-		printk("failed to initialize LTE connection");
-		return;
-	}
-}
 
 static void print_err(const lwm2m_carrier_event_t *evt)
 {
@@ -494,6 +473,12 @@ int lwm2m_carrier_event_handler(const lwm2m_carrier_event_t *event)
 	case LWM2M_CARRIER_EVENT_REBOOT:
 		printk("LWM2M_CARRIER_EVENT_REBOOT\n");
 		break;
+	case LWM2M_CARRIER_EVENT_MODEM_DOMAIN:
+		printk("LWM2M_CARRIER_EVENT_MODEM_DOMAIN\n");
+		break;
+	case LWM2M_CARRIER_EVENT_APP_DATA:
+		printk("LWM2M_CARRIER_EVENT_APP_DATA\n");
+		break;
 	case LWM2M_CARRIER_EVENT_MODEM_INIT:
 		printk("LWM2M_CARRIER_EVENT_MODEM_INIT\n");
 		err = nrf_modem_lib_init();
@@ -519,8 +504,12 @@ int main(void)
 	printk("HTTP application update sample started\n");
 	printk("Using version %d\n", CONFIG_APPLICATION_VERSION);
 
-	/* This is needed so that MCUBoot won't revert the update */
+#if !defined(CONFIG_LWM2M_CARRIER)
+	/* This is needed so that MCUBoot won't revert the update.
+	 * If the LwM2M Carrier library is enabled, allow the library to confirm the image.
+	 */
 	boot_write_img_confirmed();
+#endif
 
 	err = nrf_modem_lib_init();
 	if (err < 0) {

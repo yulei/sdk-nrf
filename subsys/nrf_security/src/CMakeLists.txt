@@ -9,11 +9,14 @@
 #
 # Can be executed by both the NCS and TF-M build systems.
 #
-# For TF-M the nrf_security/tfm/CMakeLists.txt file will execute this file.
-# For NCS  the nrf_security/CMakeLists.txt     file will execute this file.
+# The variable BUILD_INSIDE_TFM can be used to distinguish between being
+# within the TF-M build system or the NCS build system.
+#
+# For TF-M the nrf_security/tfm/CMakeLists.txt file will execute this file. BUILD_INSIDE_TFM=True
+# For NCS  the nrf_security/CMakeLists.txt     file will execute this file. BUILD_INSIDE_TFM=False
 #
 
-set(OBERON_PSA_PATH ${ZEPHYR_NRF_MODULE_DIR}/ext/oberon/psa)
+set(OBERON_PSA_PATH ${ZEPHYR_OBERON_PSA_CRYPTO_MODULE_DIR})
 
 # Library for mbedcrypto includes and configurations
 add_library(mbedcrypto_common INTERFACE)
@@ -22,11 +25,19 @@ add_library(mbedcrypto_common INTERFACE)
 target_compile_definitions(mbedcrypto_common
   INTERFACE
     -DMBEDTLS_CONFIG_FILE="${CONFIG_MBEDTLS_CFG_FILE}"
-    -DMBEDTLS_USER_CONFIG_FILE="${CONFIG_MBEDTLS_USER_CONFIG_FILE}"
+    -DMBEDTLS_PSA_CRYPTO_CONFIG_FILE="${CONFIG_MBEDTLS_PSA_CRYPTO_CONFIG_FILE}"
+    -DMBEDTLS_PSA_CRYPTO_USER_CONFIG_FILE="${CONFIG_MBEDTLS_PSA_CRYPTO_USER_CONFIG_FILE}"
 )
 
-if (CONFIG_MBEDTLS_PSA_CRYPTO_SPM)
-  # Building as part of the TF-M build system.
+# Add the user config only if it is set
+if(NOT ${CONFIG_MBEDTLS_USER_CONFIG_FILE} STREQUAL "nrf-config-user-empty.h" )
+  target_compile_definitions(mbedcrypto_common
+    INTERFACE
+      -DMBEDTLS_USER_CONFIG_FILE="${CONFIG_MBEDTLS_USER_CONFIG_FILE}"
+  )
+endif()
+
+if(BUILD_INSIDE_TFM)
   # In order to support FPU in TF-M the following is documented by the TF-M
   # build system:
   #
@@ -48,6 +59,9 @@ set(generated_include_path ${CMAKE_CURRENT_BINARY_DIR}/include/generated)
 
 # Empty out previous versions of config-files
 file(REMOVE_RECURSE ${generated_include_path})
+
+# Generate PSA WANT configurations
+include(${NRF_SECURITY_ROOT}/cmake/psa_crypto_want_config.cmake)
 
 # Generate mbed TLS configurations
 if(CONFIG_MBEDTLS_LEGACY_CRYPTO_C OR NOT COMPILE_PSA_APIS)
@@ -178,6 +192,7 @@ if (CONFIG_MBEDTLS_X509_LIBRARY)
     x509_crl.c
     x509_crt.c
     x509_csr.c
+    x509write.c
     x509write_crt.c
     x509write_csr.c
   )
@@ -242,7 +257,7 @@ if (CONFIG_MBEDTLS_TLS_LIBRARY)
   )
 endif()
 
-if(CONFIG_PSA_NATIVE_ITS_BACKEND_ZEPHYR)
-  # Include EITS in Zephyr build
-  add_subdirectory(psa)
+if (NOT BUILD_INSIDE_TFM)
+  # Add zephyr-specific code
+  add_subdirectory(zephyr)
 endif()

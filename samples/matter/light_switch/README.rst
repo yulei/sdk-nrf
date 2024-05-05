@@ -43,8 +43,8 @@ IPv6 network support
 
 The development kits for this sample offer the following IPv6 network support for Matter:
 
-* Matter over Thread is supported for ``nrf52840dk_nrf52840``, ``nrf5340dk_nrf5340_cpuapp``, and ``nrf21540dk_nrf52840``.
-* Matter over Wi-Fi is supported for ``nrf5340dk_nrf5340_cpuapp`` with the ``nrf7002ek`` shield attached or for ``nrf7002dk_nrf5340_cpuapp``.
+* Matter over Thread is supported for ``nrf52840dk_nrf52840``, ``nrf5340dk_nrf5340_cpuapp``, ``nrf21540dk_nrf52840``, and ``nrf54l15pdk_nrf54l15``.
+* Matter over Wi-Fi is supported for ``nrf5340dk_nrf5340_cpuapp`` with the ``nrf7002ek`` shield attached or for ``nrf7002dk/nrf5340/cpuapp``.
 
 Overview
 ********
@@ -127,6 +127,10 @@ Device Firmware Upgrade support
     :start-after: matter_door_lock_sample_build_with_dfu_start
     :end-before: matter_door_lock_sample_build_with_dfu_end
 
+.. include:: ../template/README.rst
+    :start-after: matter_template_nrf54l15_build_with_dfu_start
+    :end-before: matter_template_nrf54l15_build_with_dfu_end
+
 Factory data support
 ====================
 
@@ -138,6 +142,10 @@ Factory data support
 
 User interface
 **************
+
+.. include:: ../template/README.rst
+   :start-after: matter_template_nrf54l15_0_3_0_interface_start
+   :end-before: matter_template_nrf54l15_0_3_0_interface_end
 
 .. include:: ../lock/README.rst
     :start-after: matter_door_lock_sample_led1_start
@@ -155,32 +163,12 @@ All LEDs:
    :end-before: matter_door_lock_sample_button1_end
 
 Button 2:
-   * On nRF52840 DK, nRF5340 DK and nRF21540 DK:
+   * Controls the light on the bound lighting device.
+     Depending on how long you press the button:
 
-     * Controls the light on the bound lighting device.
-       Depending on how long you press the button:
-
-       * If pressed for less than 0.5 seconds, it changes the light state to the opposite one on the bound lighting device (:ref:`light bulb <matter_light_bulb_sample>`).
-       * If pressed for more than 0.5 seconds, it changes the brightness of the light on the bound lighting bulb device (:ref:`light bulb <matter_light_bulb_sample>`).
-         The brightness is changing from 0% to 100% with 1% increments every 300 milliseconds as long as **Button 2** is pressed.
-
-   * On nRF7002 DK:
-
-     * If the device is not commissioned to a Matter network, it starts the NFC tag emulation, enables Bluetooth LE advertising for the predefined period of time (15 minutes by default), and makes the device discoverable over Bluetooth LE.
-       This button is used during the :ref:`commissioning procedure <matter_light_switch_sample_remote_control_commissioning>`.
-     * If the device is commissioned to a Matter network, it controls the light on the bound lighting device.
-       Depending on how long you press the button:
-
-       * If pressed for less than 0.5 seconds, it changes the light state to the opposite one on the bound lighting device (:ref:`light bulb <matter_light_bulb_sample>`).
-       * If pressed for more than 0.5 seconds, it changes the brightness of the light on the bound lighting bulb device (:ref:`light bulb <matter_light_bulb_sample>`).
-         The brightness is changing from 0% to 100% with 1% increments every 300 milliseconds as long as **Button 2** is pressed.
-
-Button 4:
-   * On nRF52840 DK, nRF5340 DK and nRF21540 DK:
-     Starts the NFC tag emulation, enables Bluetooth LE advertising for the predefined period of time (15 minutes by default), and makes the device discoverable over Bluetooth LE.
-     This button is used during the :ref:`commissioning procedure <matter_light_switch_sample_remote_control_commissioning>`.
-
-   * On nRF7002 DK: Not available.
+      * If pressed for less than 0.5 seconds, it changes the light state to the opposite one on the bound lighting device (:ref:`light bulb <matter_light_bulb_sample>`).
+      * If pressed for more than 0.5 seconds, it changes the brightness of the light on the bound lighting bulb device (:ref:`light bulb <matter_light_bulb_sample>`).
+        The brightness is changing from 0% to 100% with 1% increments every 300 milliseconds as long as **Button 2** is pressed.
 
 .. include:: ../lock/README.rst
     :start-after: matter_door_lock_sample_jlink_start
@@ -194,7 +182,7 @@ NFC port with antenna attached:
 Matter CLI commands
 ===================
 
-If you build the application using the ``debug`` or ``no_dfu`` build type, you can use a series of commands to control the light switch device.
+If you build the application using the ``debug`` build type, you can use a series of commands to control the light switch device.
 These commands can be sent to one device (unicast) or a group of devices (groupcast).
 
 Unicast commands
@@ -273,38 +261,8 @@ See `Configuration`_ for information about building the sample with the DFU supp
 Selecting a build type
 ======================
 
-Before you start testing the application, you can select one of the `Matter light switch build types`_, depending on your building method.
-
-Selecting a build type in |VSC|
--------------------------------
-
-.. include:: /config_and_build/modifying.rst
-   :start-after: build_types_selection_vsc_start
-   :end-before: build_types_selection_vsc_end
-
-Selecting a build type from command line
-----------------------------------------
-
-.. include:: /config_and_build/modifying.rst
-   :start-after: build_types_selection_cmd_start
-   :end-before: For example, you can replace the
-
-For example, you can replace the *selected_build_type* variable to build the ``release`` firmware for ``nrf52840dk_nrf52840`` by running the following command in the project directory:
-
-.. parsed-literal::
-   :class: highlight
-
-   west build -b nrf52840dk_nrf52840 -d build_nrf52840dk_nrf52840 -- -DCONF_FILE=prj_release.conf
-
-The ``build_nrf52840dk_nrf52840`` parameter specifies the output directory for the build files.
-
-.. note::
-   If the selected board does not support the selected build type, the build is interrupted.
-   For example, if the ``shell`` build type is not supported by the selected board, the following notification appears:
-
-   .. code-block:: console
-
-      File not found: ./ncs/nrf/samples/matter/light_switch/configuration/nrf52840dk_nrf52840/prj_shell.conf
+Before you start testing the application, you can select one of the `Matter light switch build types`_.
+See :ref:`cmake_options` for information about how to select a build type.
 
 Testing
 *******
@@ -331,7 +289,7 @@ After building this and the :ref:`Matter Light Bulb <matter_light_bulb_sample>` 
 1. |connect_kit|
 #. |connect_terminal_ANSI|
 #. If devices were not erased during the programming, press and hold **Button 1** on each device until the factory reset takes place.
-#. On each device, press **Button 4** to start the Bluetooth LE advertising.
+#. On each device, press **Button 1** to start the Bluetooth LE advertising.
 #. Commission devices to the Matter network.
    See `Commissioning the device`_ for more information.
    During the commissioning process, write down the values for the light switch node ID and the light bulb node ID (or IDs, if you are using more than one light bulb).
@@ -444,10 +402,7 @@ Commissioning the device
 
 Before starting the commissioning procedure, the device must be made discoverable over Bluetooth LE.
 By default, the device is not discoverable automatically upon startup.
-Press the following button to enable the Bluetooth LE advertising:
-
-* On nRF52840 DK, nRF5340 DK, and nRF21540 DK: Press **Button 4**.
-* On nRF7002 DK: Press **Button 2**.
+Press **Button 1** to enable the Bluetooth LE advertising.
 
 Onboarding information
 ----------------------

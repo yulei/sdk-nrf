@@ -12,6 +12,7 @@
 #include <zephyr/bluetooth/bluetooth.h>
 #include <zephyr/bluetooth/mesh.h>
 #include <zephyr/bluetooth/mesh/shell.h>
+#include <bluetooth/mesh/vnd/le_pair_resp.h>
 #include <bluetooth/mesh/dk_prov.h>
 #include <dk_buttons_and_leds.h>
 #include "smp_bt.h"
@@ -52,13 +53,13 @@ static void attention_blink(struct k_work *work)
 	}
 }
 
-static void attention_on(struct bt_mesh_model *mod)
+static void attention_on(const struct bt_mesh_model *mod)
 {
 	attention = true;
 	k_work_reschedule(&attention_blink_work, K_NO_WAIT);
 }
 
-static void attention_off(struct bt_mesh_model *mod)
+static void attention_off(const struct bt_mesh_model *mod)
 {
 	/* Will stop rescheduling blink timer */
 	attention = false;
@@ -81,12 +82,18 @@ static struct bt_mesh_model primary_models[] = {
 	BT_MESH_MODEL_DFD_SRV(&dfd_srv),
 };
 
+static struct bt_mesh_model primary_vnd_models[] = {
+#if CONFIG_BT_MESH_LE_PAIR_RESP
+	BT_MESH_MODEL_LE_PAIR_RESP,
+#endif
+};
+
 static struct bt_mesh_model secondary_models[] = {
 	BT_MESH_MODEL_DFU_SRV(&dfu_srv),
 };
 
 static struct bt_mesh_elem elements[] = {
-	BT_MESH_ELEM(1, primary_models, BT_MESH_MODEL_NONE),
+	BT_MESH_ELEM(1, primary_models, primary_vnd_models),
 	BT_MESH_ELEM(2, secondary_models, BT_MESH_MODEL_NONE),
 };
 
@@ -105,7 +112,11 @@ static void bt_ready(int err)
 
 	printk("Bluetooth initialized\n");
 
-	dk_leds_init();
+	err = dk_leds_init();
+	if (err) {
+		printk("Initializing LEDs failed (err %d)\n", err);
+		return;
+	}
 
 	err = bt_mesh_init(bt_mesh_dk_prov_init(), &comp);
 	if (err) {
@@ -122,7 +133,10 @@ static void bt_ready(int err)
 	printk("Mesh initialized\n");
 
 	/* Start advertising SMP BT service. */
-	smp_dfu_init();
+	err = smp_dfu_init();
+	if (err) {
+		printk("SMP initialization failed (err: %d)\n", err);
+	}
 
 	/* Confirm the image and mark it as applied after the mesh started. */
 	dfu_target_image_confirm();

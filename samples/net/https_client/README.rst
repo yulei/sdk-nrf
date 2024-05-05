@@ -9,7 +9,10 @@ HTTPS Client
 
 The HTTPS Client sample demonstrates a minimal implementation of HTTP communication.
 It shows how to set up a TLS session towards an HTTPS server and how to send an HTTP request.
-The sample connects to an LTE network using an nRF91 Series DK or to Wi-Fi using the nRF7002 DK through the connection manager API.
+
+.. |wifi| replace:: Wi-Fi®
+
+.. include:: /includes/net_connection_manager.txt
 
 Requirements
 ************
@@ -35,12 +38,13 @@ Obtaining a certificate
 
 The sample connects to ``www.example.com``, which requires an X.509 certificate.
 This certificate is provided in the :file:`samples/net/https_client/cert` folder.
+|hex_format|
 
 To connect to other servers, you might need to provision a different certificate.
 See :ref:`cert_dwload` for more information.
 
-Using Mbed TLS and TF-M
-***********************
+Using Mbed TLS and TF-M on nRF91 Series DKs
+*******************************************
 
 This sample supports using Mbed TLS and Trusted Firmware-M (TF-M).
 Instead of offloading the TLS sockets into the modem, you can use the Mbed TLS library from Zephyr.
@@ -48,6 +52,13 @@ Using the Zephyr Mbed TLS, you can still use the offloaded sockets.
 Mbed TLS offers more configuration options than using the offloaded TLS handling.
 
 When using TF-M and Mbed TLS with PSA crypto, all the crypto operations are run on the secure side on the device.
+
+Configuration
+*************
+
+.. include:: /includes/wifi_credentials_shell.txt
+
+.. include:: /includes/wifi_credentials_static.txt
 
 .. include:: /libraries/modem/nrf_modem_lib/nrf_modem_lib_trace.rst
    :start-after: modem_lib_sending_traces_UART_start
@@ -60,27 +71,29 @@ Building and running
 
 .. include:: /includes/build_and_run_ns.txt
 
-To build the sample with Mbed TLS and TF-M, add the following to your west build command:
+To build the sample with Mbed TLS and TF-M for the nRF91 Series DKs, add the following to your west build command:
 
 .. code-block:: none
 
-   -DOVERLAY_CONFIG=overlay-tfm_mbedtls.conf
+   -DEXTRA_CONF_FILE=overlay-tfm-nrf91.conf
 
 The default packet data network (PDN) configuration is dual stack, which will use an IPv6 address if available (and IPv4 if not).
 
-For testing IPv4 only, you might need to configure the packet data network settings, adding the following to your build command:
+On the nRF91 Series DKs, for testing IPv4 only, you might need to configure the packet data network settings, adding the following to your build command:
 
 .. code-block:: none
 
-   -DOVERLAY_CONFIG=overlay-pdn_ipv4.conf
+   -DEXTRA_CONF_FILE=overlay-pdn-nrf91-ipv4.conf
 
 Testing
 =======
 
 After programming the sample to your development kit, test it by performing the following steps:
 
-1. Connect the USB cable and power on or reset your DK.
-#. Open a terminal emulator and observe that the sample starts, provisions certificates, connects to the network and to example.com, and then sends an HTTP HEAD request.
+1. |connect_kit|
+#. Power on or reset the kit.
+#. |connect_terminal|
+#. Observe that the sample starts, provisions certificates, connects to the network and to example.com, and then sends an HTTP HEAD request.
 #. Observe that the HTTP HEAD request returns ``HTTP/1.1 200 OK``.
 
 Sample output
@@ -127,7 +140,7 @@ Output for the default configuration, where the carrier does support IPv6:
    Finished, closing socket.
    PDP context 0 deactivated
 
-Output where you override the default packet data network (PDN) configuration to IPv4 only, via the `overlay-pdn_ipv4.conf` overlay:
+Output where you override the default packet data network (PDN) configuration to IPv4 only, using the ``overlay-pdn-nrf91-ipv4.conf`` overlay:
 
 .. code-block:: console
 

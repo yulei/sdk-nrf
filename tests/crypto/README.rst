@@ -154,7 +154,7 @@ You can use the following configuration files to build the test in a specific se
 * :file:`overlay-multi.conf` uses a combination of hardware acceleration, using the Arm CryptoCell, and vanilla Mbed TLS and Oberon software implementations to support functionalities not supported by the CryptoCell.
   This setup uses hardware acceleration as much as possible.
 
-You can use one of the listed overlay configurations by adding the ``-- -DOVERLAY_CONFIG=<overlay_config_file>`` flag to your build. Also see :ref:`cmake_options` for instructions on how to add this option.
+You can use one of the listed overlay configurations by adding the ``-- -DEXTRA_CONF_FILE=<overlay_config_file>`` flag to your build. Also see :ref:`cmake_options` for instructions on how to add this option.
 
 .. _crypto_test_ztest_custom:
 
@@ -172,7 +172,9 @@ Testing
 =======
 
 1. Compile and program the application.
-#. Observe the result of the different test vectors in the log using :ref:`RTT Viewer <zephyr:nordic_segger>` or a terminal emulator.
+#. |connect_kit|
+#. |connect_terminal|
+#. Observe the result of the different test vectors in the terminal emulator log.
    The last line of the output indicates the test result::
 
       PROJECT EXECUTION SUCCESSFUL

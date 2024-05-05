@@ -131,6 +131,20 @@ static inline const struct lpuart_config *get_dev_config(const struct device *de
 	return dev->config;
 }
 
+#define GPIOTE_NODE(gpio_node) DT_PHANDLE(gpio_node, gpiote_instance)
+#define GPIOTE_INST_AND_COMMA(gpio_node) \
+	[DT_PROP(gpio_node, port)] = \
+		NRFX_GPIOTE_INSTANCE(DT_PROP(GPIOTE_NODE(gpio_node), instance)),
+
+static const nrfx_gpiote_t *get_gpiote(nrfx_gpiote_pin_t pin)
+{
+	static const nrfx_gpiote_t gpiote[GPIO_COUNT] = {
+		DT_FOREACH_STATUS_OKAY(nordic_nrf_gpio, GPIOTE_INST_AND_COMMA)
+	};
+
+	return &gpiote[pin >> 5];
+}
+
 /* Called when uart transfer is finished to indicate to the receiver that it
  * can be closed.
  */
@@ -159,7 +173,7 @@ static void req_pin_set(struct lpuart_data *data)
 
 	nrf_gpio_reconfigure(data->req_pin, &dir, &input, NULL, NULL, NULL);
 
-	nrfx_gpiote_trigger_disable(data->req_pin);
+	nrfx_gpiote_trigger_disable(get_gpiote(data->req_pin), data->req_pin);
 }
 
 /* Pin is reconfigured to input with pull up and low state detection. That leads
@@ -173,16 +187,14 @@ static void req_pin_arm(struct lpuart_data *data)
 	/* Add pull up before reconfiguring to input. */
 	nrf_gpio_reconfigure(data->req_pin, NULL, NULL, &pull, NULL, NULL);
 
-	nrfx_gpiote_trigger_enable(data->req_pin, true);
+	nrfx_gpiote_trigger_enable(get_gpiote(data->req_pin), data->req_pin, true);
 }
 
 static int req_pin_init(struct lpuart_data *data, nrfx_gpiote_pin_t pin)
 {
 	uint8_t ch;
 	nrfx_err_t err;
-	nrfx_gpiote_input_config_t input_config = {
-		.pull = NRF_GPIO_PIN_PULLDOWN
-	};
+	nrf_gpio_pin_pull_t pull_config = NRF_GPIO_PIN_PULLDOWN;
 	nrfx_gpiote_trigger_config_t trigger_config = {
 		.trigger = NRFX_GPIOTE_TRIGGER_HITOLO,
 		.p_in_channel = &ch
@@ -191,13 +203,18 @@ static int req_pin_init(struct lpuart_data *data, nrfx_gpiote_pin_t pin)
 		.handler = req_pin_handler,
 		.p_context = data
 	};
+	nrfx_gpiote_input_pin_config_t input_config = {
+		.p_pull_config = &pull_config,
+		.p_trigger_config = &trigger_config,
+		.p_handler_config = &handler_config
+	};
 
-	err = nrfx_gpiote_channel_alloc(&ch);
+	err = nrfx_gpiote_channel_alloc(get_gpiote(pin), &ch);
 	if (err != NRFX_SUCCESS) {
 		return -ENOMEM;
 	}
 
-	err = nrfx_gpiote_input_configure(pin, &input_config, &trigger_config, &handler_config);
+	err = nrfx_gpiote_input_configure(get_gpiote(pin), pin, &input_config);
 	if (err != NRFX_SUCCESS) {
 		return -EINVAL;
 	}
@@ -214,27 +231,30 @@ static int req_pin_init(struct lpuart_data *data, nrfx_gpiote_pin_t pin)
 
 static void rdy_pin_suspend(struct lpuart_data *data)
 {
-	nrfx_gpiote_trigger_disable(data->rdy_pin);
+	nrfx_gpiote_trigger_disable(get_gpiote(data->rdy_pin), data->rdy_pin);
 }
 
 
 static int rdy_pin_init(struct lpuart_data *data, nrfx_gpiote_pin_t pin)
 {
 	nrfx_err_t err;
-	nrfx_gpiote_input_config_t input_config = {
-		.pull = NRF_GPIO_PIN_NOPULL
-	};
+	nrf_gpio_pin_pull_t pull_config = NRF_GPIO_PIN_NOPULL;
 	nrfx_gpiote_handler_config_t handler_config = {
 		.handler = rdy_pin_handler,
 		.p_context = data
 	};
+	nrfx_gpiote_input_pin_config_t input_config = {
+		.p_pull_config = &pull_config,
+		.p_trigger_config = NULL,
+		.p_handler_config = &handler_config
+	};
 
-	err = nrfx_gpiote_channel_alloc(&data->rdy_ch);
+	err = nrfx_gpiote_channel_alloc(get_gpiote(pin), &data->rdy_ch);
 	if (err != NRFX_SUCCESS) {
 		return -ENOMEM;
 	}
 
-	err = nrfx_gpiote_input_configure(pin, &input_config, NULL, &handler_config);
+	err = nrfx_gpiote_input_configure(get_gpiote(pin), pin, &input_config);
 	if (err != NRFX_SUCCESS) {
 		LOG_ERR("err:%08x", err);
 		return -EINVAL;
@@ -253,11 +273,17 @@ static void rdy_pin_idle(struct lpuart_data *data)
 	nrfx_gpiote_trigger_config_t trigger_config = {
 		.trigger = NRFX_GPIOTE_TRIGGER_HIGH
 	};
+	nrfx_gpiote_input_pin_config_t input_config = {
+		.p_pull_config = NULL,
+		.p_trigger_config = &trigger_config,
+		.p_handler_config = NULL
+	};
+	const nrfx_gpiote_t *gpiote = get_gpiote(data->rdy_pin);
 
-	err = nrfx_gpiote_input_configure(data->rdy_pin, NULL, &trigger_config, NULL);
+	err = nrfx_gpiote_input_configure(gpiote, data->rdy_pin, &input_config);
 	__ASSERT(err == NRFX_SUCCESS, "Unexpected err: %08x/%d", err, err);
 
-	nrfx_gpiote_trigger_enable(data->rdy_pin, true);
+	nrfx_gpiote_trigger_enable(gpiote, data->rdy_pin, true);
 }
 
 /* Indicated to the transmitter that receiver is ready by pulling pin down for
@@ -273,17 +299,23 @@ static bool rdy_pin_blink(struct lpuart_data *data)
 		.trigger = NRFX_GPIOTE_TRIGGER_HITOLO,
 		.p_in_channel = &data->rdy_ch
 	};
+	nrfx_gpiote_input_pin_config_t input_config = {
+		.p_pull_config = NULL,
+		.p_trigger_config = &trigger_config,
+		.p_handler_config = NULL
+	};
 	const nrf_gpio_pin_dir_t dir_in = NRF_GPIO_PIN_DIR_INPUT;
 	const nrf_gpio_pin_dir_t dir_out = NRF_GPIO_PIN_DIR_OUTPUT;
+	const nrfx_gpiote_t *gpiote = get_gpiote(data->rdy_pin);
 	bool ret;
 
 	/* Drive low for a moment */
 	nrf_gpio_reconfigure(data->rdy_pin, &dir_out, NULL, NULL, NULL, NULL);
 
-	err = nrfx_gpiote_input_configure(data->rdy_pin, NULL, &trigger_config, NULL);
+	err = nrfx_gpiote_input_configure(gpiote, data->rdy_pin, &input_config);
 	__ASSERT(err == NRFX_SUCCESS, "Unexpected err: %08x/%d", err, err);
 
-	nrfx_gpiote_trigger_enable(data->rdy_pin, true);
+	nrfx_gpiote_trigger_enable(gpiote, data->rdy_pin, true);
 
 	int key = irq_lock();
 
@@ -1042,6 +1074,7 @@ static void api_poll_out(const struct device *dev, unsigned char out_char)
 	}
 }
 
+#ifdef CONFIG_UART_USE_RUNTIME_CONFIGURE
 static int api_configure(const struct device *dev, const struct uart_config *cfg)
 {
 	const struct lpuart_data *data = get_dev_data(dev);
@@ -1059,6 +1092,7 @@ static int api_config_get(const struct device *dev, struct uart_config *cfg)
 
 	return uart_config_get(data->uart, cfg);
 }
+#endif /* CONFIG_UART_USE_RUNTIME_CONFIGURE */
 
 #define LPUART_PIN_CFG_INITIALIZER(pin_prop) \
 	{ \
@@ -1072,10 +1106,6 @@ static const struct lpuart_config lpuart_config = {
 
 static struct lpuart_data lpuart_data;
 
-#define INT_DRIVEN_API_SET(fp, func) \
-	.fp = IS_ENABLED(CONFIG_NRF_SW_LPUART_INT_DRIVEN) ? func : NULL
-
-
 static const struct uart_driver_api lpuart_api = {
 	.callback_set = api_callback_set,
 	.tx = api_tx,
@@ -1085,29 +1115,38 @@ static const struct uart_driver_api lpuart_api = {
 	.rx_disable = api_rx_disable,
 	.poll_in = api_poll_in,
 	.poll_out = api_poll_out,
+#ifdef CONFIG_UART_USE_RUNTIME_CONFIGURE
 	.configure = api_configure,
 	.config_get = api_config_get,
-#if CONFIG_UART_INTERRUPT_DRIVEN
-	INT_DRIVEN_API_SET(fifo_fill, api_fifo_fill),
-	INT_DRIVEN_API_SET(fifo_read, api_fifo_read),
-	INT_DRIVEN_API_SET(irq_tx_enable, api_irq_tx_enable),
-	INT_DRIVEN_API_SET(irq_tx_disable, api_irq_tx_disable),
-	INT_DRIVEN_API_SET(irq_tx_ready, api_irq_tx_ready),
-	INT_DRIVEN_API_SET(irq_rx_enable, api_irq_rx_enable),
-	INT_DRIVEN_API_SET(irq_rx_disable, api_irq_rx_disable),
-	INT_DRIVEN_API_SET(irq_tx_complete, api_irq_tx_complete),
-	INT_DRIVEN_API_SET(irq_rx_ready, api_irq_rx_ready),
-	INT_DRIVEN_API_SET(irq_err_enable, api_irq_err_enable),
-	INT_DRIVEN_API_SET(irq_err_disable, api_irq_err_disable),
-	INT_DRIVEN_API_SET(irq_is_pending, api_irq_is_pending),
-	INT_DRIVEN_API_SET(irq_update, api_irq_update),
-	INT_DRIVEN_API_SET(irq_callback_set, api_irq_callback_set)
+#endif
+#if CONFIG_NRF_SW_LPUART_INT_DRIVEN
+	.fifo_fill = api_fifo_fill,
+	.fifo_read = api_fifo_read,
+	.irq_tx_enable = api_irq_tx_enable,
+	.irq_tx_disable = api_irq_tx_disable,
+	.irq_tx_ready = api_irq_tx_ready,
+	.irq_rx_enable = api_irq_rx_enable,
+	.irq_rx_disable = api_irq_rx_disable,
+	.irq_tx_complete = api_irq_tx_complete,
+	.irq_rx_ready = api_irq_rx_ready,
+	.irq_err_enable = api_irq_err_enable,
+	.irq_err_disable = api_irq_err_disable,
+	.irq_is_pending = api_irq_is_pending,
+	.irq_update = api_irq_update,
+	.irq_callback_set = api_irq_callback_set
 #endif
 };
 
-BUILD_ASSERT(DT_IRQ(DT_PARENT(DT_NODELABEL(lpuart)), priority) ==
-	     DT_IRQ(DT_NODELABEL(gpiote), priority),
-	     "UARTE and GPIOTE interrupt priority must match.");
+#define GPIO_HAS_PIN(gpio_node, pin_prop)				  \
+	(DT_PROP(gpio_node, port) == (DT_INST_PROP(0, pin_prop) >> 5))
+#define CHECK_GPIOTE_IRQ_PRIORITY(gpio_node)				  \
+	BUILD_ASSERT((!GPIO_HAS_PIN(gpio_node, req_pin) &&		  \
+		      !GPIO_HAS_PIN(gpio_node, rdy_pin)) ||		  \
+		     DT_IRQ(DT_PARENT(DT_NODELABEL(lpuart)), priority) == \
+		     DT_IRQ(GPIOTE_NODE(gpio_node), priority),		  \
+		     "UARTE and GPIOTE interrupt priority must match.");
+
+DT_FOREACH_STATUS_OKAY(nordic_nrf_gpio, CHECK_GPIOTE_IRQ_PRIORITY)
 
 DEVICE_DT_DEFINE(DT_NODELABEL(lpuart), lpuart_init, NULL,
 	      &lpuart_data, &lpuart_config,

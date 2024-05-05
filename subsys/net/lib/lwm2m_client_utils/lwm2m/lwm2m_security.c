@@ -31,6 +31,11 @@ LOG_MODULE_REGISTER(lwm2m_security, CONFIG_LWM2M_CLIENT_UTILS_LOG_LEVEL);
 #define SERVER_SHORT_SERVER_ID 0
 #define SERVER_LIFETIME_ID 1
 
+/* Security settings storage definition */
+#define SETTINGS_PREFIX "lwm2m:sec"
+#define SETTINGS_PATH_LEN sizeof(SETTINGS_PREFIX) + LWM2M_MAX_PATH_STR_SIZE
+#define SETTINGS_PATH_FMT  SETTINGS_PREFIX "/%hu/%hu/%hu"
+
 enum security_mode {
 	SEC_MODE_PSK = 0,
 	SEC_MODE_CERTIFICATE = 2,
@@ -72,7 +77,6 @@ int lwm2m_modem_mode_cb(enum lte_lc_func_mode new_mode, void *user_data)
 }
 
 #if defined(CONFIG_LWM2M_DTLS_SUPPORT)
-#define SETTINGS_PREFIX "lwm2m:sec"
 
 static bool have_permanently_stored_keys;
 static int bootstrap_settings_loaded_inst = -1;
@@ -266,6 +270,14 @@ static int load_credentials_to_modem(struct lwm2m_ctx *ctx)
 	bool has_credentials;
 	int mode;
 
+	if (IS_ENABLED(CONFIG_LWM2M_CLIENT_UTILS_RAI)) {
+		/* Inform RAI helper, that we are starting a new session, so it disables
+		 * RAI indications until we are properly registered again.
+		 */
+		lwm2m_utils_rai_event_cb(ctx,
+					 &(enum lwm2m_rd_client_event){LWM2M_RD_CLIENT_EVENT_NONE});
+	}
+
 	if (ctx->bootstrap_mode) {
 		ctx->tls_tag = CONFIG_LWM2M_CLIENT_UTILS_BOOTSTRAP_TLS_TAG;
 		purge_sessions = true;
@@ -446,11 +458,12 @@ static struct settings_handler lwm2m_security_settings = {
 	.h_commit = loaded,
 };
 
-static int write_to_settings(int obj, int inst, int res, uint8_t *data, uint16_t data_len)
+static int write_to_settings(uint16_t obj, uint16_t inst, uint16_t res, uint8_t *data,
+			     uint16_t data_len)
 {
-	char path[sizeof(SETTINGS_PREFIX "/0/0/10")];
+	char path[SETTINGS_PATH_LEN];
 
-	snprintk(path, sizeof(path), SETTINGS_PREFIX "/%d/%d/%d", obj, inst, res);
+	snprintk(path, sizeof(path), SETTINGS_PATH_FMT, obj, inst, res);
 	if (settings_save_one(path, data, data_len)) {
 		LOG_ERR("Failed to store %s", path);
 	}
@@ -458,16 +471,14 @@ static int write_to_settings(int obj, int inst, int res, uint8_t *data, uint16_t
 	return 0;
 }
 
-static void delete_from_storage(int obj, int inst, int res)
+static void delete_from_storage(uint16_t obj, uint16_t inst, uint16_t res)
 {
-	char path[sizeof(SETTINGS_PREFIX "/0/0/0")];
+	char path[SETTINGS_PATH_LEN];
 
-	snprintk(path, sizeof(path), SETTINGS_PREFIX "/%d/%d/%d", obj, inst, res);
+	snprintk(path, sizeof(path), SETTINGS_PATH_FMT, obj, inst, res);
 	settings_delete(path);
 	LOG_DBG("Deleted %s", path);
 }
-
-
 
 static int write_cb_sec(uint16_t obj_inst_id, uint16_t res_id, uint16_t res_inst_id, uint8_t *data,
 			uint16_t data_len, bool last_block, size_t total_size)
@@ -700,17 +711,6 @@ static int set_socketoptions(struct lwm2m_ctx *ctx)
 		purge_sessions = false;
 	}
 
-	if (IS_ENABLED(CONFIG_LWM2M_CLIENT_UTILS_DTLS_CID)) {
-		/* Enable CID */
-		uint32_t dtls_cid = NRF_SO_SEC_DTLS_CID_ENABLED;
-
-		ret = zsock_setsockopt(ctx->sock_fd, SOL_TLS, TLS_DTLS_CID, &dtls_cid,
-				       sizeof(dtls_cid));
-		if (ret) {
-			ret = -errno;
-			LOG_ERR("Failed to enable TLS_DTLS_CID: %d", ret);
-		}
-	}
 	return lwm2m_set_default_sockopt(ctx);
 }
 

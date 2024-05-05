@@ -96,7 +96,7 @@ struct bt_mesh_time_srv_data {
  */
 struct bt_mesh_time_srv {
 	/** Model entry. */
-	struct bt_mesh_model *model;
+	const struct bt_mesh_model *model;
 	/** Publish parameters. */
 	struct bt_mesh_model_pub pub;
 	/** Setup model publish parameters */
@@ -107,6 +107,11 @@ struct bt_mesh_time_srv {
 	struct bt_mesh_time_srv_data data;
 	/** Delayable work to randomize status relaying. */
 	struct k_work_delayable status_delay;
+	/** Property whether the Time status was unsolicited. */
+	bool is_unsolicited;
+	/** Cached publishing TTL while server is sending the unsolicited Time Status with zero TTL.
+	 */
+	uint8_t cached_ttl;
 
 	/** @brief Update callback.
 	 *
@@ -302,7 +307,7 @@ extern const struct bt_mesh_model_op _bt_mesh_time_srv_op[];
 extern const struct bt_mesh_model_op _bt_mesh_time_setup_srv_op[];
 extern const struct bt_mesh_model_cb _bt_mesh_time_srv_cb;
 extern const struct bt_mesh_model_cb _bt_mesh_time_setup_srv_cb;
-int _bt_mesh_time_srv_update_handler(struct bt_mesh_model *model);
+int _bt_mesh_time_srv_update_handler(const struct bt_mesh_model *model);
 /** @endcond */
 
 #ifdef __cplusplus

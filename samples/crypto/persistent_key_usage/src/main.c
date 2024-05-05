@@ -15,16 +15,18 @@
 #include <tfm_ns_interface.h>
 #endif
 
-#define APP_SUCCESS		(0)
-#define APP_ERROR		(-1)
-#define APP_SUCCESS_MESSAGE "Example finished successfully!"
-#define APP_ERROR_MESSAGE "Example exited with error!"
+#include "trusted_storage_init.h"
 
-#define PRINT_HEX(p_label, p_text, len)\
-	({\
-		LOG_INF("---- %s (len: %u): ----", p_label, len);\
-		LOG_HEXDUMP_INF(p_text, len, "Content:");\
-		LOG_INF("---- %s end  ----", p_label);\
+#define APP_SUCCESS	    (0)
+#define APP_ERROR	    (-1)
+#define APP_SUCCESS_MESSAGE "Example finished successfully!"
+#define APP_ERROR_MESSAGE   "Example exited with error!"
+
+#define PRINT_HEX(p_label, p_text, len)                                                            \
+	({                                                                                         \
+		LOG_INF("---- %s (len: %u): ----", p_label, len);                                  \
+		LOG_HEXDUMP_INF(p_text, len, "Content:");                                          \
+		LOG_INF("---- %s end  ----", p_label);                                             \
 	})
 
 LOG_MODULE_REGISTER(persistent_key_usage, LOG_LEVEL_DBG);
@@ -37,18 +39,22 @@ LOG_MODULE_REGISTER(persistent_key_usage, LOG_LEVEL_DBG);
  */
 #define SAMPLE_PERS_KEY_ID PSA_KEY_ID_USER_MIN
 
-
-static psa_key_handle_t key_handle;
+static psa_key_id_t key_id;
 /* ====================================================================== */
 
 int crypto_init(void)
 {
 	psa_status_t status;
 
+#ifdef CONFIG_TRUSTED_STORAGE_BACKEND_AEAD_KEY_DERIVE_FROM_HUK
+	write_huk();
+#endif /* CONFIG_TRUSTED_STORAGE_BACKEND_AEAD_KEY_DERIVE_FROM_HUK */
+
 	/* Initialize PSA Crypto */
 	status = psa_crypto_init();
-	if (status != PSA_SUCCESS)
+	if (status != PSA_SUCCESS) {
 		return APP_ERROR;
+	}
 
 	return APP_SUCCESS;
 }
@@ -58,7 +64,7 @@ int crypto_finish(void)
 	psa_status_t status;
 
 	/* Destroy the key handle */
-	status = psa_destroy_key(key_handle);
+	status = psa_destroy_key(key_id);
 	if (status != PSA_SUCCESS) {
 		LOG_INF("psa_destroy_key failed! (Error: %d)", status);
 		return APP_ERROR;
@@ -67,7 +73,7 @@ int crypto_finish(void)
 	return APP_SUCCESS;
 }
 
-int generate_prersistent_key(void)
+int generate_persistent_key(void)
 {
 	psa_status_t status;
 
@@ -86,9 +92,9 @@ int generate_prersistent_key(void)
 	psa_set_key_id(&key_attributes, SAMPLE_PERS_KEY_ID);
 
 	/* Generate a random AES key with persistent lifetime. The key can be used for
-	 * encryption/decryption using the key_handle.
+	 * encryption/decryption using the key_id.
 	 */
-	status = psa_generate_key(&key_attributes, &key_handle);
+	status = psa_generate_key(&key_attributes, &key_id);
 	if (status != PSA_SUCCESS) {
 		LOG_INF("psa_generate_key failed! (Error: %d)", status);
 		return APP_ERROR;
@@ -114,7 +120,7 @@ int main(void)
 		return APP_ERROR;
 	}
 
-	status = generate_prersistent_key();
+	status = generate_persistent_key();
 	if (status != APP_SUCCESS) {
 		LOG_INF(APP_ERROR_MESSAGE);
 		return APP_ERROR;

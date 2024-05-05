@@ -19,7 +19,7 @@ Complete the following actions to optimize your application:
 
 * Use the `Memory report`_ feature in the |nRFVSC| to check the size and percentage of memory that each symbol uses on your device for RAM, ROM, and partitions (when applicable).
 * Follow the guides for :ref:`optimizing Zephyr <zephyr:optimizations>`.
-  Also see the implementation of the :ref:`zephyr:minimal_sample` sample.
+  Also see the implementation of the :zephyr:code-sample:`minimal` sample.
 * Analyze stack usage in each thread of your application by using the :ref:`zephyr:thread_analyzer`.
   Reduce the stack sizes where possible.
 * Limit or disable debugging features, such as logging or asserts.
@@ -62,7 +62,6 @@ Besides applying `General recommendations`_, you can also complete the following
   * :kconfig:option:`CONFIG_BT_BUF_EVT_RX_COUNT`
   * :kconfig:option:`CONFIG_BT_CONN_TX_MAX`
   * :kconfig:option:`CONFIG_BT_L2CAP_TX_BUF_COUNT`
-  * :kconfig:option:`CONFIG_BT_CTLR_RX_BUFFERS`
   * :kconfig:option:`CONFIG_BT_BUF_ACL_TX_COUNT`
   * :kconfig:option:`CONFIG_BT_BUF_ACL_TX_SIZE`
 
@@ -70,11 +69,11 @@ For reference, you can find minimal footprint configurations of the :ref:`periph
 
 .. _app_memory_bt_mesh:
 
-Bluetooth mesh
+Bluetooth Mesh
 **************
 
-Besides applying `General recommendations`_ and Bluetooth_ optimization actions, there are some configuration options you can use to optimize the :ref:`Bluetooth mesh <ug_bt_mesh>` part of your application.
-Changing any of these options will change the functional capabilities of the Bluetooth mesh device, and thereby result in changes to RAM and flash memory footprint.
+Besides applying `General recommendations`_ and Bluetooth_ optimization actions, there are some configuration options you can use to optimize the :ref:`Bluetooth Mesh <ug_bt_mesh>` part of your application.
+Changing any of these options will change the functional capabilities of the Bluetooth Mesh device, and thereby result in changes to RAM and flash memory footprint.
 
 Changing the values of the following options will affect the RAM footprint and the amount of space needed for persistent storage of the associated configuration data:
 
@@ -261,7 +260,7 @@ Besides applying `General recommendations`_, you can also complete the following
 Wi-Fi
 *****
 
-The current Wi-Fi® memory requirements are listed on the :ref:`ug_wifi_mem_req` page.
+The current Wi-Fi® memory requirements are listed on the :ref:`ug_wifi_mem_req_sta_mode` and :ref:`ug_wifi_mem_req_scan_mode` pages.
 
 In addition to applying `General recommendations`_, you can also see the :ref:`nRF70_nRF5340_constrained_host` page to optimize the Wi-Fi stack of your application.
 Specifically, you can refer to the section on :ref:`networking stack <constrained_host_networking_stack>` or :ref:`memory fine-tuning controls <constrained_host_driver_memory_controls>` which lists Kconfig options that can be used to reduce memory requirements of your application.

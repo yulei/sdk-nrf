@@ -36,6 +36,10 @@ struct method_cloud_location_start_work_args {
 static struct method_cloud_location_start_work_args method_cloud_location_start_work;
 static bool running;
 
+#if defined(CONFIG_LOCATION_METHOD_WIFI)
+static K_SEM_DEFINE(wifi_scan_ready, 0, 1);
+#endif
+
 static void method_cloud_location_positioning_work_fn(struct k_work *work)
 {
 	struct method_cloud_location_start_work_args *work_data =
@@ -45,10 +49,9 @@ static void method_cloud_location_positioning_work_fn(struct k_work *work)
 	struct wifi_scan_info *scan_wifi_info = NULL;
 	struct lte_lc_cells_info *scan_cellular_info = NULL;
 	int err = 0;
-#if defined(CONFIG_LOCATION_METHOD_WIFI)
-	struct k_sem wifi_scan_ready;
 
-	k_sem_init(&wifi_scan_ready, 0, 1);
+#if defined(CONFIG_LOCATION_METHOD_WIFI)
+	k_sem_reset(&wifi_scan_ready);
 
 	if (wifi_config != NULL) {
 		scan_wifi_execute(wifi_config->timeout, &wifi_scan_ready);
@@ -179,11 +182,11 @@ int method_cloud_location_get(const struct location_request_info *request)
 	method_cloud_location_start_work.wifi_config = NULL;
 	method_cloud_location_start_work.cell_config = NULL;
 	if (request->current_method == LOCATION_METHOD_CELLULAR ||
-	    request->current_method == LOCATION_METHOD_INTERNAL_WIFI_CELLULAR) {
+	    request->current_method == LOCATION_METHOD_WIFI_CELLULAR) {
 		method_cloud_location_start_work.cell_config = request->cellular;
 	}
 	if (request->current_method == LOCATION_METHOD_WIFI ||
-	    request->current_method == LOCATION_METHOD_INTERNAL_WIFI_CELLULAR) {
+	    request->current_method == LOCATION_METHOD_WIFI_CELLULAR) {
 		method_cloud_location_start_work.wifi_config = request->wifi;
 	}
 
@@ -196,6 +199,18 @@ int method_cloud_location_get(const struct location_request_info *request)
 
 	return 0;
 }
+
+#if defined(CONFIG_LOCATION_DATA_DETAILS)
+void method_cloud_location_details_get(struct location_data_details *details)
+{
+#if defined(CONFIG_LOCATION_METHOD_CELLULAR)
+	scan_cellular_details_get(details);
+#endif
+#if defined(CONFIG_LOCATION_METHOD_WIFI)
+	scan_wifi_details_get(details);
+#endif
+}
+#endif
 
 int method_cloud_location_init(void)
 {

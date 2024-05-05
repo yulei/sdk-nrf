@@ -11,6 +11,7 @@
 #include <zephyr/logging/log.h>
 #include <zephyr/sys/__assert.h>
 #include <net/download_client.h>
+#include "download_client_internal.h"
 
 LOG_MODULE_DECLARE(download_client, CONFIG_DOWNLOAD_CLIENT_LOG_LEVEL);
 
@@ -41,10 +42,6 @@ LOG_MODULE_DECLARE(download_client, CONFIG_DOWNLOAD_CLIENT_LOG_LEVEL);
 	"\r\n"
 
 extern char *strnstr(const char *haystack, const char *needle, size_t haystack_sz);
-
-int url_parse_host(const char *url, char *host, size_t len);
-int url_parse_file(const char *url, char *file, size_t len);
-int socket_send(const struct download_client *client, size_t len, int timeout);
 
 int http_get_request_send(struct download_client *client)
 {
@@ -190,7 +187,7 @@ static int http_header_parse(struct download_client *client, size_t *hdr_len)
 	 */
 	if (client->file_size == 0) {
 		if (client->http.ranged) {
-			p = strnstr(client->buf, "content-range", sizeof(client->buf));
+			p = strnstr(client->buf, "\r\ncontent-range", sizeof(client->buf));
 			if (!p) {
 				LOG_ERR("Server did not send "
 					"\"Content-Range\" in response");
@@ -202,7 +199,7 @@ static int http_header_parse(struct download_client *client, size_t *hdr_len)
 				return -EBADMSG;
 			}
 		} else { /* proto == PROTO_HTTP */
-			p = strnstr(client->buf, "content-length", sizeof(client->buf));
+			p = strnstr(client->buf, "\r\ncontent-length", sizeof(client->buf));
 			if (!p) {
 				LOG_WRN("Server did not send "
 					"\"Content-Length\" in response");
@@ -223,7 +220,7 @@ static int http_header_parse(struct download_client *client, size_t *hdr_len)
 		LOG_DBG("File size = %u", client->file_size);
 	}
 
-	p = strnstr(client->buf, "connection: close", sizeof(client->buf));
+	p = strnstr(client->buf, "\r\nconnection: close", sizeof(client->buf));
 	if (p) {
 		LOG_WRN("Peer closed connection, will re-connect");
 		client->http.connection_close = true;
@@ -265,8 +262,8 @@ int http_parse(struct download_client *client, size_t len)
 			 */
 			LOG_DBG("Copying %u payload bytes",
 				client->offset - hdr_len);
-			memcpy(client->buf, client->buf + hdr_len,
-			       client->offset - hdr_len);
+			memmove(client->buf, client->buf + hdr_len,
+				client->offset - hdr_len);
 
 			client->offset -= hdr_len;
 		} else {

@@ -18,7 +18,9 @@ cmock_handle(${ZEPHYR_NRF_MODULE_DIR}/include/app_event_manager.h)
 cmock_handle(${ZEPHYR_NRF_MODULE_DIR}/subsys/app_event_manager/app_event_manager_priv.h)
 cmock_handle(${ZEPHYR_NRF_MODULE_DIR}/include/date_time.h)
 cmock_handle(${ZEPHYR_NRF_MODULE_DIR}/include/modem/location.h)
-cmock_handle(${ZEPHYR_NRF_MODULE_DIR}/include/modem/lte_lc.h FUNC_EXCLUDE ".*(lte_lc_rai_req|lte_lc_rai_param_set)")
+cmock_handle(${ZEPHYR_NRF_MODULE_DIR}/include/modem/lte_lc.h
+	FUNC_EXCLUDE ".*(lte_lc_rai_req|lte_lc_rai_param_set)"
+	WORD_EXCLUDE "__deprecated")
 cmock_handle(${ZEPHYR_NRFXLIB_MODULE_DIR}/nrf_modem/include/nrf_modem_gnss.h)
 
 # add location_module (the unit under test)
@@ -45,6 +47,7 @@ target_compile_options(app PRIVATE
 	-DCONFIG_CLOUD_CODEC_LWM2M_PATH_ENTRY_SIZE_MAX=1
 	-DCONFIG_LTE_NEIGHBOR_CELLS_MAX=10
 	-DCONFIG_LOCATION_SERVICE_EXTERNAL=y
+	-DCONFIG_LOCATION_METHOD_GNSS=y
 	-DCONFIG_LOCATION_METHOD_CELLULAR=y
 	-DCONFIG_NRF_CLOUD_AGNSS=y
 	-DCONFIG_AT_MONITOR_HEAP_SIZE=1024

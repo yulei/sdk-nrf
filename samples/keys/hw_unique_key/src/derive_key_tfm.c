@@ -9,57 +9,69 @@
  */
 
 #include <zephyr/kernel.h>
-#include <zephyr/sys/printk.h>
+#include <zephyr/logging/log.h>
 #include <psa/crypto.h>
 #include <tfm_crypto_defs.h>
 
 #include "derive_key.h"
 
-psa_key_id_t derive_key(psa_key_attributes_t *attributes, uint8_t *key_label,
-			uint32_t key_label_len)
+#if CONFIG_CRACEN_HW_PRESENT
+/* On platforms with Cracen, the HUK is an AES key, suitable for CMAC KDF. */
+#define KDF_ALG	   PSA_ALG_SP800_108_COUNTER_CMAC
+#define INPUT_STEP PSA_KEY_DERIVATION_INPUT_LABEL
+#else
+/* On nrf53 and nRF91 the HUK key is PSA_KEY_TYPE_RAW_DATA, suitable for HKDF. */
+#define KDF_ALG PSA_ALG_HKDF(PSA_ALG_SHA_256)
+#define INPUT_STEP PSA_KEY_DERIVATION_INPUT_INFO
+#endif
+
+LOG_MODULE_DECLARE(app, LOG_LEVEL_DBG);
+
+psa_status_t derive_key(psa_key_attributes_t *attributes, uint8_t *key_label,
+			uint32_t key_label_len, psa_key_id_t *key_id_out)
 {
 	psa_status_t status;
 	psa_key_derivation_operation_t op = PSA_KEY_DERIVATION_OPERATION_INIT;
-	psa_key_id_t key_id_out = 0;
+	psa_key_id_t key_id;
 
-	status = psa_key_derivation_setup(&op, PSA_ALG_HKDF(PSA_ALG_SHA_256));
+	*key_id_out = PSA_KEY_ID_NULL;
+
+	status = psa_key_derivation_setup(&op, KDF_ALG);
 	if (status != PSA_SUCCESS) {
-		printk("psa_key_derivation_setup returned error: %d\n", status);
-		return 0;
+		LOG_INF("psa_key_derivation_setup returned error: %d", status);
+		return status;
 	}
 
 	/* Set up a key derivation operation with HUK  */
 	status = psa_key_derivation_input_key(&op, PSA_KEY_DERIVATION_INPUT_SECRET,
 					      TFM_BUILTIN_KEY_ID_HUK);
 	if (status != PSA_SUCCESS) {
-		printk("psa_key_derivation_input_key returned error: %d\n", status);
-		return 0;
+		LOG_INF("psa_key_derivation_input_key returned error: %d", status);
+		return status;
 	}
 
 	/* Supply the PS key label as an input to the key derivation */
-	status = psa_key_derivation_input_bytes(&op, PSA_KEY_DERIVATION_INPUT_INFO,
-						key_label,
-						key_label_len);
+	status = psa_key_derivation_input_bytes(&op, INPUT_STEP, key_label, key_label_len);
 	if (status != PSA_SUCCESS) {
-		printk("psa_key_derivation_input_bytes returned error: %d\n", status);
-		return 0;
+		LOG_INF("psa_key_derivation_input_bytes returned error: %d", status);
+		return status;
 	}
 
 	/* Create the storage key from the key derivation operation */
-	status = psa_key_derivation_output_key(attributes, &op, &key_id_out);
+	status = psa_key_derivation_output_key(attributes, &op, &key_id);
 	if (status != PSA_SUCCESS) {
-		printk("psa_key_derivation_output_key returned error: %d\n", status);
-		return 0;
+		LOG_INF("psa_key_derivation_output_key returned error: %d", status);
+		return status;
 	}
 
-	printk("(Key resides internally in TF-M)\n");
+	LOG_INF("(Key resides internally in TF-M)");
 
-	/* Free resources associated with the key derivation operation */
+	/* Finish key derivation operation and free associated resources */
 	status = psa_key_derivation_abort(&op);
 	if (status != PSA_SUCCESS) {
-		printk("psa_key_derivation_abort returned error: %d\n", status);
-		return 0;
+		LOG_INF("psa_key_derivation_abort returned error: %d", status);
 	}
 
-	return key_id_out;
+	*key_id_out = key_id;
+	return PSA_SUCCESS;
 }

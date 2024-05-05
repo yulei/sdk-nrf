@@ -119,16 +119,8 @@ int nrf_cloud_agnss_request(const struct nrf_modem_gnss_agnss_data_frame *reques
 
 static bool qzss_assistance_is_supported(void)
 {
-	char resp[32];
-
-	if (nrf_modem_at_cmd(resp, sizeof(resp), "AT+CGMM") == 0) {
-		/* nRF9160 does not support QZSS assistance, while nRF91x1 do. */
-		if (strstr(resp, "nRF9160") != NULL) {
-			return false;
-		}
-	}
-
-	return true;
+	/* Assume that all cellular products other than the nRF9160 support this. */
+	return (IS_ENABLED(CONFIG_NRF_MODEM_LIB) && !IS_ENABLED(CONFIG_SOC_NRF9160));
 }
 
 int nrf_cloud_agnss_request_all(void)
@@ -473,6 +465,13 @@ static size_t get_next_agnss_element(struct nrf_cloud_agnss_element *element,
 	 * each element.
 	 */
 	if (elements_left_to_process == 0) {
+		element_type = NRF_CLOUD_AGNSS__TYPE_INVALID;
+
+		if (buf_len == 0) {
+			/* No more data to parse. */
+			return 0;
+		}
+
 		/* Check that there's enough data for type and count. */
 		if (buf_len < NRF_CLOUD_AGNSS_BIN_TYPE_SIZE + NRF_CLOUD_AGNSS_BIN_COUNT_SIZE) {
 			LOG_ERR("Unexpected end of data");
@@ -540,6 +539,7 @@ static size_t get_next_agnss_element(struct nrf_cloud_agnss_element *element,
 	default:
 		LOG_DBG("Unhandled A-GNSS data type: %d", element->type);
 		elements_left_to_process = 0;
+		element_type = NRF_CLOUD_AGNSS__TYPE_INVALID;
 		return 0;
 	}
 
@@ -547,6 +547,7 @@ static size_t get_next_agnss_element(struct nrf_cloud_agnss_element *element,
 	if (buf_len < len) {
 		LOG_ERR("Unexpected end of data");
 		elements_left_to_process = 0;
+		element_type = NRF_CLOUD_AGNSS__TYPE_INVALID;
 		return 0;
 	}
 
@@ -572,7 +573,7 @@ int nrf_cloud_agnss_process(const char *buf, size_t buf_len)
 	/* Check for a potential A-GNSS JSON error message from nRF Cloud */
 	enum nrf_cloud_error nrf_err;
 
-	err = nrf_cloud_error_msg_decode(buf, NRF_CLOUD_JSON_APPID_VAL_AGPS,
+	err = nrf_cloud_error_msg_decode(buf, NRF_CLOUD_JSON_APPID_VAL_AGNSS,
 		NRF_CLOUD_JSON_MSG_TYPE_VAL_DATA, &nrf_err);
 	if (!err) {
 		LOG_ERR("nRF Cloud returned A-GNSS error: %d", nrf_err);
@@ -602,12 +603,15 @@ int nrf_cloud_agnss_process(const char *buf, size_t buf_len)
 
 	LOG_DBG("A-GNSS_injection_active LOCKED");
 
-	while (parsed_len < buf_len) {
+	while (parsed_len <= buf_len) {
+		/* get_next_agnss_element() is called once more when the data ends to detect
+		 * that parsing has been finished.
+		 */
 		size_t element_size =
 			get_next_agnss_element(&element, &buf[parsed_len], buf_len - parsed_len);
 
 		if (element_size == 0) {
-			LOG_DBG("Parsing finished\n");
+			LOG_DBG("Parsing finished");
 			break;
 		}
 

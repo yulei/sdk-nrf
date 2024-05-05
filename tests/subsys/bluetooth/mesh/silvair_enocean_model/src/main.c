@@ -39,18 +39,18 @@ static struct bt_enocean_device mock_enocean_device = {
 	}
 };
 
-static struct bt_mesh_model mock_model = {
-	.user_data = &srv
+static const struct bt_mesh_model mock_model = {
+	.rt = &(struct bt_mesh_model_rt_ctx){.user_data = &srv}
 };
 
-static struct bt_mesh_model mock_lvl_model = {
+static const struct bt_mesh_model mock_lvl_model = {
 	.pub = &srv.buttons[0].lvl.pub,
-	.user_data = &srv.buttons[0].lvl,
+	.rt = &(struct bt_mesh_model_rt_ctx){.user_data = &srv.buttons[0].lvl},
 };
 
-static struct bt_mesh_model mock_onoff_model = {
+static const struct bt_mesh_model mock_onoff_model = {
 	.pub = &srv.buttons[0].onoff.pub,
-	.user_data = &srv.buttons[0].onoff
+	.rt = &(struct bt_mesh_model_rt_ctx){.user_data = &srv.buttons[0].onoff}
 };
 
 static const struct bt_enocean_callbacks *enocean_cbs;
@@ -109,20 +109,20 @@ int32_t model_delay_decode(uint8_t encoded_delay)
 	return encoded_delay * DELAY_TIME_STEP_MS;
 }
 
-struct bt_mesh_elem *bt_mesh_model_elem(struct bt_mesh_model *mod)
+const struct bt_mesh_elem *bt_mesh_model_elem(const struct bt_mesh_model *mod)
 {
 	return NULL;
 }
 
-struct bt_mesh_model *bt_mesh_model_find(const struct bt_mesh_elem *elem,
-					 uint16_t id)
+const struct bt_mesh_model *bt_mesh_model_find(const struct bt_mesh_elem *elem,
+					       uint16_t id)
 {
 	return NULL;
 }
 
 int bt_mesh_onoff_cli_set_unack(struct bt_mesh_onoff_cli *cli,
-				 struct bt_mesh_msg_ctx *ctx,
-				 const struct bt_mesh_onoff_set *set)
+				struct bt_mesh_msg_ctx *ctx,
+				const struct bt_mesh_onoff_set *set)
 {
 	ztest_check_expected_value(cli);
 	ztest_check_expected_value(set->on_off);
@@ -162,7 +162,7 @@ void bt_mesh_model_msg_init(struct net_buf_simple *msg, uint32_t opcode)
 	net_buf_simple_add_le16(msg, opcode & 0xffff);
 }
 
-int bt_mesh_model_data_store(struct bt_mesh_model *model, bool vnd,
+int bt_mesh_model_data_store(const struct bt_mesh_model *model, bool vnd,
 			     const char *name, const void *data,
 			     size_t data_len)
 {

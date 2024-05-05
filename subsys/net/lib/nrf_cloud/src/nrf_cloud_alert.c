@@ -43,7 +43,7 @@ static int alert_prepare(struct nrf_cloud_data *output,
 	}
 
 	LOG_DBG("Alert! type: %d, value: %f, description: %s, ts: %lld, seq: %d",
-		alert.type, alert.value, alert.description ? alert.description : "",
+		alert.type, (double)alert.value, alert.description ? alert.description : "",
 		alert.ts_ms, alert.sequence);
 
 	return nrf_cloud_alert_encode(&alert, output);
@@ -169,7 +169,7 @@ int nrf_cloud_alert_send(enum nrf_cloud_alert_type type,
 	}
 
 	/* send to d2c topic */
-	err = nrf_cloud_coap_json_message_send(data.ptr);
+	err = nrf_cloud_coap_json_message_send(data.ptr, false, true);
 	if (!err) {
 		LOG_DBG("Send alert via CoAP");
 	} else {

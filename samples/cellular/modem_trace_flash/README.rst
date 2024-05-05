@@ -83,11 +83,9 @@ Testing
 After programming the sample and board controller firmware (as mentioned in Requirements section) to your development kit, test it by performing the following steps:
 
 #. |connect_kit|
-#. |connect_terminal|
 #. Open the `Cellular Monitor`_ desktop application and connect the DK.
 #. Select :guilabel:`Autoselect` from the **Modem trace database** drop-down menu, or a modem firmware version that is programmed on the DK.
 #. Select :guilabel:`Reset device on start`.
-#. Deselect :guilabel:`Refresh dashboard on start`.
 #. Make sure that either :guilabel:`Open in Wireshark` or :guilabel:`Save trace file to disk` is selected.
 #. Click :guilabel:`Open Serial Terminal` and keep the terminal window open (optional).
 #. Click :guilabel:`Start` to begin the modem trace.

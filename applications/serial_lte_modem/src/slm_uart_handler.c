@@ -12,8 +12,8 @@
 #include <zephyr/sys/ring_buffer.h>
 #include <zephyr/pm/device.h>
 #include <pm_config.h>
-#include "slm_settings.h"
 #include "slm_uart_handler.h"
+#include "slm_at_host.h"
 
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(slm_uart_handler, CONFIG_SLM_LOG_LEVEL);
@@ -21,11 +21,8 @@ LOG_MODULE_REGISTER(slm_uart_handler, CONFIG_SLM_LOG_LEVEL);
 #define UART_RX_TIMEOUT_US		2000
 #define UART_ERROR_DELAY_MS		500
 
-#define SLM_SYNC_STR	"Ready\r\n"
-
+const struct device *const slm_uart_dev = DEVICE_DT_GET(DT_CHOSEN(ncs_slm_uart));
 uint32_t slm_uart_baudrate;
-
-static const struct device *uart_dev = DEVICE_DT_GET(DT_CHOSEN(ncs_slm_uart));
 
 static struct k_work_delayable rx_process_work;
 
@@ -61,11 +58,6 @@ enum uart_recovery_state {
 static atomic_t recovery_state;
 
 K_SEM_DEFINE(tx_done_sem, 0, 1);
-
-slm_uart_rx_callback_t rx_callback_t;
-
-/* global functions defined in different files */
-int indicate_start(void);
 
 static inline struct rx_buf_t *block_start_get(uint8_t *buf)
 {
@@ -127,7 +119,7 @@ static int rx_enable(void)
 		return -ENOMEM;
 	}
 
-	ret = uart_rx_enable(uart_dev, buf->buf, sizeof(buf->buf), UART_RX_TIMEOUT_US);
+	ret = uart_rx_enable(slm_uart_dev, buf->buf, sizeof(buf->buf), UART_RX_TIMEOUT_US);
 	if (ret) {
 		LOG_ERR("UART RX enable failed: %d", ret);
 		return ret;
@@ -136,7 +128,7 @@ static int rx_enable(void)
 	return 0;
 }
 
-static void rx_disable(void)
+static int slm_uart_rx_disable(void)
 {
 	int err;
 
@@ -145,14 +137,14 @@ static void rx_disable(void)
 		k_sleep(K_MSEC(10));
 	}
 
-	err = uart_rx_disable(uart_dev);
+	err = uart_rx_disable(slm_uart_dev);
 	if (err) {
 		LOG_ERR("UART RX disable failed: %d", err);
-		return;
+		atomic_set(&recovery_state, RECOVERY_IDLE);
+		return err;
 	}
 
-	/* Wait for disable to complete. */
-	k_sleep(K_MSEC(100));
+	return 0;
 }
 
 static void rx_recovery(void)
@@ -170,7 +162,7 @@ static void rx_recovery(void)
 	}
 
 	if (atomic_cas(&recovery_state, RECOVERY_ONGOING, RECOVERY_IDLE)) {
-		LOG_INF("UART RX enabled");
+		LOG_DBG("UART RX enabled");
 	}
 }
 
@@ -179,9 +171,7 @@ static void rx_process(struct k_work *work)
 	struct rx_event_t rx_event;
 
 	while (k_msgq_get(&rx_event_queue, &rx_event, K_NO_WAIT) == 0) {
-		if (rx_callback_t) {
-			rx_callback_t(rx_event.buf, rx_event.len);
-		}
+		slm_at_receive(rx_event.buf, rx_event.len);
 		rx_buf_unref(rx_event.buf);
 	}
 
@@ -191,21 +181,20 @@ static void rx_process(struct k_work *work)
 static int tx_start(void)
 {
 	uint8_t *buf;
-	size_t ret;
+	size_t len;
 	int err;
 	enum pm_device_state state = PM_DEVICE_STATE_OFF;
 
-	(void)pm_device_state_get(uart_dev, &state);
+	pm_device_state_get(slm_uart_dev, &state);
 	if (state != PM_DEVICE_STATE_ACTIVE) {
-		(void)indicate_start();
-		return -ENODEV;
+		return 1;
 	}
 
-	ret = ring_buf_get_claim(&tx_buf, &buf, ring_buf_capacity_get(&tx_buf));
-	err = uart_tx(uart_dev, buf, ret, SYS_FOREVER_US);
+	len = ring_buf_get_claim(&tx_buf, &buf, ring_buf_capacity_get(&tx_buf));
+	err = uart_tx(slm_uart_dev, buf, len, SYS_FOREVER_US);
 	if (err) {
 		LOG_ERR("UART TX error: %d", err);
-		(void)ring_buf_get_finish(&tx_buf, 0);
+		ring_buf_get_finish(&tx_buf, 0);
 		return err;
 	}
 
@@ -223,23 +212,14 @@ static void uart_callback(const struct device *dev, struct uart_event *evt, void
 
 	switch (evt->type) {
 	case UART_TX_DONE:
-		err = ring_buf_get_finish(&tx_buf, evt->data.tx.len);
-		if (err) {
-			LOG_ERR("UART_TX_DONE failure: %d", err);
-		}
-		if (ring_buf_is_empty(&tx_buf) == false) {
-			(void)tx_start();
-		} else {
-			k_sem_give(&tx_done_sem);
-		}
-		break;
 	case UART_TX_ABORTED:
 		err = ring_buf_get_finish(&tx_buf, evt->data.tx.len);
 		if (err) {
-			LOG_ERR("UART_TX_ABORTED failure: %d", err);
+			LOG_ERR("UART_TX_%s failure: %d",
+				(evt->type == UART_TX_DONE) ? "DONE" : "ABORTED", err);
 		}
 		if (ring_buf_is_empty(&tx_buf) == false) {
-			(void)tx_start();
+			tx_start();
 		} else {
 			k_sem_give(&tx_done_sem);
 		}
@@ -258,15 +238,15 @@ static void uart_callback(const struct device *dev, struct uart_event *evt, void
 		break;
 	case UART_RX_BUF_REQUEST:
 		if (k_msgq_num_free_get(&rx_event_queue) < UART_RX_EVENT_COUNT_FOR_BUF) {
-			LOG_INF("Disabling UART RX: No event space.");
+			LOG_WRN("Disabling UART RX: No event space.");
 			break;
 		}
 		buf = rx_buf_alloc();
 		if (!buf) {
-			LOG_INF("Disabling UART RX: No free buffers.");
+			LOG_WRN("Disabling UART RX: No free buffers.");
 			break;
 		}
-		err = uart_rx_buf_rsp(uart_dev, buf->buf, sizeof(buf->buf));
+		err = uart_rx_buf_rsp(slm_uart_dev, buf->buf, sizeof(buf->buf));
 		if (err) {
 			LOG_WRN("Disabling UART RX: %d", err);
 			rx_buf_unref(buf);
@@ -278,7 +258,7 @@ static void uart_callback(const struct device *dev, struct uart_event *evt, void
 		}
 		break;
 	case UART_RX_STOPPED:
-		LOG_WRN("UART_RX_STOPPED (%d)", evt->data.rx_stop.reason);
+		LOG_DBG("UART_RX_STOPPED (%d)", evt->data.rx_stop.reason);
 		break;
 	case UART_RX_DISABLED:
 		LOG_DBG("UART_RX_DISABLED");
@@ -291,65 +271,13 @@ static void uart_callback(const struct device *dev, struct uart_event *evt, void
 	}
 }
 
-int slm_uart_power_on(void)
-{
-	int err;
-
-	err = pm_device_action_run(uart_dev, PM_DEVICE_ACTION_RESUME);
-	if (err && err != -EALREADY) {
-		LOG_ERR("Can't resume UART: %d", err);
-		return err;
-	}
-
-	k_sleep(K_MSEC(100));
-
-	(void)atomic_set(&recovery_state, RECOVERY_IDLE);
-	err = rx_enable();
-	if (err) {
-		return err;
-	}
-
-	k_sem_give(&tx_done_sem);
-	(void)tx_start();
-
-	return 0;
-}
-
-int slm_uart_power_off(void)
-{
-	int err;
-
-	rx_disable();
-	err = pm_device_action_run(uart_dev, PM_DEVICE_ACTION_SUSPEND);
-	if (err && err != -EALREADY) {
-		LOG_ERR("Can't suspend UART: %d", err);
-	}
-
-	/* Write sync str to buffer, so it is send first when we power UART.*/
-	(void)slm_uart_tx_write(SLM_SYNC_STR, sizeof(SLM_SYNC_STR)-1, true);
-
-	return err;
-}
-
-bool slm_uart_can_context_send(const uint8_t *data, size_t len)
-{
-	if (!k_is_in_isr()) {
-		return true;
-	}
-	LOG_ERR("FIXME: Attempt to send UART message (of size %u) in ISR.", len);
-	return false;
-}
-
 /* Write the data to tx_buffer and trigger sending. */
-int slm_uart_tx_write(const uint8_t *data, size_t len, bool print_full_debug)
+static int slm_uart_tx_write(const uint8_t *data, size_t len)
 {
 	size_t ret;
 	size_t sent = 0;
 	int err;
 
-	if (!slm_uart_can_context_send(data, len)) {
-		return -EINTR;
-	}
 	k_mutex_lock(&mutex_tx_put, K_FOREVER);
 	while (sent < len) {
 		ret = ring_buf_put(&tx_buf, data + sent, len - sent);
@@ -373,7 +301,7 @@ int slm_uart_tx_write(const uint8_t *data, size_t len, bool print_full_debug)
 
 	if (k_sem_take(&tx_done_sem, K_NO_WAIT) == 0) {
 		err = tx_start();
-		if (err == -ENODEV) {
+		if (err == 1) {
 			k_sem_give(&tx_done_sem);
 			return 0;
 		} else if (err) {
@@ -385,27 +313,26 @@ int slm_uart_tx_write(const uint8_t *data, size_t len, bool print_full_debug)
 		/* TX already in progress. */
 	}
 
-	LOG_HEXDUMP_DBG(data, print_full_debug ? len : MIN(HEXDUMP_LIMIT, len), "TX");
-
 	return 0;
 }
 
-int slm_uart_handler_init(slm_uart_rx_callback_t callback_t)
+static int slm_uart_handler_init(void)
 {
 	int err;
 	uint32_t start_time;
 	struct uart_config cfg;
 
-	if (!device_is_ready(uart_dev)) {
+	if (!device_is_ready(slm_uart_dev)) {
 		LOG_ERR("UART device not ready");
 		return -ENODEV;
 	}
 
-	err = uart_config_get(uart_dev, &cfg);
+	err = uart_config_get(slm_uart_dev, &cfg);
 	if (err) {
 		LOG_ERR("uart_config_get: %d", err);
 		return err;
 	}
+
 	slm_uart_baudrate = cfg.baudrate;
 	LOG_INF("UART baud: %d d/p/s-bits: %d/%d/%d HWFC: %d",
 		cfg.baudrate, cfg.data_bits, cfg.parity,
@@ -414,7 +341,7 @@ int slm_uart_handler_init(slm_uart_rx_callback_t callback_t)
 	/* Wait for the UART line to become valid */
 	start_time = k_uptime_get_32();
 	do {
-		err = uart_err_check(uart_dev);
+		err = uart_err_check(slm_uart_dev);
 		if (err) {
 			uint32_t now = k_uptime_get_32();
 
@@ -425,12 +352,11 @@ int slm_uart_handler_init(slm_uart_rx_callback_t callback_t)
 			k_sleep(K_MSEC(10));
 		}
 	} while (err);
-	err = uart_callback_set(uart_dev, uart_callback, NULL);
+	err = uart_callback_set(slm_uart_dev, uart_callback, NULL);
 	if (err) {
 		LOG_ERR("Cannot set callback: %d", err);
 		return -EFAULT;
 	}
-	rx_callback_t = callback_t;
 	(void)atomic_set(&recovery_state, RECOVERY_IDLE);
 	err = rx_enable();
 	if (err) {
@@ -441,22 +367,17 @@ int slm_uart_handler_init(slm_uart_rx_callback_t callback_t)
 
 	k_sem_give(&tx_done_sem);
 
-	err = slm_uart_tx_write(SLM_SYNC_STR, sizeof(SLM_SYNC_STR)-1, true);
-	if (err) {
-		return err;
-	}
+	/* Flush possibly pending data in case SLM was idle. */
+	tx_start();
 
 	return 0;
 }
 
-void slm_uart_handler_uninit(void)
+int slm_uart_handler_enable(void)
 {
-	int err;
-
-	/* Power off UART module */
-	rx_disable();
-	err = pm_device_action_run(uart_dev, PM_DEVICE_ACTION_SUSPEND);
-	if (err) {
-		LOG_WRN("Can't suspend UART: %d", err);
-	}
+	return slm_at_set_backend((struct slm_at_backend) {
+		.start = slm_uart_handler_init,
+		.send = slm_uart_tx_write,
+		.stop = slm_uart_rx_disable
+	});
 }

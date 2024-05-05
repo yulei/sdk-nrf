@@ -156,3 +156,45 @@ void mosh_print_no_format(const char *usage)
 {
 	shell_print(mosh_shell, "%s", usage);
 }
+
+int mosh_print_help_shell(const struct shell *shell, size_t argc, char **argv)
+{
+	int ret = 1;
+
+	if (argc > 1 && strcmp(argv[1], "-h") != 0 && strcmp(argv[1], "--help") != 0) {
+		mosh_error("%s: subcommand not found", argv[1]);
+		ret = -EINVAL;
+	}
+
+	shell_help(shell);
+
+	return ret;
+}
+
+void mosh_print_version_info(void)
+{
+	/* shell_print() is not used here, because this function is called early during
+	 * application startup and the shell might not be ready yet.
+	 */
+#if defined(APP_VERSION)
+	printk("\nMOSH version:       %s", STRINGIFY(APP_VERSION));
+#else
+	printk("\nMOSH version:       unknown");
+#endif
+
+#if defined(BUILD_ID)
+	printk("\nMOSH build id:      v%s", STRINGIFY(BUILD_ID));
+#else
+	printk("\nMOSH build id:      custom");
+#endif
+
+#if defined(BUILD_VARIANT)
+#if defined(BRANCH_NAME)
+	printk("\nMOSH build variant: %s/%s\n\n", STRINGIFY(BRANCH_NAME), STRINGIFY(BUILD_VARIANT));
+#else
+	printk("\nMOSH build variant: %s\n\n", STRINGIFY(BUILD_VARIANT));
+#endif
+#else
+	printk("\nMOSH build variant: dev\n\n");
+#endif
+}

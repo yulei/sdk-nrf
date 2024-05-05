@@ -22,9 +22,9 @@ If you are not familiar with the |NCS| and its development environment, see :ref
 
    See the `nRF Connect SDK v1.4.0 documentation`_ for the last release supporting the nRF5340 PDK.
 
-|nrf5340_audio_note|
-Given its complexity, the application uses custom building and programming procedures.
-Refer to its documentation for more information.
+The |NCS| includes :ref:`nrf53_audio_app`, which integrate the LE Audio standard with custom reference hardware based on the nRF5340 DK.
+Given their complexity, the applications use custom building and programming procedures.
+Refer to their documentation for more information.
 
 .. _ug_nrf5340_intro:
 
@@ -44,7 +44,7 @@ Network core
 The network core is an Arm Cortex-M33 processor with a reduced feature set, designed for ultra-low-power operation.
 Use this core for radio communication and for real-time processing tasks involving low-level radio protocol layers.
 
-The build target for the network core in Zephyr is ``nrf5340dk_nrf5340_cpunet``.
+The build target for the network core in Zephyr is ``nrf5340dk/nrf5340/cpunet``.
 
 .. _ug_nrf5340_intro_app_core:
 
@@ -59,8 +59,8 @@ When the MCU boots, it always starts executing from the secure area.
 
 In Zephyr, the firmware of the application core is built using one of the following build targets:
 
-* ``nrf5340dk_nrf5340_cpuapp`` for build targets with CMSE disabled.
-* ``nrf5340dk_nrf5340_cpuapp_ns`` for build targets that have CMSE enabled and have the SPE firmware alongside the NSPE firmware.
+* ``nrf5340dk/nrf5340/cpuapp`` for build targets with CMSE disabled.
+* ``nrf5340dk/nrf5340/cpuapp/ns`` for build targets that have CMSE enabled and have the SPE firmware alongside the NSPE firmware.
 
 For information about CMSE and the difference between the two environments, see :ref:`app_boards_spe_nspe`.
 
@@ -79,13 +79,6 @@ See also :ref:`tfm_hello_world` for a sample that demonstrates how to add TF-M t
 
 Inter-core communication
 ========================
-
-Communication between the application core and the network core happens through a shared memory area.
-The application core memory is mapped to the network core memory map.
-This means that the network core can access and use the application core memory for shared memory communication.
-
-Interprocessor Communication (IPC) is used to indicate to the other core that there is new data available to pick up.
-The actual data exchange is handled by Open Asymmetric Multi-Processing (OpenAMP).
 
 Zephyr includes the `OpenAMP`_ library, which provides a complete solution for exchanging messages between the cores.
 The IPC peripheral is presented to Zephyr as an Interprocessor Mailbox (IPM) device.
@@ -145,6 +138,8 @@ The following table lists performance numbers that were measured under different
 | 128 MHz         | External flash  | Yes    | 48 MHz       | Quad   | 36.4      | 8.85               | 13.9               | 966                      | 911                      |
 +-----------------+-----------------+--------+--------------+--------+-----------+--------------------+--------------------+--------------------------+--------------------------+
 
+.. _ug_nrf5340_protocols:
+
 Protocols and use cases
 ***********************
 
@@ -161,7 +156,7 @@ Bluetooth Low Energy
 
    * - Network core
      - Application core
-   * - :ref:`zephyr:bluetooth-hci-rpmsg-sample`
+   * - :ref:`zephyr:bluetooth-hci-ipc-sample`
      - | :ref:`Bluetooth Low Energy samples <ble_samples>`
        | :ref:`Bluetooth samples in Zephyr <zephyr:bluetooth-samples>`
    * - :ref:`ble_rpc_host` (supported for development)
@@ -177,7 +172,7 @@ Split Controller and Host
 
 When splitting the Bluetooth LE Controller and the Host, run the Bluetooth LE Controller on the network core and the host part of the Bluetooth LE stack and the application logic on the application core.
 
-For the network core, the |NCS| provides the :ref:`zephyr:bluetooth-hci-rpmsg-sample` sample.
+For the network core, the |NCS| provides the :ref:`zephyr:bluetooth-hci-ipc-sample` sample.
 This Zephyr sample is designed specifically to enable the Bluetooth LE Controller functionality on a remote MCU using the `RPMsg Messaging Protocol`_ as a transport for Bluetooth HCI.
 The sample implements the RPMsg transport using the `OpenAMP`_ library to communicate with a Bluetooth Host stack that runs on a separate core (in this case, the nRF5340 application core).
 
@@ -201,12 +196,12 @@ To run the full Bluetooth LE stack on the network core, the |NCS| provides the :
 
 For the application core, use a compatible Bluetooth LE sample, for example, the :ref:`peripheral_hids_mouse`, :ref:`peripheral_uart` or :ref:`central_uart` sample.
 
-Bluetooth mesh
+Bluetooth Mesh
 --------------
 
-Bluetooth mesh operates on Bluetooth Low Energy (LE), and is implemented according to Bluetooth Mesh Profile Specification v1.0.1 and Bluetooth Mesh Model Specification v1.0.1.
+Bluetooth Mesh operates on Bluetooth Low Energy (LE), and is implemented according to Bluetooth Mesh Profile Specification v1.0.1 and Bluetooth Mesh Model Specification v1.0.1.
 For the application core, the |NCS| provides several :ref:`bt_mesh_samples`.
-In addition, you can find Bluetooth mesh samples with :ref:`Bluetooth samples in Zephyr <zephyr:bluetooth-samples>`.
+In addition, you can find Bluetooth Mesh samples with :ref:`Bluetooth samples in Zephyr <zephyr:bluetooth-samples>`.
 
 IEEE 802.15.4 (Thread and Zigbee)
 =================================
@@ -235,6 +230,7 @@ The sample implements the RPMsg transport using the `OpenAMP`_ library to commun
 For the application core, the |NCS| provides a series of samples for the :ref:`Thread <ug_thread>`, :ref:`Zigbee <ug_zigbee>`, and :ref:`Matter <ug_matter>` protocols.
 |multi_image|
 
+.. _ug_nrf5340_protocols_multiprotocol:
 
 Multiprotocol (Thread or Zigbee in combination with Bluetooth LE)
 =================================================================
@@ -257,7 +253,7 @@ When using Thread or Zigbee in parallel with Bluetooth LE, run the low-level rad
    Bluetooth LE and IEEE 802.15.4 multiprotocol architecture in multicore SoC
 
 For the network core, the |NCS| provides the :ref:`multiprotocol-rpmsg-sample` sample.
-It is a combination of the :ref:`zephyr:bluetooth-hci-rpmsg-sample` sample (for Bluetooth LE) and the :ref:`zephyr:nrf-ieee802154-rpmsg-sample` sample (for IEEE 802.15.4).
+It is a combination of the :ref:`zephyr:bluetooth-hci-ipc-sample` sample (for Bluetooth LE) and the :ref:`zephyr:nrf-ieee802154-rpmsg-sample` sample (for IEEE 802.15.4).
 This means that it enables both the Bluetooth LE Controller and the nRF IEEE 802.15.4 radio driver and simultaneously exposes the functionality of both stacks to the application core using the `RPMsg Messaging Protocol`_.
 Separate RPMsg endpoints are used to obtain independent inter-core connections for each stack.
 
@@ -285,7 +281,7 @@ Direct use of the radio peripheral
 Samples that directly use the radio peripheral can run on the network core of the nRF5340.
 They do not require any functionality from the application core.
 
-However, on nRF5340, the application core is responsible for starting the network core and connecting its GPIO pins (see :kconfig:option:`CONFIG_BOARD_ENABLE_CPUNET` and the code in :file:`zephyr/boards/arm/nrf5340dk_nrf5340/nrf5340_cpunet_reset.c`).
+However, on nRF5340, the application core is responsible for starting the network core and connecting its GPIO pins (see :kconfig:option:`CONFIG_BOARD_ENABLE_CPUNET` and the code in :file:`zephyr/boards/nordic/nrf5340dk/nrf5340_cpunet_reset.c`).
 Therefore, you must always program the application core, even if the firmware is supposed to run only on the network core.
 
 You can use the :ref:`nrf5340_empty_app_core` sample for this purpose.
@@ -339,9 +335,9 @@ By default, the two images are built together for all Bluetooth LE, Thread, Zigb
 Samples that are designed to run only on the network core include the :ref:`nrf5340_empty_app_core` sample as a child image.
 For other samples, the images are built separately.
 
-The build configuration depends on the following Kconfig options that must be set in the configuration of the parent image:
+The :term:`build configuration` depends on the following Kconfig options that must be set in the configuration of the parent image:
 
-* :kconfig:option:`CONFIG_BT_RPMSG` - set to ``y`` in all Bluetooth LE samples for the application core
+* :kconfig:option:`CONFIG_BT_HCI_IPC` - set to ``y`` in all Bluetooth LE samples for the application core
 * :kconfig:option:`CONFIG_NRF_802154_SER_HOST` - set to ``y`` in all Thread, Zigbee, and Matter samples for the application core
 * :kconfig:option:`CONFIG_NCS_SAMPLE_EMPTY_APP_CORE_CHILD_IMAGE` - set to ``y`` in all network core samples that require the :ref:`nrf5340_empty_app_core` sample
 
@@ -353,13 +349,13 @@ The combination of these options determines which (if any) sample is included in
    * - Enabled options
      - Child image sample for the network core
      - Child image sample for the application core
-   * - :kconfig:option:`CONFIG_BT_RPMSG`
-     - :ref:`zephyr:bluetooth-hci-rpmsg-sample`
+   * - :kconfig:option:`CONFIG_BT_HCI_IPC`
+     - :ref:`zephyr:bluetooth-hci-ipc-sample`
      - ---
    * - :kconfig:option:`CONFIG_NRF_802154_SER_HOST`
      - :ref:`zephyr:nrf-ieee802154-rpmsg-sample`
      - ---
-   * - :kconfig:option:`CONFIG_BT_RPMSG` and :kconfig:option:`CONFIG_NRF_802154_SER_HOST`
+   * - :kconfig:option:`CONFIG_BT_HCI_IPC` and :kconfig:option:`CONFIG_NRF_802154_SER_HOST`
      - :ref:`multiprotocol-rpmsg-sample`
      - ---
    * - :kconfig:option:`CONFIG_NCS_SAMPLE_EMPTY_APP_CORE_CHILD_IMAGE`
@@ -370,13 +366,13 @@ Configuration of the child image
 ================================
 
 When a network sample is built automatically as a child image in a multi-image build, you can define the relevant Kconfig options (if required) in a :file:`.conf` file.
-Name the file :file:`network_sample*\ .conf`, where *network_sample* is the name of the child image (for example, :file:`hci_rpmsg.conf`).
+Name the file :file:`network_sample*\ .conf`, where *network_sample* is the name of the child image (for example, :file:`hci_ipc.conf`).
 Place the file in a :file:`child_image` subfolder of the application sample directory.
 See :ref:`ug_multi_image_variables` for more information.
 
 This way of defining the Kconfig options allows to align the configurations of both images.
 
-For example, see the :ref:`ble_throughput` child image configuration in :file:`nrf/samples/bluetooth/throughput/child_image/hci_rpmsg.conf`.
+For example, see the :ref:`ble_throughput` child image configuration in :file:`nrf/samples/bluetooth/throughput/child_image/hci_ipc.conf`.
 
 .. _ug_nrf5340_building:
 
@@ -395,9 +391,9 @@ You can build and program separate images or combined images using the |nRFVSC|.
 Separate images
 ---------------
 
-To build and program the application core, follow the instructions in `How to build an application`_ and use ``nrf5340dk_nrf5340_cpuapp`` or ``nrf5340dk_nrf5340_cpuapp_ns`` as the build target.
+To build and program the application core, follow the instructions in `How to build an application`_ and use ``nrf5340dk/nrf5340/cpuapp`` or ``nrf5340dk/nrf5340/cpuapp/ns`` as the build target.
 
-To build and program the network core, follow the instructions in `How to build an application`_ and use ``nrf5340dk_nrf5340_cpunet`` as the build target.
+To build and program the network core, follow the instructions in `How to build an application`_ and use ``nrf5340dk/nrf5340/cpunet`` as the build target.
 
 .. _ug_nrf5340_VSC_multi_image:
 
@@ -410,7 +406,7 @@ Complete the following steps to build and program a multi-image build to the nRF
 
 .. |sample_path_vsc| replace:: :file:`nrf/samples/bluetooth/peripheral_lbs`
 
-.. |vsc_sample_board_target_line| replace:: select ``nrf5340dk_nrf5340_cpuapp`` or ``nrf5340dk_nrf5340_cpuapp_ns`` as the target board
+.. |vsc_sample_board_target_line| replace:: select ``nrf5340dk/nrf5340/cpuapp`` or ``nrf5340dk/nrf5340/cpuapp/ns`` as the target board
 
 .. include:: ../../../includes/vsc_build_and_run.txt
 
@@ -517,9 +513,7 @@ See the following instructions.
 
    .. group-tab:: west
 
-      Enter the following command to recover both cores::
-
-        west flash --recover
+      Use the ``--recover`` parameter with ``west flash``, as described in :ref:`programming_params`.
 
    .. group-tab:: nrfjprog
 
@@ -538,6 +532,8 @@ See the following instructions.
          Recovering the application core erases only the flash memory of the application core.
          Therefore, you must recover the network core first.
          Otherwise, if you recover the application core first and the network core last, the binary written to the application core is deleted and readback protection is enabled again after a reset.
+
+.. _ug_nrf53_developing_ble_fota:
 
 .. include:: ../nrf52/developing.rst
    :start-after: fota_upgrades_intro_start
@@ -595,11 +591,14 @@ To enable the simultaneous update of multiple images in the MCUboot, set the fol
 * :kconfig:option:`CONFIG_PCD_APP` - Enable commands exchange with the network core.
 * :kconfig:option:`CONFIG_UPDATEABLE_IMAGE_NUMBER` - Enable support for multiple update partitions by setting this option to ``2``.
 
+As described in :ref:`multi-image build guide <ug_multi_image_variables>`, make sure to add the child image prefix to the name of Kconfig options that are used when building MCUboot as a child image (for example, ``child_image_CONFIG_PCD_APP``).
+If not changed, then the default child image prefix for MCUboot is ``mcuboot_`` (for example, ``mcuboot_CONFIG_PCD_APP``).
+
 .. note::
 
-   The application core can be reverted, but doing so bricks the network core upon revertion, as the reversion process fills the network core with the content currently in the RAM that pcd uses.
-   To enable this, define the ``USE_NRF53_MULTI_IMAGE_WITHOUT_UPGRADE_ONLY`` Kconfig option in the project-level Kconfig file.
-   When this is option is defined, you can enable it by setting :kconfig:option`CONFIG_USE_NRF53_MULTI_IMAGE_WITHOUT_UPGRADE_ONLY`.
+   The application core can be reverted, but doing so breaks the network core upon reversal, as the reversion process fills the network core with the content currently in the RAM that PCD uses.
+   To enable this, define the :kconfig:option:`CONFIG_USE_NRF53_MULTI_IMAGE_WITHOUT_UPGRADE_ONLY` Kconfig option in the project-level Kconfig file.
+   When this option is defined, you can enable it by setting :kconfig:option:`CONFIG_USE_NRF53_MULTI_IMAGE_WITHOUT_UPGRADE_ONLY`.
 
 The :kconfig:option:`CONFIG_NRF53_MULTI_IMAGE_UPDATE` option selects this feature by default if these options and all its other dependencies are asserted.
 

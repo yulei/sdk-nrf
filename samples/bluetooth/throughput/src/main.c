@@ -29,8 +29,8 @@
 
 #define DEVICE_NAME	CONFIG_BT_DEVICE_NAME
 #define DEVICE_NAME_LEN (sizeof(DEVICE_NAME) - 1)
-#define INTERVAL_MIN	0x140	/* 320 units, 400 ms */
-#define INTERVAL_MAX	0x140	/* 320 units, 400 ms */
+#define INTERVAL_MIN	0x6	/* 6 units, 7.5 ms, only used to setup connection */
+#define INTERVAL_MAX	0x6	/* 6 units, 7.5 ms, only used to setup connection */
 
 #define THROUGHPUT_CONFIG_TIMEOUT K_SECONDS(20)
 
@@ -40,7 +40,7 @@ static volatile bool data_length_req;
 static volatile bool test_ready;
 static struct bt_conn *default_conn;
 static struct bt_throughput throughput;
-static struct bt_uuid *uuid128 = BT_UUID_THROUGHPUT;
+static const struct bt_uuid *uuid128 = BT_UUID_THROUGHPUT;
 static struct bt_gatt_exchange_params exchange_params;
 static struct bt_le_conn_param *conn_param =
 	BT_LE_CONN_PARAM(INTERVAL_MIN, INTERVAL_MAX, 0, 400);
@@ -205,12 +205,34 @@ static void connected(struct bt_conn *conn, uint8_t hci_err)
 	       info.role == BT_CONN_ROLE_CENTRAL ? "central" : "peripheral");
 	printk("Conn. interval is %u units\n", info.le.interval);
 
+	if (info.role == BT_CONN_ROLE_PERIPHERAL) {
+		err = bt_conn_set_security(conn, BT_SECURITY_L2);
+		if (err) {
+			printk("Failed to set security: %d\n", err);
+		}
+	}
+}
+
+void security_changed(struct bt_conn *conn, bt_security_t level,
+				 enum bt_security_err security_err)
+{
+	printk("Security changed: level %i, err: %i\n", level, security_err);
+
+	if (security_err != 0) {
+		printk("Failed to encrypt link\n");
+		bt_conn_disconnect(conn, BT_HCI_ERR_PAIRING_NOT_SUPPORTED);
+		return;
+	}
+
+	struct bt_conn_info info = {0};
+	int err;
+
+	err = bt_conn_get_info(default_conn, &info);
 	if (info.role == BT_CONN_ROLE_CENTRAL) {
 		err = bt_gatt_dm_start(default_conn,
 				       BT_UUID_THROUGHPUT,
 				       &discovery_cb,
 				       &throughput);
-
 		if (err) {
 			printk("Discover failed (err %d)\n", err);
 		}
@@ -480,24 +502,6 @@ static int connection_configuration_set(const struct shell *shell,
 		return err;
 	}
 
-	if (info.le.data_len->tx_max_len != data_len->tx_max_len) {
-		data_length_req = true;
-
-		err = bt_conn_le_data_len_update(default_conn, data_len);
-		if (err) {
-			shell_error(shell, "LE data length update failed: %d",
-				    err);
-			return err;
-		}
-
-		shell_print(shell, "LE Data length update pending");
-		err = k_sem_take(&throughput_sem, THROUGHPUT_CONFIG_TIMEOUT);
-		if (err) {
-			shell_error(shell, "LE Data Length update timeout");
-			return err;
-		}
-	}
-
 	if (info.le.interval != conn_param->interval_max) {
 		err = bt_conn_le_param_update(default_conn, conn_param);
 		if (err) {
@@ -512,6 +516,24 @@ static int connection_configuration_set(const struct shell *shell,
 		if (err) {
 			shell_error(shell,
 				    "Connection parameters update timeout");
+			return err;
+		}
+	}
+
+	if (info.le.data_len->tx_max_len != data_len->tx_max_len) {
+		data_length_req = true;
+
+		err = bt_conn_le_data_len_update(default_conn, data_len);
+		if (err) {
+			shell_error(shell, "LE data length update failed: %d",
+				    err);
+			return err;
+		}
+
+		shell_print(shell, "LE Data length update pending");
+		err = k_sem_take(&throughput_sem, THROUGHPUT_CONFIG_TIMEOUT);
+		if (err) {
+			shell_error(shell, "LE Data Length update timeout");
 			return err;
 		}
 	}
@@ -627,7 +649,8 @@ BT_CONN_CB_DEFINE(conn_callbacks) = {
 	.le_param_req = le_param_req,
 	.le_param_updated = le_param_updated,
 	.le_phy_updated = le_phy_updated,
-	.le_data_len_updated = le_data_length_updated
+	.le_data_len_updated = le_data_length_updated,
+	.security_changed = security_changed
 };
 
 int main(void)

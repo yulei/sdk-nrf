@@ -25,6 +25,7 @@ target_include_directories(app
   ${ZEPHYR_NRF_MODULE_DIR}/subsys/net/lib/fota_download/include
   ${ZEPHYR_NRF_MODULE_DIR}/include/net/
   ${ZEPHYR_NRF_MODULE_DIR}/subsys/dfu/include
+  ${ZEPHYR_NRF_MODULE_DIR}/subsys/net/lib/download_client/include
   . # To get 'pm_config.h'
   )
 
@@ -42,6 +43,5 @@ target_compile_options(app
   -DCONFIG_FOTA_DOWNLOAD_RESOURCE_LOCATOR_LENGTH=512
   -DCONFIG_FOTA_DOWNLOAD_FILE_NAME_LENGTH=128
   -DCONFIG_FOTA_DOWNLOAD_HOST_NAME_LENGTH=128
-  ${info_magic}
-  ${ext_api_magic}
+  -DCONFIG_FOTA_DOWNLOAD_SEC_TAG_LIST_SIZE_MAX=5
   )

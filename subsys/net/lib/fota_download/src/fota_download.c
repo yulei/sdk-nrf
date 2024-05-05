@@ -17,8 +17,8 @@
 #if defined(PM_S1_ADDRESS) || defined(CONFIG_DFU_TARGET_MCUBOOT)
 /* MCUBoot support is required */
 #include <fw_info.h>
-#if CONFIG_BUILD_WITH_TFM
-#include <tfm_ioctl_api.h>
+#if CONFIG_TRUSTED_EXECUTION_NONSECURE
+#include <tfm/tfm_ioctl_api.h>
 #endif
 #include <dfu/dfu_target_mcuboot.h>
 #endif
@@ -106,8 +106,11 @@ static void stopped(void)
 static void dfu_target_callback_handler(enum dfu_target_evt_id evt)
 {
 	switch (evt) {
-	case DFU_TARGET_EVT_TIMEOUT:
+	case DFU_TARGET_EVT_ERASE_PENDING:
 		send_evt(FOTA_DOWNLOAD_EVT_ERASE_PENDING);
+		break;
+	case DFU_TARGET_EVT_TIMEOUT:
+		send_evt(FOTA_DOWNLOAD_EVT_ERASE_TIMEOUT);
 		break;
 	case DFU_TARGET_EVT_ERASE_DONE:
 		send_evt(FOTA_DOWNLOAD_EVT_ERASE_DONE);
@@ -228,11 +231,9 @@ static int download_client_callback(const struct download_client_evt *event)
 		}
 
 		if (IS_ENABLED(CONFIG_FOTA_DOWNLOAD_PROGRESS_EVT)) {
-			err = dfu_target_offset_get(&offset);
+			err = download_client_downloaded_size_get(&dlc, &offset);
 			if (err != 0) {
-				LOG_DBG("unable to get dfu target "
-					"offset err: %d",
-					err);
+				LOG_DBG("unable to get downloaded size err: %d", err);
 				set_error_state(FOTA_DOWNLOAD_ERROR_CAUSE_INTERNAL);
 				goto error_and_close;
 			}
@@ -272,15 +273,18 @@ static int download_client_callback(const struct download_client_evt *event)
 		/* In case of socket errors we can return 0 to retry/continue,
 		 * or non-zero to stop
 		 */
-		if ((socket_retries_left) && ((event->error == -ENOTCONN) ||
-					      (event->error == -ECONNRESET) ||
-					      (event->error == -ETIMEDOUT))) {
+		if ((socket_retries_left) && (event->error == -ECONNRESET)) {
 			LOG_WRN("Download socket error. %d retries left...",
 				socket_retries_left);
 			socket_retries_left--;
 			/* Fall through and return 0 below to tell
 			 * download_client to retry
 			 */
+		} else if ((event->error == -ECONNABORTED) || (event->error == -ECONNREFUSED)) {
+			LOG_ERR("Download client failed to connect to server");
+			set_error_state(FOTA_DOWNLOAD_ERROR_CAUSE_CONNECT_FAILED);
+
+			goto error_and_close;
 		} else {
 			LOG_ERR("Download client error");
 			err = dfu_target_done(false);
@@ -349,13 +353,6 @@ stop_and_clear_flags:
 	return;
 }
 
-int fota_download_start(const char *host, const char *file, int sec_tag,
-	uint8_t pdn_id, size_t fragment_size)
-{
-	return fota_download_start_with_image_type(host, file, sec_tag, pdn_id,
-		fragment_size, DFU_TARGET_IMAGE_TYPE_ANY);
-}
-
 static bool is_ip_address(const char *host)
 {
 	struct sockaddr sa;
@@ -404,13 +401,7 @@ int fota_download_s0_active_get(bool *const s0_active)
 	int err;
 
 #ifdef CONFIG_TRUSTED_EXECUTION_NONSECURE
-#if CONFIG_SPM_SERVICE_S0_ACTIVE
-	err = spm_s0_active(PM_S0_ADDRESS, PM_S1_ADDRESS, s0_active);
-#elif CONFIG_BUILD_WITH_TFM
 	err = tfm_platform_s0_active(PM_S0_ADDRESS, PM_S1_ADDRESS, s0_active);
-#else
-#error "Not possible to read s0 active status"
-#endif
 #else /* CONFIG_TRUSTED_EXECUTION_NONSECURE */
 	err = read_s0_active(PM_S0_ADDRESS, PM_S1_ADDRESS, s0_active);
 #endif /* CONFIG_TRUSTED_EXECUTION_NONSECURE */
@@ -420,14 +411,22 @@ int fota_download_s0_active_get(bool *const s0_active)
 #endif /* PM_S1_ADDRESS */
 }
 
-int fota_download_start_with_image_type(const char *host, const char *file,
-	int sec_tag, uint8_t pdn_id, size_t fragment_size,
+
+int fota_download_any(const char *host, const char *file, const int *sec_tag_list,
+		      uint8_t sec_tag_count, uint8_t pdn_id, size_t fragment_size)
+{
+	return fota_download(host, file, sec_tag_list, sec_tag_count, pdn_id,
+			     fragment_size, DFU_TARGET_IMAGE_TYPE_ANY);
+}
+
+int fota_download(const char *host, const char *file,
+	const int *sec_tag_list, uint8_t sec_tag_count, uint8_t pdn_id, size_t fragment_size,
 	const enum dfu_target_image_type expected_type)
 {
-	static int sec_tag_list[1];
 	uint32_t host_hash = 0;
 	uint32_t file_hash = 0;
 	int err = -1;
+	static int sec_tag_list_copy[CONFIG_FOTA_DOWNLOAD_SEC_TAG_LIST_SIZE_MAX];
 
 	struct download_client_cfg config = {
 		.pdn_id = pdn_id,
@@ -440,6 +439,10 @@ int fota_download_start_with_image_type(const char *host, const char *file,
 
 	if (atomic_test_and_set_bit(&flags, FLAG_DOWNLOADING)) {
 		return -EALREADY;
+	}
+
+	if (sec_tag_count > ARRAY_SIZE(sec_tag_list_copy)) {
+		return -E2BIG;
 	}
 
 	atomic_clear_bit(&flags, FLAG_CLOSED);
@@ -457,19 +460,21 @@ int fota_download_start_with_image_type(const char *host, const char *file,
 	} else {
 		atomic_clear_bit(&flags, FLAG_NEW_URI);
 	}
+
 	dl_host_hash = host_hash;
 	dl_file_hash = file_hash;
 	dl_host = host;
 	dl_file = file;
 
-	if (sec_tag != -1 && !is_ip_address(host)) {
-		config.set_tls_hostname = true;
-	}
+	if ((sec_tag_list != NULL) && (sec_tag_count > 0)) {
+		memcpy(sec_tag_list_copy, sec_tag_list, sec_tag_count * sizeof(sec_tag_list[0]));
 
-	if (sec_tag != -1) {
-		sec_tag_list[0] = sec_tag;
-		config.sec_tag_list = sec_tag_list;
-		config.sec_tag_count = 1;
+		config.sec_tag_count = sec_tag_count;
+		config.sec_tag_list = sec_tag_list_copy;
+
+		if (!is_ip_address(host)) {
+			config.set_tls_hostname = true;
+		}
 	}
 
 	socket_retries_left = CONFIG_FOTA_SOCKET_RETRIES;
@@ -518,6 +523,26 @@ int fota_download_start_with_image_type(const char *host, const char *file,
 	}
 
 	return 0;
+}
+
+int fota_download_start(const char *host, const char *file, int sec_tag,
+			uint8_t pdn_id, size_t fragment_size)
+{
+	int sec_tag_list[1] = { sec_tag };
+	uint8_t sec_tag_count = sec_tag < 0 ? 0 : 1;
+
+	return fota_download_any(host, file, sec_tag_list, sec_tag_count, pdn_id, fragment_size);
+}
+
+int fota_download_start_with_image_type(const char *host, const char *file,
+					int sec_tag, uint8_t pdn_id, size_t fragment_size,
+					const enum dfu_target_image_type expected_type)
+{
+	int sec_tag_list[1] = { sec_tag };
+	uint8_t sec_tag_count = sec_tag < 0 ? 0 : 1;
+
+	return fota_download(host, file, sec_tag_list, sec_tag_count, pdn_id,
+			     fragment_size, expected_type);
 }
 
 static int fota_download_object_init(void)

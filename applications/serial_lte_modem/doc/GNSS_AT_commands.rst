@@ -7,7 +7,7 @@ GNSS AT commands
    :local:
    :depth: 2
 
-The following list contains GNSS-related AT commands.
+This page describes GNSS-related AT commands.
 
 Control GNSS
 ============
@@ -115,7 +115,7 @@ Unsolicited notification
 * The ``<heading>`` value represents the heading of the movement of the user in degrees.
 * The ``<datetime>`` value represents the UTC date-time.
 
-.. gps_status_notif_start
+.. slm_gps_status_notif_start
 
 .. code-block::
 
@@ -133,7 +133,7 @@ Unsolicited notification
   * ``3`` - GNSS enters sleep because of timeout.
   * ``4`` - GNSS enters sleep because a fix is acquired.
 
-.. gps_status_notif_end
+.. slm_gps_status_notif_end
 
 Example
 ~~~~~~~
@@ -146,7 +146,7 @@ Example
   AT+CFUN=31
 
   OK
-  AT#XGPS=1,0,0,0,0
+  AT#XGPS=1,0,0,0
 
   #XGPS: 1,1
 
@@ -265,8 +265,8 @@ Response syntax
 ~~~~~~~~~~~~~~~
 
 .. include:: GNSS_AT_commands.rst
-   :start-after: gps_status_notif_start
-   :end-before: gps_status_notif_end
+   :start-after: slm_gps_status_notif_start
+   :end-before: slm_gps_status_notif_end
 
 Example
 ~~~~~~~
@@ -299,6 +299,7 @@ Example
   AT#XGPS=?
 
   #XGPS: (0,1),(0,1),<interval>,<timeout>
+
   OK
 
 Delete GNSS data

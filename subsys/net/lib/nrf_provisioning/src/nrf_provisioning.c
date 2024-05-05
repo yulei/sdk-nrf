@@ -14,13 +14,14 @@
 #include <zephyr/logging/log.h>
 #include <zephyr/logging/log_ctrl.h>
 #include <zephyr/init.h>
-#include <zephyr/random/rand32.h>
+#include <zephyr/random/random.h>
 #include <zephyr/settings/settings.h>
 #include <zephyr/sys/reboot.h>
 
 #include <modem/lte_lc.h>
 #include <modem/modem_key_mgmt.h>
 #include <modem/nrf_modem_lib.h>
+#include <modem/modem_attest_token.h>
 #include <net/nrf_provisioning.h>
 #include <net/rest_client.h>
 #include <date_time.h>
@@ -44,7 +45,7 @@ K_CONDVAR_DEFINE(np_cond);
 #define SETTINGS_STORAGE_PREFIX CONFIG_NRF_PROVISIONING_SETTINGS_STORAGE_PATH
 
 static bool nw_connected = true;
-
+static bool reschedule;
 
 /* nRF Provisioning context */
 static struct nrf_provisioning_http_context rest_ctx = {
@@ -293,24 +294,26 @@ static int nrf_provisioning_modem_mode_cb(enum lte_lc_func_mode new_mode, void *
 	return ret;
 }
 
-static void nrf_provisioning_device_mode_cb(void *user_data)
+static void nrf_provisioning_device_mode_cb(enum nrf_provisioning_event event, void *user_data)
 {
 	(void)user_data;
 
 #if !CONFIG_UNITY
-	/* Disconnect from network gracefully */
-	int ret = lte_lc_func_mode_set(LTE_LC_FUNC_MODE_OFFLINE);
+	if (event == NRF_PROVISIONING_EVENT_DONE) {
+		/* Disconnect from network gracefully */
+		int ret = lte_lc_func_mode_set(LTE_LC_FUNC_MODE_OFFLINE);
 
-	if (ret != 0) {
-		LOG_ERR("Unable to set modem offline, error %d", ret);
+		if (ret != 0) {
+			LOG_ERR("Unable to set modem offline, error %d", ret);
+		}
+
+		LOG_INF("Provisioning done, rebooting...");
+		while (log_process()) {
+			;
+		}
+
+		sys_reboot(SYS_REBOOT_WARM);
 	}
-
-	LOG_INF("Provisioning done, rebooting...");
-	while (log_process()) {
-		;
-	}
-
-	sys_reboot(SYS_REBOOT_WARM);
 #endif
 }
 
@@ -338,7 +341,6 @@ static void nrf_provisioning_lte_handler(const struct lte_lc_evt *const evt)
 		break;
 	}
 }
-
 
 int nrf_provisioning_init(struct nrf_provisioning_mm_change *mmode,
 				struct nrf_provisioning_dm_change *dmode)
@@ -442,6 +444,7 @@ int nrf_provisioning_schedule(void)
 
 	if (first) {
 		first = false;
+		nxt_provisioning = CONFIG_NRF_PROVISIONING_INTERVAL_S;
 		goto out;
 	}
 
@@ -491,6 +494,8 @@ out:
 	retry_s += spread_s;
 
 	LOG_DBG("Connecting in %llds", retry_s);
+	reschedule = false;
+
 	return retry_s;
 }
 
@@ -509,6 +514,41 @@ static void commit_latest_cmd_id(void)
 	}
 }
 
+void nrf_provisioning_set_interval(int interval)
+{
+	LOG_DBG("Provisioning interval set to %d", interval);
+
+	if (interval != nxt_provisioning) {
+		char time_str[sizeof(STRINGIFY(2147483647))] = {0};
+		int ret;
+
+		nxt_provisioning = interval;
+		reschedule = true;
+
+		ret = k_mutex_lock(&np_mtx, K_NO_WAIT);
+		if (ret < 0) {
+			LOG_ERR("Unable to lock mutex, err: %d", ret);
+			return;
+		}
+		/* Let the provisioning thread run */
+		k_condvar_signal(&np_cond);
+		k_mutex_unlock(&np_mtx);
+
+		ret = snprintf(time_str, sizeof(time_str), "%d", interval);
+		if (ret < 0) {
+			LOG_ERR("Unable to convert interval to string");
+			return;
+		}
+
+		ret = settings_save_one(SETTINGS_STORAGE_PREFIX "/interval-sec",
+			time_str, strlen(time_str) + 1);
+		if (ret) {
+			LOG_ERR("Unable to store interval, err: %d", ret);
+			return;
+		}
+		LOG_DBG("Stored interval: \"%s\"", time_str);
+	}
+}
 
 int nrf_provisioning_req(void)
 {
@@ -533,13 +573,15 @@ int nrf_provisioning_req(void)
 
 			k_condvar_wait(&np_cond, &np_mtx, K_SECONDS(ret));
 			k_mutex_unlock(&np_mtx);
-		} while (!nw_connected);
+		} while (!nw_connected || reschedule);
 
+		dm.cb(NRF_PROVISIONING_EVENT_START, dm.user_data);
 		if (IS_ENABLED(CONFIG_NRF_PROVISIONING_HTTP)) {
 			ret = nrf_provisioning_http_req(&rest_ctx);
 		} else {
 			ret = nrf_provisioning_coap_req(&coap_ctx);
 		}
+		dm.cb(NRF_PROVISIONING_EVENT_STOP, dm.user_data);
 
 		while (ret == -EBUSY) {
 			/* Backoff */
@@ -550,10 +592,31 @@ int nrf_provisioning_req(void)
 			if (backoff > SRV_TIMEOUT_BACKOFF_MAX_S) {
 				backoff = SRV_TIMEOUT_BACKOFF_MAX_S;
 			}
+			dm.cb(NRF_PROVISIONING_EVENT_START, dm.user_data);
 			if (IS_ENABLED(CONFIG_NRF_PROVISIONING_HTTP)) {
 				ret = nrf_provisioning_http_req(&rest_ctx);
 			} else {
 				ret = nrf_provisioning_coap_req(&coap_ctx);
+			}
+			dm.cb(NRF_PROVISIONING_EVENT_STOP, dm.user_data);
+		}
+
+		if (ret == -EACCES) {
+			LOG_WRN("Unauthorized access: device is not yet claimed.");
+			if (IS_ENABLED(CONFIG_NRF_PROVISIONING_PRINT_ATTESTATION_TOKEN)) {
+				struct nrf_attestation_token token = { 0 };
+				int err;
+
+				err = modem_attest_token_get(&token);
+				if (err) {
+					LOG_ERR("Failed to get token, err %d", err);
+				} else {
+					printk("\nAttestation token "
+					       "for claiming device on nRFCloud:\n");
+					printk("%.*s.%.*s\n\n", token.attest_sz, token.attest,
+					       token.cose_sz, token.cose);
+					modem_attest_token_free(&token);
+				}
 			}
 		}
 
@@ -574,7 +637,7 @@ int nrf_provisioning_req(void)
 				LOG_DBG("Saving the latest command id");
 				commit_latest_cmd_id();
 			}
-			dm.cb(dm.user_data);
+			dm.cb(NRF_PROVISIONING_EVENT_DONE, dm.user_data);
 		}
 
 #if CONFIG_UNITY

@@ -35,7 +35,6 @@ DEFINE_FAKE_VALUE_FUNC(int, modem_key_mgmt_write, nrf_sec_tag_t, enum modem_key_
 		       const void *, size_t);
 DEFINE_FAKE_VALUE_FUNC(int, lte_lc_func_mode_set, enum lte_lc_func_mode);
 DEFINE_FAKE_VALUE_FUNC(int, lte_lc_connect);
-DEFINE_FAKE_VALUE_FUNC(int, lte_lc_deinit);
 DEFINE_FAKE_VALUE_FUNC(int, lte_lc_offline);
 DEFINE_FAKE_VALUE_FUNC(int, lte_lc_func_mode_get, enum lte_lc_func_mode *);
 DEFINE_FAKE_VALUE_FUNC(int, lte_lc_lte_mode_get, enum lte_lc_lte_mode *);
@@ -56,6 +55,7 @@ DEFINE_FAKE_VALUE_FUNC(int, modem_info_init);
 DEFINE_FAKE_VALUE_FUNC(int, modem_info_params_init, struct modem_param_info *);
 DEFINE_FAKE_VALUE_FUNC(int, modem_info_params_get, struct modem_param_info *);
 DEFINE_FAKE_VALUE_FUNC(int, modem_info_rsrp_register, rsrp_cb_t);
+DEFINE_FAKE_VALUE_FUNC(int, modem_info_get_hw_version, char *, uint8_t);
 DEFINE_FAKE_VOID_FUNC(engine_trigger_update, bool);
 DEFINE_FAKE_VALUE_FUNC(int, dfu_target_mcuboot_set_buf, uint8_t *, size_t);
 DEFINE_FAKE_VALUE_FUNC(int, nrf_modem_lib_shutdown);
@@ -96,3 +96,24 @@ DEFINE_FAKE_VALUE_FUNC(int, fota_download_util_download_cancel);
 DEFINE_FAKE_VALUE_FUNC(int, fota_download_util_image_schedule, enum dfu_target_image_type);
 DEFINE_FAKE_VALUE_FUNC(int, fota_download_util_image_reset, enum dfu_target_image_type);
 DEFINE_FAKE_VALUE_FUNC(int, fota_download_util_apply_update, enum dfu_target_image_type);
+
+static int lwm2m_engine_init(void)
+{
+	STRUCT_SECTION_FOREACH(lwm2m_init_func, init) {
+		int ret = init->f();
+
+		if (ret) {
+			printf("Init function %p returned %d\n", init, ret);
+		}
+	}
+	return 0;
+}
+
+SYS_INIT(lwm2m_engine_init, APPLICATION, CONFIG_KERNEL_INIT_PRIORITY_DEFAULT);
+
+FUNC_NORETURN void sys_reboot(int types)
+{
+	while (1) {
+		k_sleep(K_SECONDS(1));
+	}
+}

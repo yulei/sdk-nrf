@@ -4,13 +4,15 @@ This sample uses the `nRF Cloud REST API`_, which requires that your device has 
 
 .. requirement_keysign_moreinfo_start
 
-(See `nRF Cloud REST API`_ and `Securely generating credentials on the nRF9160`_ for more details on this requirement).
+(See `nRF Cloud REST API`_ and `Securely generating credentials`_ for more details on this requirement).
 
 If you are using nRF9160 DK, modem version v1.3.x or later is required.
 Your nRF9160 DK may ship with modem firmware older than v1.3.x, so verify that you have the latest installed.
+For an nRF9161 DK, modem version v2.0.0 or later is required.
 
 For instructions on updating your device's modem firmware, see the following documents:
 
+  * :ref:`Updating modem firmware on nRF9161 DK <nrf9161_updating_fw_modem>`
   * :ref:`Updating modem firmware on nRF9160 DK <nrf9160_gs_updating_fw_modem>`
   * :ref:`Updating modem firmware on Thingy:91 <programming_thingy>`
 
@@ -20,7 +22,7 @@ To obtain and register a valid signing key, you can do one of the following:
 
 * Provision your device on nRF Cloud using Just-In-Time Provisioning (JITP) (detailed below).
 * Provision your device on nRF Cloud with preconnect provisioning (detailed in `nRF Cloud Provisioning`_).
-* Install or generate a private key on your device and register its public key with nRF Cloud (detailed in `Securely generating credentials on the nRF9160`_).
+* Install or generate a private key on your device and register its public key with nRF Cloud (detailed in `Securely generating credentials`_).
 
 To provision your device on nRF Cloud using JITP, complete the following steps:
 

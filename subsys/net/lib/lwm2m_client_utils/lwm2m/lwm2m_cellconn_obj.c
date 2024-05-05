@@ -150,22 +150,6 @@ static struct lwm2m_engine_obj_inst *cellconn_create(uint16_t obj_inst_id)
 	return &inst;
 }
 
-static int lwm2m_cellconn_init(void)
-{
-	cellconn.obj_id = LWM2M_OBJECT_CELLULAR_CONNECTIVITY_ID;
-	cellconn.version_major = CELLCONN_VERSION_MAJOR;
-	cellconn.version_minor = CELLCONN_VERSION_MINOR;
-	cellconn.is_core = false;
-	cellconn.fields = fields;
-	cellconn.field_count = ARRAY_SIZE(fields);
-	cellconn.max_instance_count = 1U;
-	cellconn.create_cb = cellconn_create;
-	lwm2m_register_obj(&cellconn);
-
-	LOG_DBG("Init LwM2M cellular connectivity instance");
-	return 0;
-}
-
 #define PSM_ONLY_MODE 1
 #define EDRX_ONLY_MODE 2
 #define PSM_AND_EDRX_MODE 3
@@ -564,8 +548,8 @@ static void edrx_update(struct lte_lc_edrx_cfg edrx_cfg)
 	/* The eDRX value is a multiple of 10.24 seconds, except for the
 	 * special case of idx == 0 for LTE-M, where the value is 5.12 seconds.
 	 */
-	if (edrx_cfg.edrx > 10.0) {
-		val = round(edrx_cfg.edrx / 10.24);
+	if (edrx_cfg.edrx > 10.0f) {
+		val = round(edrx_cfg.edrx / 10.24f);
 		for (int i = 1; i < 16; i++) {
 			if (val == multipliers[i]) {
 				idx = i;
@@ -578,10 +562,10 @@ static void edrx_update(struct lte_lc_edrx_cfg edrx_cfg)
 	 * [3GPP-TS_24.008, clause 10.5.5.32]
 	 */
 	if (edrx_cfg.mode == LTE_LC_LTE_MODE_LTEM) {
-		ptw = round(edrx_cfg.ptw / 1.28) - 1;
+		ptw = round(edrx_cfg.ptw / 1.28f) - 1;
 		edrx = edrx_lookup_ltem[idx];
 	} else {
-		ptw = round(edrx_cfg.ptw / 2.56) - 1;
+		ptw = round(edrx_cfg.ptw / 2.56f) - 1;
 		edrx = edrx_lookup_nbiot[idx];
 	}
 
@@ -623,8 +607,8 @@ static void lte_event_handler(const struct lte_lc_evt *const evt)
 		break;
 	case LTE_LC_EVT_EDRX_UPDATE:
 		LOG_DBG("LTE EDRX update: mode %s, edrx %.2f s, Paging time %.2f s",
-			(evt->edrx_cfg.mode == 7 ? "LTE" : "NBIOT"), evt->edrx_cfg.edrx,
-			evt->edrx_cfg.ptw);
+			(evt->edrx_cfg.mode == 7 ? "LTE" : "NBIOT"),
+			(double)evt->edrx_cfg.edrx, (double)evt->edrx_cfg.ptw);
 		edrx_update(evt->edrx_cfg);
 		break;
 	case LTE_LC_EVT_LTE_MODE_UPDATE:
@@ -643,7 +627,7 @@ static int lwm2m_lte_handler_register(void)
 	return 0;
 }
 
-int lwm2m_init_cellular_connectivity_object(void)
+static int lwm2m_cellular_connectivity_init(void)
 {
 	uint16_t data_len;
 	uint8_t data_flags;
@@ -697,4 +681,21 @@ int lwm2m_init_cellular_connectivity_object(void)
 	return 0;
 }
 
-SYS_INIT(lwm2m_cellconn_init, APPLICATION, CONFIG_KERNEL_INIT_PRIORITY_DEFAULT);
+static int lwm2m_cellconn_obj_init(void)
+{
+	cellconn.obj_id = LWM2M_OBJECT_CELLULAR_CONNECTIVITY_ID;
+	cellconn.version_major = CELLCONN_VERSION_MAJOR;
+	cellconn.version_minor = CELLCONN_VERSION_MINOR;
+	cellconn.is_core = false;
+	cellconn.fields = fields;
+	cellconn.field_count = ARRAY_SIZE(fields);
+	cellconn.max_instance_count = 1U;
+	cellconn.create_cb = cellconn_create;
+	lwm2m_register_obj(&cellconn);
+
+	LOG_DBG("Init LwM2M cellular connectivity object");
+	return 0;
+}
+
+LWM2M_OBJ_INIT(lwm2m_cellconn_obj_init);
+LWM2M_APP_INIT(lwm2m_cellular_connectivity_init);

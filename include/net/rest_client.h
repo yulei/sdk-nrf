@@ -4,6 +4,9 @@
  * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
+#ifndef REST_CLIENT_H__
+#define REST_CLIENT_H__
+
 /**
  * @file rest_client.h
  *
@@ -14,12 +17,13 @@
  * @details Provide REST client functionality.
  */
 
-#ifndef REST_CLIENT_H__
-#define REST_CLIENT_H__
-
 #include <zephyr/kernel.h>
 #include <zephyr/net/http/client.h>
 #include <zephyr/net/http/parser.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /** @brief TLS is not used. */
 #define REST_CLIENT_SEC_TAG_NO_SEC -1
@@ -30,12 +34,17 @@
 /** @brief REST client opens a socket connection. */
 #define REST_CLIENT_SCKT_CONNECT -1
 
-/** @brief Common HTTP status codes */
+/** @brief Common HTTP status codes. */
 enum rest_client_http_status {
+	/** HTTP status: OK. */
 	REST_CLIENT_HTTP_STATUS_OK = 200,
+	/** HTTP status: Bad request. */
 	REST_CLIENT_HTTP_STATUS_BAD_REQ = 400,
+	/** HTTP status: Unauthorized. */
 	REST_CLIENT_HTTP_STATUS_UNAUTH = 401,
+	/** HTTP status: Forbidden. */
 	REST_CLIENT_HTTP_STATUS_FORBIDDEN = 403,
+	/** HTTP status: Not found. */
 	REST_CLIENT_HTTP_STATUS_NOT_FOUND = 404,
 };
 
@@ -47,23 +56,22 @@ enum rest_client_http_status {
  */
 struct rest_client_req_context {
 	/** Socket identifier for the connection. When using the default value,
-	 *  the library will open a new socket connection. Default: REST_CLIENT_SCKT_CONNECT.
+	 *  the library will open a new socket connection. Default: @ref REST_CLIENT_SCKT_CONNECT.
 	 */
 	int connect_socket;
 
 	/** Defines whether the connection should remain after API call. Default: false. */
 	bool keep_alive;
 
-	/** Security tag. Default: REST_CLIENT_SEC_TAG_NO_SEC. */
+	/** Security tag. Default: @ref REST_CLIENT_SEC_TAG_NO_SEC. */
 	int sec_tag;
 
 	/** Indicates the preference for peer verification.
-	 *  Initialize to REST_CLIENT_TLS_DEFAULT_PEER_VERIFY
-	 *  and the default (TLS_PEER_VERIFY_REQUIRED) is used.
+	 *  Default: @ref REST_CLIENT_TLS_DEFAULT_PEER_VERIFY.
 	 */
 	int tls_peer_verify;
 
-	/** Used HTTP method. */
+	/** Used HTTP method. Default: HTTP_GET. */
 	enum http_method http_method;
 
 	/** Hostname or IP address to be used in the request. */
@@ -90,7 +98,7 @@ struct rest_client_req_context {
 	 *  for socket connection creation and data transfer meaning REST request can take
 	 *  longer than this given timeout. To disable, set the timeout duration to SYS_FOREVER_MS.
 	 *  A value of zero will result in an immediate timeout.
-	 *  Default: CONFIG_REST_CLIENT_REST_REQUEST_TIMEOUT.
+	 *  Default: @kconfig{CONFIG_REST_CLIENT_REST_REQUEST_TIMEOUT}.
 	 */
 	int32_t timeout_ms;
 
@@ -159,6 +167,10 @@ int rest_client_request(struct rest_client_req_context *req_ctx,
  * @param[in,out] req_ctx Request context for communicating with REST client API.
  */
 void rest_client_request_defaults_set(struct rest_client_req_context *req_ctx);
+
+#ifdef __cplusplus
+}
+#endif
 
 /** @} */
 

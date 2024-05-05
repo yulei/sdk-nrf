@@ -15,9 +15,11 @@
 
 #pragma once
 
-#define CHIP_DEVICE_CONFIG_DYNAMIC_ENDPOINT_COUNT CONFIG_BRIDGE_MAX_DYNAMIC_ENDPOINTS_NUMBER
+#define CHIP_CONFIG_LOG_MODULE_Zcl_PROGRESS 0
+#define CHIP_CONFIG_LOG_MODULE_InteractionModel_PROGRESS 0
+#define CHIP_CONFIG_LOG_MODULE_InteractionModel_DETAIL 0
+#define CHIP_CONFIG_LOG_MODULE_DataManagement_PROGRESS 0
+#define CHIP_CONFIG_LOG_MODULE_FabricProvisioning_PROGRESS 0
+#define CHIP_CONFIG_LOG_MODULE_SecureChannel_PROGRESS 0
 
-/* Disable handling only single connection to avoid stopping Matter service BLE advertising
- * while other BLE bridge-related connections are open.
- */
-#define CHIP_DEVICE_CONFIG_CHIPOBLE_SINGLE_CONNECTION 0
+#define CHIP_DEVICE_CONFIG_DYNAMIC_ENDPOINT_COUNT CONFIG_BRIDGE_MAX_DYNAMIC_ENDPOINTS_NUMBER

@@ -16,13 +16,27 @@ extern "C" {
 #endif
 
 #include <net/nrf_cloud_rest.h>
+#if defined(CONFIG_NRF_CLOUD_AGNSS)
 #include <net/nrf_cloud_agnss.h>
+#endif
+#if defined(CONFIG_NRF_CLOUD_PGPS)
 #include <net/nrf_cloud_pgps.h>
+#endif
 #include <net/nrf_cloud_codec.h>
-#include <zephyr/net/coap_client.h>
 
 /**
  * @defgroup nrf_cloud_coap nRF CoAP API
+ *
+ * @brief The functions in this library can return either positive or negative return values.
+ *
+ * @details Negative values are standard device-side errors defined in errno.h. These indicate
+ * a failure to send the request to the cloud for various reasons, such as the device
+ * is not connected to the cloud or the request contains invalid parameters.
+ *
+ * Positive values are cloud-side errors (CoAP result codes). These indicate the
+ * cloud received the request but rejected it. This can occur either because of the
+ * request itself or because of a cloud-side error. See the specific result code for
+ * details. These are defined in zephyr/net/coap.h.
  * @{
  */
 
@@ -41,7 +55,10 @@ int nrf_cloud_coap_init(void);
  *
  * @param app_ver Version to report to the shadow; can be NULL.
  *
- * @return 0 if authorized successfully, otherwise, a negative error number.
+ * @return 0 if authorized successfully, otherwise, an error number.
+ *           Negative values are device-side errors defined in errno.h.
+ *           Positive values are cloud-side errors (CoAP result codes)
+ *           defined in zephyr/net/coap.h.
  */
 int nrf_cloud_coap_connect(const char * const app_ver);
 
@@ -102,7 +119,8 @@ int nrf_cloud_coap_disconnect(void);
  *          request type.
  *  @retval -ENOBUFS will be returned, and an error message printed, if there is not enough
  *          buffer space to store retrieved A-GNSS data.
- * @retval 0 If successful.
+ * @return 0 If successful. Positive values are cloud-side errors (CoAP result codes)
+ *           defined in zephyr/net/coap.h.
  */
 int nrf_cloud_coap_agnss_data_get(struct nrf_cloud_rest_agnss_request const *const request,
 				  struct nrf_cloud_rest_agnss_result *result);
@@ -117,8 +135,10 @@ int nrf_cloud_coap_agnss_data_get(struct nrf_cloud_rest_agnss_request const *con
  * @param[in,out] file_location Structure that will contain the host and path to
  *                              the prediction file.
  *
- * @retval 0 If successful.
- *          Otherwise, a (negative) error code is returned.
+ * @return 0 If successful, nonzero if failed.
+ *           Negative values are device-side errors defined in errno.h.
+ *           Positive values are cloud-side errors (CoAP result codes)
+ *           defined in zephyr/net/coap.h.
  */
 int nrf_cloud_coap_pgps_url_get(struct nrf_cloud_rest_pgps_request const *const request,
 				 struct nrf_cloud_pgps_result *file_location);
@@ -126,22 +146,30 @@ int nrf_cloud_coap_pgps_url_get(struct nrf_cloud_rest_pgps_request const *const 
 /**
  * @brief Send a sensor value to nRF Cloud.
  *
- *  The CoAP message is sent as a non-confirmable CoAP message.
+ *  The sensor message is sent either as a non-confirmable or confirmable CoAP message.
+ *  Use non-confirmable when sending low priority information for which some data loss is
+ *  acceptable.
  *
- * @param[in]     app_id The app_id identifying the type of data. See the values in nrf_cloud_defs.h
- *                       that begin with  NRF_CLOUD_JSON_APPID_. You may also use custom names.
+ * @param[in]     app_id The app ID identifying the type of data. See the values
+ *                       that begin with NRF_CLOUD_JSON_APPID_ in nrf_cloud_defs.h. You may
+ *                       also use custom names.
  * @param[in]     value  Sensor reading.
  * @param[in]     ts_ms  Timestamp the data was measured, or NRF_CLOUD_NO_TIMESTAMP.
+ * @param[in]     confirmable Select whether to use a CON or NON CoAP transfer.
  *
- * @retval 0 If successful.
- *          Otherwise, a (negative) error code is returned.
+ * @return 0 If successful, nonzero if failed.
+ *           Negative values are device-side errors defined in errno.h.
+ *           Positive values are cloud-side errors (CoAP result codes)
+ *           defined in zephyr/net/coap.h.
  */
-int nrf_cloud_coap_sensor_send(const char *app_id, double value, int64_t ts_ms);
+int nrf_cloud_coap_sensor_send(const char *app_id, double value, int64_t ts_ms, bool confirmable);
 
 /**
- * @brief Send a message string to nRF Cloud.
+ * @brief Send a message to nRF Cloud.
  *
- *  The CoAP message is sent as a non-confirmable CoAP message.
+ *  The JSON or CBOR message is sent either as a non-confirmable or confirmable CoAP message.
+ *  Use non-confirmable when sending low priority information for which some data loss is
+ *  acceptable.
  *
  * @param[in]     app_id     The app_id identifying the type of data. See the values in
  *                           nrf_cloud_defs.h that begin with  NRF_CLOUD_JSON_APPID_.
@@ -149,37 +177,51 @@ int nrf_cloud_coap_sensor_send(const char *app_id, double value, int64_t ts_ms);
  * @param[in]     message    The string to send.
  * @param[in]     json       Set true if the data should be sent in JSON format, otherwise CBOR.
  * @param[in]     ts_ms      Timestamp the data was measured, or NRF_CLOUD_NO_TIMESTAMP.
+ * @param[in]     confirmable Select whether to use a CON or NON CoAP transfer.
  *
- * @retval 0 If successful.
- *          Otherwise, a (negative) error code is returned.
+ * @return 0 If successful, nonzero if failed.
+ *           Negative values are device-side errors defined in errno.h.
+ *           Positive values are cloud-side errors (CoAP result codes)
+ *           defined in zephyr/net/coap.h.
  */
-int nrf_cloud_coap_message_send(const char *app_id, const char *message, bool json, int64_t ts_ms);
+int nrf_cloud_coap_message_send(const char *app_id, const char *message, bool json, int64_t ts_ms,
+				bool confirmable);
 
 /**
  * @brief Send a preencoded JSON message to nRF Cloud.
  *
- *  The CoAP message is sent as a non-confirmable CoAP message.
+ *  The JSON message is sent either as a non-confirmable or confirmable CoAP message.
+ *  Use non-confirmable when sending low priority information for which some data loss is
+ *  acceptable.
  *
  * @param[in]     message    The string to send.
+ * @param[in]     bulk       Set true if message is an array of JSON messages
+ *                           to be sent to the bulk topic.
+ * @param[in]     confirmable Select whether to use a CON or NON CoAP transfer.
  *
- * @retval 0 If successful.
- *          Otherwise, a (negative) error code is returned.
+ * @return 0 If successful, nonzero if failed.
+ *           Negative values are device-side errors defined in errno.h.
+ *           Positive values are cloud-side errors (CoAP result codes)
+ *           defined in zephyr/net/coap.h.
  */
-int nrf_cloud_coap_json_message_send(const char *message);
+int nrf_cloud_coap_json_message_send(const char *message, bool bulk, bool confirmable);
 
 /**
  * @brief Send the device location in the @ref nrf_cloud_gnss_data PVT field to nRF Cloud.
  *
- *  The CoAP message is sent as a non-confirmable CoAP message. Only
+ *  The location message is sent as either a non-confirmable or confirmable CoAP message. Only
  *  @ref NRF_CLOUD_GNSS_TYPE_PVT is supported.
  *
  * @param[in]     gnss A pointer to an @ref nrf_cloud_gnss_data struct indicating the device
  *                     location, usually as determined by the GNSS unit.
+ * @param[in]     confirmable Select whether to use a CON or NON CoAP transfer.
  *
- * @retval 0 If successful.
- *          Otherwise, a (negative) error code is returned.
+ * @return 0 If successful, nonzero if failed.
+ *           Negative values are device-side errors defined in errno.h.
+ *           Positive values are cloud-side errors (CoAP result codes)
+ *           defined in zephyr/net/coap.h.
  */
-int nrf_cloud_coap_location_send(const struct nrf_cloud_gnss_data * const gnss);
+int nrf_cloud_coap_location_send(const struct nrf_cloud_gnss_data * const gnss, bool confirmable);
 
 /**
  * @brief Request device location from nRF Cloud.
@@ -189,8 +231,10 @@ int nrf_cloud_coap_location_send(const struct nrf_cloud_gnss_data * const gnss);
  * @param[in]     request Data to be provided in API call.
  * @param[in,out] result Location information.
  *
- * @return 0 if the request succeeded, a positive value indicating a CoAP result code,
- * or a negative error number.
+ * @return 0 If successful, nonzero if failed.
+ *           Negative values are device-side errors defined in errno.h.
+ *           Positive values are cloud-side errors (CoAP result codes)
+ *           defined in zephyr/net/coap.h.
  */
 int nrf_cloud_coap_location_get(struct nrf_cloud_rest_location_request const *const request,
 				struct nrf_cloud_location_result *const result);
@@ -203,8 +247,10 @@ int nrf_cloud_coap_location_get(struct nrf_cloud_rest_location_request const *co
  *                    @ref nrf_cloud_coap_fota_job_free to free the memory
  *                    allocated by this function.
  *
- * @return 0 if the request succeeded, a positive value indicating a CoAP result code,
- * or a negative error number.
+ * @return 0 If successful, nonzero if failed.
+ *           Negative values are device-side errors defined in errno.h.
+ *           Positive values are cloud-side errors (CoAP result codes)
+ *           defined in zephyr/net/coap.h.
  */
 int nrf_cloud_coap_fota_job_get(struct nrf_cloud_fota_job_info *const job);
 
@@ -224,8 +270,10 @@ void nrf_cloud_coap_fota_job_free(struct nrf_cloud_fota_job_info *const job);
  * @param[in]     details Null-terminated string containing details of the
  *                job, such as an error description.
  *
- * @return 0 if the request succeeded, a positive value indicating a CoAP result code,
- * or a negative error number.
+ * @return 0 If successful, nonzero if failed.
+ *           Negative values are device-side errors defined in errno.h.
+ *           Positive values are cloud-side errors (CoAP result codes)
+ *           defined in zephyr/net/coap.h.
  */
 int nrf_cloud_coap_fota_job_update(const char *const job_id,
 	const enum nrf_cloud_fota_status status, const char * const details);
@@ -241,28 +289,50 @@ int nrf_cloud_coap_fota_job_update(const char *const job_id,
  * @param[in]     delta   True to request only changes in the shadow, if any; otherwise,
  *                        all of desired part.
  *
- * @return 0 if the request succeeded, a positive value indicating a CoAP result code,
- * or a negative error number.
+ * @return 0 If successful, nonzero if failed.
+ *           Negative values are device-side errors defined in errno.h.
+ *           Positive values are cloud-side errors (CoAP result codes)
+ *           defined in zephyr/net/coap.h.
  */
 int nrf_cloud_coap_shadow_get(char *buf, size_t buf_len, bool delta);
 
 /**
- * @brief Update the device's "state" in the shadow via the UpdateDeviceState endpoint.
+ * @brief Update the device's "reported state" in the shadow through the state/update CoAP resource.
+ * This is used both to report the current state of the device as well as to accept settings
+ * changes received in a shadow delta.
  *
  * @param[in]     shadow_json Null-terminated JSON string to be written to the device's shadow.
  *
- * @return 0 if the request succeeded, a positive value indicating a CoAP result code,
- * or a negative error number.
+ * @return 0 If successful, nonzero if failed.
+ *           Negative values are device-side errors defined in errno.h.
+ *           Positive values are cloud-side errors (CoAP result codes)
+ *           defined in zephyr/net/coap.h.
  */
 int nrf_cloud_coap_shadow_state_update(const char * const shadow_json);
 
 /**
- * @brief Update the device status in the shadow.
+ * @brief Update the device's "desired state" in the shadow through the state/desired CoAP resource.
+ * Normally, this is only used to silence a shadow delta that is incompatible with the device,
+ * by overwriting the invalid desired values with the reported values.
+ *
+ * @param[in]     shadow_json Null-terminated JSON string to be written to the device's shadow.
+ *
+ * @return 0 If successful, nonzero if failed.
+ *           Negative values are device-side errors defined in errno.h.
+ *           Positive values are cloud-side errors (CoAP result codes)
+ *           defined in zephyr/net/coap.h.
+ */
+int nrf_cloud_coap_shadow_desired_update(const char * const shadow_json);
+
+/**
+ * @brief Update the device status in the shadow's reported state section.
  *
  * @param[in]     dev_status Device status to be encoded.
  *
- * @return 0 if the request succeeded, a positive value indicating a CoAP result code,
- * or a negative error number.
+ * @return 0 If successful, nonzero if failed.
+ *           Negative values are device-side errors defined in errno.h.
+ *           Positive values are cloud-side errors (CoAP result codes)
+ *           defined in zephyr/net/coap.h.
  */
 int nrf_cloud_coap_shadow_device_status_update(const struct nrf_cloud_device_status
 					       *const dev_status);
@@ -272,8 +342,10 @@ int nrf_cloud_coap_shadow_device_status_update(const struct nrf_cloud_device_sta
  *
  * @param[in]     svc_inf Service info items to be updated in the shadow.
  *
- * @return 0 if the request succeeded, a positive value indicating a CoAP result code,
- * or a negative error number.
+ * @return 0 If successful, nonzero if failed.
+ *           Negative values are device-side errors defined in errno.h.
+ *           Positive values are cloud-side errors (CoAP result codes)
+ *           defined in zephyr/net/coap.h.
  */
 int nrf_cloud_coap_shadow_service_info_update(const struct nrf_cloud_svc_info * const svc_inf);
 
@@ -283,25 +355,50 @@ int nrf_cloud_coap_shadow_service_info_update(const struct nrf_cloud_svc_info * 
  * One such element is the control section, which specifies the log level and turns
  * alerts on and off.
  *
- * @param[in] in_data A pointer to a structure with the length and a pointer to the delta received.
+ * If application-specific delta data exists, it will be provided in delta_out.
  *
- * @return 0 if the request succeeded, a positive value indicating a CoAP result code,
- * or a negative error number.
+ * @param[in] in_data A pointer to a structure with the length and a pointer to the delta received.
+ * @param[out] delta_out A pointer to a structure that contains application-specific delta data.
+ *
+ * @retval -ENOMSG Error decoding input data.
+ * @retval 0 Success, no application-specific delta data.
+ * @retval 1 Success, application-specific delta data exists.
+ *           Caller is responsible for the memory in delta_out; free with @ref nrf_cloud_obj_free.
  */
-int nrf_cloud_coap_shadow_delta_process(const struct nrf_cloud_data *in_data);
+int nrf_cloud_coap_shadow_delta_process(const struct nrf_cloud_data *in_data,
+					struct nrf_cloud_obj *const delta_out);
+
+/**
+ * @brief Send raw bytes to nRF Cloud.
+ *
+ * @param[in]     buf buffer with binary string.
+ * @param[in]     buf_len  length of buf in bytes.
+ * @param[in]     confirmable Select whether to use a CON or NON CoAP transfer.
+ * @return 0 If successful, nonzero if failed.
+ *           Negative values are device-side errors defined in errno.h.
+ *           Positive values are cloud-side errors (CoAP result codes)
+ *           defined in zephyr/net/coap.h.
+ */
+int nrf_cloud_coap_bytes_send(uint8_t *buf, size_t buf_len, bool confirmable);
 
 /**
  * @brief Send an nRF Cloud object
  *
- * This only supports sending of the CoAP CBOR or JSON type or a pre-encoded CBOR buffer.
+ * This only supports sending of the CoAP CBOR or JSON type objects or a pre-encoded CBOR buffer.
+ * If the object is actually an array of JSON objects, it will be sent to the d2c/bulk topic,
+ * otherwise all other documents are sent to the d2c topic. See the @ref nrf_cloud_obj_bulk_init()
+ * function.
  *
  * @param[in]     obj An nRF Cloud object. Will be encoded first if obj->enc_src is
  * NRF_CLOUD_ENC_SRC_NONE.
+ * @param[in]     confirmable Select whether to use a CON or NON CoAP transfer.
  *
- * @return 0 if the request succeeded, a positive value indicating a CoAP result code,
- * or a negative error number.
+ * @return 0 If successful, nonzero if failed.
+ *           Negative values are device-side errors defined in errno.h.
+ *           Positive values are cloud-side errors (CoAP result codes)
+ *           defined in zephyr/net/coap.h.
  */
-int nrf_cloud_coap_obj_send(struct nrf_cloud_obj *const obj);
+int nrf_cloud_coap_obj_send(struct nrf_cloud_obj *const obj, bool confirmable);
 
 /** @} */
 

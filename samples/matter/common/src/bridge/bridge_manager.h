@@ -6,14 +6,20 @@
 
 #pragma once
 
+#include "binding/binding_handler.h"
 #include "bridge_util.h"
+#include "util/finite_map.h"
 #include "bridged_device_data_provider.h"
 #include "matter_bridged_device.h"
+
+namespace Nrf
+{
 
 class BridgeManager {
 public:
 	static constexpr uint8_t kMaxBridgedDevices = CHIP_DEVICE_CONFIG_DYNAMIC_ENDPOINT_COUNT;
 	static constexpr uint8_t kMaxBridgedDevicesPerProvider = CONFIG_BRIDGE_MAX_BRIDGED_DEVICES_NUMBER_PER_PROVIDER;
+	static constexpr chip::EndpointId kAggregatorEndpointId = CONFIG_BRIDGE_AGGREGATOR_ENDPOINT_ID;
 
 	using LoadStoredBridgedDevicesCallback = CHIP_ERROR (*)();
 
@@ -94,6 +100,15 @@ public:
 		return CHIP_NO_ERROR;
 	}
 
+	/**
+	 * @brief Get the data provider stored on the specified endpoint.
+	 *
+	 * @param endpoint endpoint on which the bridged device is stored
+	 * @param[out] deviceType a type of the bridged device
+	 * @return pointer to the data provider bridged with the device on the specified endpoint
+	 */
+	BridgedDeviceDataProvider *GetProvider(chip::EndpointId endpoint, uint16_t &deviceType);
+
 	static CHIP_ERROR HandleRead(uint16_t index, chip::ClusterId clusterId,
 				     const EmberAfAttributeMetadata *attributeMetadata, uint8_t *buffer,
 				     uint16_t maxReadLength);
@@ -101,6 +116,8 @@ public:
 				      const EmberAfAttributeMetadata *attributeMetadata, uint8_t *buffer);
 	static void HandleUpdate(BridgedDeviceDataProvider &dataProvider, chip::ClusterId clusterId,
 				 chip::AttributeId attributeId, void *data, size_t dataSize);
+	static void HandleCommand(BridgedDeviceDataProvider &dataProvider, chip::ClusterId clusterId,
+				  chip::CommandId commandId, Nrf::Matter::BindingHandler::InvokeCommand invokeCommand);
 
 	static BridgeManager &Instance()
 	{
@@ -161,18 +178,32 @@ private:
 
 	static constexpr uint8_t kMaxDataProviders = CONFIG_BRIDGE_MAX_BRIDGED_DEVICES_NUMBER;
 
-	using DeviceMap = FiniteMap<BridgedDevicePair, kMaxBridgedDevices>;
+	using DeviceMap = FiniteMap<uint16_t, BridgedDevicePair, kMaxBridgedDevices>;
 
+	/**
+	 * @brief Add pair of single bridged device and its data provider using optional index and endpoint id.
+	 * The method takes care of releasing the memory allocated for the data provider and bridged device objects
+	 * in case of adding process failure.
+	 *
+	 * @param device address of valid bridged device object
+	 * @param dataProvider address of valid data provider object
+	 * @param devicesPairIndex index object that will be filled with pair's index
+	 * assigned by the bridge
+	 * @param endpointId value of endpoint id required to be assigned
+	 * @return CHIP_NO_ERROR on success
+	 * @return other error code on failure
+	 */
 	CHIP_ERROR AddSingleDevice(MatterBridgedDevice *device, BridgedDeviceDataProvider *dataProvider,
 				   chip::Optional<uint8_t> &devicesPairIndex, uint16_t endpointId);
 	CHIP_ERROR SafelyRemoveDevice(uint8_t index);
 
 	/**
 	 * @brief Add pair of bridged devices and their data provider using optional index and endpoint id. This is a
-	 * wrapper method invoked by public AddBridgedDevices methods that maps integer indexes to optionals are assigns
-	 * output index values.
+	 * wrapper method invoked by public AddBridgedDevices methods that maps indexes from optionals to integers that
+	 * are assigned with output values. This method takes the ownership of the passed `devices` and `dataProvider`
+	 * objects unconditionally.
 	 *
-	 * @param device address of valid bridged device object
+	 * @param devices address of valid bridged device objects
 	 * @param dataProvider address of valid data provider object
 	 * @param devicesPairIndexes array of the index objects that will be filled with pairs' indexes
 	 * assigned by the bridge
@@ -183,9 +214,9 @@ private:
 	 * @return CHIP_NO_ERROR on success
 	 * @return other error code on failure
 	 */
-	CHIP_ERROR AddBridgedDevices(MatterBridgedDevice *devices[], BridgedDeviceDataProvider *dataProvider,
-				     uint8_t deviceListSize, uint8_t devicesPairIndexes[], uint16_t endpointIds[],
-				     chip::Optional<uint8_t> indexes[]);
+	CHIP_ERROR DoAddBridgedDevices(MatterBridgedDevice *devices[], BridgedDeviceDataProvider *dataProvider,
+				       uint8_t deviceListSize, uint8_t devicesPairIndexes[], uint16_t endpointIds[],
+				       chip::Optional<uint8_t> indexes[]);
 
 	/**
 	 * @brief Add pair of bridged devices and their data provider using optional index and endpoint id. The method
@@ -224,3 +255,5 @@ private:
 	chip::EndpointId mCurrentDynamicEndpointId;
 	bool mIsInitialized = false;
 };
+
+} /* namespace Nrf */

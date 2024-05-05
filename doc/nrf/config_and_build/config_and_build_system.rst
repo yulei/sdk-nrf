@@ -9,254 +9,284 @@ Build and configuration system
 
 The |NCS| build and configuration system is based on the one from Zephyr, with some additions.
 
-Zephyr's build and configuration system
-***************************************
+.. _configuration_system_overview:
 
-Zephyr's build and configuration system uses the following building blocks as a foundation:
+Overview of build and configuration system
+******************************************
 
-* CMake, the cross-platform build system generator.
-* Kconfig, a powerful configuration system also used in the Linux kernel.
-* Devicetree, a hardware description language that is used to describe the hardware that the |NCS| is meant to run on.
+The build and configuration system in Zephyr and the |NCS| uses the following building blocks as a foundation:
 
-Since the build and configuration system used by the |NCS| comes from Zephyr, references to the original Zephyr documentation are provided here in order to avoid duplication.
-See the following links for information about the different building blocks mentioned above:
+.. list-table:: Configuration system overview
+   :header-rows: 1
 
-* :ref:`zephyr:application` is a complete guide to application development with Zephyr, including the build and configuration system.
-* :ref:`zephyr:cmake-details` describes in-depth the usage of CMake for Zephyr-based applications.
-* :ref:`zephyr:application-kconfig` contains a guide for Kconfig usage in applications.
-* :ref:`zephyr:set-devicetree-overlays` explains how to use devicetree and its overlays to customize an application's devicetree.
-* :ref:`board_porting_guide` is a complete guide to porting Zephyr to your own board.
+   * - Source
+     - File types
+     - Usage
+     - Available dedicated editing tools
+     - Additional information
+   * - :ref:`CMake <zephyr:build_overview>`
+     - :file:`CMakeLists.txt`, :file:`.cmake`
+     - Build system generator.
+     - n/a
+     - CMake is used to build your application together with the Zephyr kernel.
+   * - :ref:`Devicetree <zephyr:dt-guide>`
+     - :file:`.dts`, :file:`.dtsi`, :file:`.overlay`
+     - Hardware description language.
+     - `Devicetree Visual Editor <How to work with Devicetree Visual Editor_>`_
+     - Devicetree Visual Editor is part of the |nRFVSC|. You still need to be familiar with the devicetree language to use it.
+   * - :ref:`Kconfig <zephyr:application-kconfig>`
+     - :file:`Kconfig`, :file:`prj.conf`, :file:`.config`
+     - Software configuration system also used in the Linux kernel.
+     - `Kconfig GUI <Configuring with nRF Kconfig_>`_, :ref:`menuconfig and guiconfig <zephyr:menuconfig>`
+     - | Kconfig GUI is part of the |nRFVSC|.
+       | The :ref:`Kconfig Reference <configuration_options>` provides the documentation for each configuration option.
+   * - :ref:`partition_manager`
+     - :file:`pm.yml`, :file:`pm_static.yml`
+     - Memory layout configuration system.
+     - :ref:`partition_manager` script
+     - Partition Manager is an |NCS| configuration system that is not available in Zephyr.
+
+Each of these systems comes with a specialized syntax and purpose.
+See the following sections for more information.
+To read more about Zephyr's configuration system and its role in the application development, see :ref:`zephyr:build_overview` and :ref:`zephyr:application` in the Zephyr documentation.
+
+When you :ref:`create_application`, the configuration files for each of these systems are created in the :ref:`application directory <create_application_structure>`: :file:`CMakeLists.txt` for CMake, :file:`app.overlay` for devicetree, :file:`prj.conf` for Kconfig, and :file:`partitions.yml` for Partition Manager (if enabled).
+You can then edit them according to your needs (see :ref:`building`).
+
+When you start building, a CMake build is executed in two stages: configuration phase and building phase.
+
+.. figure:: ../images/ncs-toolchain.svg
+   :alt: nRF Connect SDK tools and configuration
+
+   |NCS| tools and configuration methods
+
+.. _configuration_system_overview_config:
+
+Configuration phase
+===================
+
+During this phase, CMake executes build scripts from :file:`CMakeLists.txt` and gathers configuration from different sources, for example :ref:`app_build_file_suffixes`, to generate the final build scripts and create a model of the build for the specified build target.
+The result of this process is a :term:`build configuration`, a set of files that will drive the build process.
+
+For more information about this phase, see the respective sections on Zephyr's :ref:`zephyr:cmake-details` page, which describes in-depth the usage of CMake for Zephyr-based applications.
+
+Role of CMakeLists.txt
+----------------------
+
+In Zephyr and the |NCS|, the application is a CMake project.
+As such, the application controls the configuration and build process of itself, Zephyr, and sourced libraries.
+The application's :file:`CMakeLists.txt` file is the main CMake project file and the source of the build process configuration.
+
+Zephyr provides a CMake package that must be loaded by the application into its :file:`CMakeLists.txt` file.
+When loaded, the application can reference items provided by both Zephyr and the |NCS|.
+
+Loading Zephyr's `CMake <CMake documentation_>`_ package creates the ``app`` CMake target.
+You can add application source files to this target from the application :file:`CMakeLists.txt` file.
+See :ref:`modifying_files_compiler` for detailed information.
+
+.. _configure_application_hw:
+
+Hardware-related configuration
+------------------------------
+
+.. ncs-include:: build/cmake/index.rst
+   :docset: zephyr
+   :dedent: 3
+   :start-after: Devicetree
+   :end-before: The preprocessed devicetree sources
+
+The preprocessed devicetree sources are parsed by the :file:`zephyr/scripts/dts/gen_defines.py` script to generate a :file:`devicetree_unfixed.h` header file with preprocessor macros.
+
+The :file:`zephyr.dts` file contains the entire hardware-related configuration of the system in the devicetree format.
+The header file contains the same kind of information, but with defines usable by source code.
+
+For more information, see :ref:`configuring_devicetree` and Zephyr's :ref:`zephyr:dt-guide`.
+In particular, :ref:`zephyr:set-devicetree-overlays` explains how to use devicetree and its overlays to customize an application's devicetree.
+
+.. _configure_application_sw:
+
+Software-related configuration
+------------------------------
+
+.. ncs-include:: build/cmake/index.rst
+   :docset: zephyr
+   :dedent: 3
+   :start-after: Kconfig
+   :end-before: Information from devicetree is available to Kconfig,
+
+Information from devicetree is available to Kconfig, through the functions defined in :file:`zephyr/scripts/kconfig/kconfigfunctions.py`.
+
+The :file:`.config` file in the :file:`<build_dir>/zephyr/` directory describes most of the software configuration of the constructed binary.
+Some subsystems can use their own configuration files.
+
+For more information, see :ref:`configure_application` and Zephyr's :ref:`zephyr:application-kconfig`.
+The :ref:`Kconfig Reference <configuration_options>` provides the documentation for each configuration option in the |NCS|.
+
+Memory layout configuration
+---------------------------
+
+The memory layout configuration is provided by the :ref:`partition_manager` script, specific to the |NCS|.
+
+The script must be enabled to provide the memory layout configuration.
+It is impacted by various elements, such as Kconfig configuration options or the presence of child images.
+Partition Manager ensures that all required partitions are in the correct place and have the correct size.
+
+If enabled, the memory layout can be controlled in the following ways:
+
+* Dynamically (default) - In this scenario, the layout is impacted by various elements, such as Kconfig configuration options or the presence of child images.
+  Partition Manager ensures that all required partitions are in the correct place and have the correct size.
+* Statically - In this scenario, you need to provide the static configuration.
+  See :ref:`ug_pm_static` for information about how to do this.
+
+After CMake has run, a :file:`partitions.yml` file with the memory layout will have been created in the :file:`build` directory.
+This process also creates a set of header files that provides defines, which can be used to refer to memory layout elements.
+
+Child images
+------------
+
+The |NCS| build system allows the application project to become a root for the sub-applications known in the |NCS| as child images.
+Examples of child images are bootloader images, network core images, or security-related images.
+Each child image is a separate application.
+
+For more information, see :ref:`ug_multi_image`.
+
+.. _app_build_file_suffixes:
+
+Custom configurations
+---------------------
+
+Zephyr provides the :ref:`zephyr:application-file-suffixes` feature for applications that require a single code base with multiple configurations for different product or build variants (or both).
+When you select a given file suffix for the :ref:`configuration phase <configuration_system_overview_config>`, the build system will use a specific set of files to create a specific build configuration for the application.
+If it does not find files that match the provided suffix, the build system will fall back to the default files without suffix.
+
+The file suffix can be any string, but many applications and samples in the |NCS| use ``release``.
+This suffix can be included in the :file:`prj.conf` file name (for example, :file:`prj_release.conf`), and also in file names for board configurations, child image Kconfig configurations, and others.
+In this way, these files are made dependent on the given configuration and are only used when that build configuration is generated.
+For example, if an application uses a custom :file:`nrf5340dk_nrf5340_cpuapp_release.overlay` overlay file, this file will be used together with the application's :file:`prj_release.conf` when you set :makevar:`FILE_SUFFIX` to ``release`` (``-DFILE_SUFFIX=release``).
+
+Many applications and samples in the |NCS| define even more detailed build configurations.
+For example, the :ref:`Zigbee light switch <zigbee_light_switch_sample>` sample features the ``fota`` configuration.
+See the Configuration section of the given application or sample's documentation for information on if it includes any custom configurations.
+
+.. important::
+    The file suffixes feature is replacing the :ref:`app_build_additions_build_types` that used the :makevar:`CONF_FILE` variable.
+    File suffixes are backward compatible with this variable, but the following software components are not compatible with file suffixes:
+
+    * :ref:`Child image Kconfig configuration <ug_multi_image_permanent_changes>`.
+      Use the :makevar:`CONF_FILE` variable during the deprecation period of the build types.
+
+For information about how to provide file suffixes when building an application, see :ref:`cmake_options`.
+
+.. _configuration_system_overview_build:
+
+Building phase
+==============
+
+During this phase, the final build scripts are executed.
+The build phase begins when the user invokes ``make`` or `ninja <Ninja documentation_>`_.
+The compiler (for example, `GCC compiler`_) then creates object files used to create the final executables.
+You can customize this stage by :ref:`cmake_options` and using :ref:`compiler_settings`.
+
+The result of this process is a complete application in a format suitable for flashing on the desired target board.
+See :ref:`output build files <app_build_output_files>` for details.
+
+The build phase can be broken down, conceptually, into four stages: the pre-build, first-pass binary, final binary, and post-processing.
+To read about each of these stages, see :ref:`zephyr:cmake-details` in the Zephyr documentation.
 
 .. _app_build_additions:
 
-|NCS| additions
-***************
+Additions specific to the |NCS|
+*******************************
 
 The |NCS| adds some functionality on top of the Zephyr build and configuration system.
 Those additions are automatically included into the Zephyr build system using a :ref:`cmake_build_config_package`.
 
 You must be aware of these additions when you start writing your own applications based on this SDK.
 
-* The Kconfig option :kconfig:option:`CONFIG_WARN_EXPERIMENTAL` is enabled by default.
-  It gives warnings at CMake configure time if any experimental feature is enabled.
+.. _app_build_additions_experimental:
 
-  For example, when building a sample that enables :kconfig:option:`CONFIG_BT_EXT_ADV`, the following warning is printed at CMake configure time:
+Experimental option enabled by default
+======================================
 
-  .. code-block:: shell
+Unlike in Zephyr, the Kconfig option :kconfig:option:`CONFIG_WARN_EXPERIMENTAL` is enabled by default in the |NCS|.
+It gives warnings at CMake configure time if any :ref:`experimental <software_maturity>` feature is enabled.
 
-     warning: Experimental symbol BT_EXT_ADV is enabled.
+For example, when building a sample that enables :kconfig:option:`CONFIG_BT_EXT_ADV`, the following warning is printed at CMake configure time:
 
-  For more information, see :ref:`software_maturity`.
-* The |NCS| provides an additional :file:`boilerplate.cmake` file that is automatically included when using the Zephyr CMake package in the :file:`CMakeLists.txt` file of your application::
+.. code-block:: shell
 
-    find_package(Zephyr HINTS $ENV{ZEPHYR_BASE})
+   warning: Experimental symbol BT_EXT_ADV is enabled.
 
-* The |NCS| allows you to :ref:`create custom build type files <modifying_build_types>` instead of using a single :file:`prj.conf` file.
-* The |NCS| build system extends Zephyr's with support for multi-image builds.
-  You can find out more about these in the :ref:`ug_multi_image` section.
-* The |NCS| adds a :ref:`partition_manager`, responsible for partitioning the available flash memory.
-* The |NCS| build system generates zip files containing binary images and a manifest for use with nRF Cloud FOTA.
+To disable these warnings, disable the :kconfig:option:`CONFIG_WARN_EXPERIMENTAL` Kconfig option.
 
-.. _app_build_additions_tools:
+.. _app_build_additions_build_types:
+.. _gs_modifying_build_types:
+.. _modifying_build_types:
 
-|NCS| configuration tools
-=========================
+Custom build types
+==================
 
-The |nRFVSC| provides the following configuration tools for the build system components:
+.. important::
+    The build types are deprecated and are being replaced by :ref:`suffix-based configurations <app_build_additions_build_types>` and Zephyr's :ref:`zephyr:sysbuild`.
+    You can continue to use the build types feature until the transition is complete in the |NCS|.
+    It is still required for applications that use build types with :ref:`multiple images <ug_multi_image>`.
+    Check the application and sample documentation pages for which variable to use.
 
-* For CMake, the `build configuration management <How to work with build configurations_>`_.
-* For Devicetree, the `Devicetree Visual Editor <How to work with Devicetree Visual Editor_>`_.
-* For Kconfig, the `Kconfig GUI <Configuring with nRF Kconfig_>`_.
+A build type is a feature that defines the way in which the configuration files are to be handled.
+For example, selecting a build type lets you generate different build configurations for *release* and *debug* versions of the application.
 
-.. _app_build_fota:
+In the |NCS|, the build type is controlled using the configuration files, whose names can be suffixed to define specific build types.
+When you select a build type for the :ref:`configuration phase <configuration_system_overview_config>`, the compiler will use a specific set of files to create a specific build configuration for the application.
 
-Building FOTA images
-********************
+The :file:`prj.conf` file is the application-specific default, but many applications and samples include source files for generating the build configuration differently, for example :file:`prj_release.conf` or :file:`prj_debug.conf`.
+Similarly, the build type can be included in file names for board configuration, Partition Manager's static configuration, child image Kconfig configuration, and others.
+In this way, these files are made dependent on the build type and will only be used when the corresponding build type is invoked.
+For example, if an application uses :file:`pm_static_release.yml` to define Partition Manager's static configuration, this file will only be used when the application's :file:`prj_release.conf` file is used to select the release build type.
 
-The |NCS| build system places output images in the :file:`<build folder>/zephyr` folder.
-These images are then used for updates from a cloud served (for example, nRF Cloud).
+Many applications and samples in the |NCS| use build types to define more detailed build configurations.
+The most common build types are ``release`` and ``debug``, which correspond to CMake defaults, but other names can be defined as well.
+For example, nRF Desktop features a ``wwcb`` build type, while Matter weather station features the ``factory_data`` build type.
+See the application's Configuration section for information if it includes any build types.
 
-If :kconfig:option:`CONFIG_BOOTLOADER_MCUBOOT` is set, the build system creates the :file:`dfu_application.zip` file containing files :file:`app_update.bin` and :file:`manifest.json`.
-When you set the :kconfig:option:`CONFIG_BOOT_BUILD_DIRECT_XIP_VARIANT` Kconfig option, the build system creates a secondary slot variant of the :file:`app_update.bin`, named :file:`mcuboot_secondary_app_update.bin`, and includes it in the :file:`dfu_application.zip` file.
-The :kconfig:option:`CONFIG_BOOT_BUILD_DIRECT_XIP_VARIANT` Kconfig option and the MCUboot direct-xip mode are currently supported only on the single-core devices such as the nRF52 Series.
-If you have also set the options :kconfig:option:`CONFIG_IMG_MANAGER` and :kconfig:option:`CONFIG_MCUBOOT_IMG_MANAGER`, the application will be able to process FOTA updates.
-If you have set the options :kconfig:option:`CONFIG_SECURE_BOOT` and :kconfig:option:`CONFIG_BUILD_S1_VARIANT`, a similar file :file:`dfu_mcuboot.zip` will also be created.
-You can use this file to perform FOTA updates of MCUboot itself.
+The following software components can be made dependent on the build type:
 
-The :file:`app_update.bin` file is a signed version of your application.
-The signature matches to what MCUboot expects and allows this file to be used as an update.
-The build system creates a :file:`manifest.json` file using information in the :file:`zephyr.meta` output file.
-This includes the Zephyr and |NCS| git hashes for the commits used to build the application.
-If your working tree contains uncommitted changes, the build system adds the suffix ``-dirty`` to the relevant version field.
+* The Partition Manager's :ref:`static configuration <ug_pm_static>`.
+  When the build type has been inferred, the file :file:`pm_static_<buildtype>.yml` will have precedence over :file:`pm_static.yml`.
+* The :ref:`child image Kconfig configuration <ug_multi_image_permanent_changes>`.
+  Certain child image configuration files located in the :file:`child_image/` directory can be defined per build type.
 
-.. _app_build_output_files:
+The devicetree configuration is not affected by the build type.
 
-Output build files
-******************
+For more information about how to invoke build types, see :ref:`cmake_options`.
 
-The building process produces each time an *image file*.
+.. _app_build_additions_multi_image:
 
-.. output_build_files_info_start
+Multi-image builds
+==================
 
-The image file can refer to an *executable*, a *program*, or an *ELF file*.
-As one of the last build steps, the linker processes all object files by locating code, data, and symbols in sections in the final ELF file.
-The linker replaces all symbol references to code and data with addresses.
-A symbol table is created which maps addresses to symbol names, which is used by debuggers.
-When an ELF file is converted into another format, such as HEX or binary, the symbol table is lost.
+The |NCS| build system extends Zephyr's with support for multi-image builds.
+You can find out more about these in the :ref:`ug_multi_image` section.
 
-Depending on the application and the SoC, you can use one or several images.
+The |NCS| allows you to :ref:`build types <app_build_additions_build_types>` instead of using a single :file:`prj.conf` file.
 
-.. output_build_files_info_end
+Boilerplate CMake file
+======================
 
-.. output_build_files_table_start
+The |NCS| provides an additional :file:`boilerplate.cmake` file that is automatically included when using the Zephyr CMake package in the :file:`CMakeLists.txt` file of your application:
 
-The following table lists build files that can be generated as output when building firmware for supported :ref:`build targets <app_boards>`.
-The table includes files for single-core and multi-core programming scenarios for both |VSC| and command line building methods.
-Which files you are going to use depends on the application configuration and not directly on the type of SoC you are using.
-The following scenarios are possible:
+.. code-block::
 
-* Single-image - Only one firmware image file is generated for a single core.
-* Multi-image - Two or more firmware image files are generated for a single core.
-  You can read more about this scenario in :ref:`ug_multi_image`.
-* Multi-core - Two or more firmware image files are generated for two or more cores.
+   find_package(Zephyr HINTS $ENV{ZEPHYR_BASE})
 
-+------------------------------------------+-------------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------+
-| File                                     | Description                                                                                     | Programming scenario                                                                                            |
-+==========================================+=================================================================================================+=================================================================================================================+
-| :file:`zephyr.hex`                       | Default full image.                                                                             | * Programming build targets with :ref:`NSPE <app_boards_spe_nspe>` or single-image.                             |
-|                                          | In a multi-image build, several :file:`zephyr.hex` files are generated, one for each image.     | * Testing DFU procedure with nrfjprog (programming directly to device).                                         |
-+------------------------------------------+-------------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------+
-| :file:`merged.hex`                       | The result of merging all :file:`zephyr.hex` files for all images for a core                    | * Programming multi-core application.                                                                           |
-|                                          | in a multi-image build. Used by Nordic Semiconductor's build targets in single-core             | * Testing DFU procedure with nrfjprog (programming directly to device).                                         |
-|                                          | multi-image builds. In multi-core builds, several :file:`merged_<image_name>.hex` fields        |                                                                                                                 |
-|                                          | are generated, where *<image-name>* indicates the core.                                         |                                                                                                                 |
-+------------------------------------------+-------------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------+
-| :file:`merged_domains.hex`               | The result of merging all :file:`merged.hex` files for all cores or processing environments     | * Programming :ref:`SPE-only <app_boards_spe_nspe>` and multi-core build targets.                               |
-|                                          | (:file:`merged.hex` for the application core and :file:`merged.hex` or :file:`zephyr.hex`       | * Testing DFU procedure with nrfjprog (programming directly to device).                                         |
-|                                          | for the network core).                                                                          |                                                                                                                 |
-+------------------------------------------+-------------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------+
-| :file:`tfm_s.hex`                        | Secure firmware image created by the TF-M build system in the background of the Zephyr build.   | Programming :ref:`SPE-only <app_boards_spe_nspe>` and multi-core build targets.                                 |
-|                                          | It is used together with the :file:`zephyr.hex` file, which is intended for the Non-Secure      |                                                                                                                 |
-|                                          | Processing Environment (NSPE). Located in :file:`build/tfm/bin`.                                |                                                                                                                 |
-+------------------------------------------+-------------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------+
-| :file:`app_update.bin`                   | Application core update file used to create :file:`dfu_application.zip` for multi-core DFU.     | DFU process for single-image build targets and the application core                                             |
-|                                          | Can also be used standalone for a single-image DFU.                                             | of the multi-core build targets.                                                                                |
-|                                          | Contains the signed version of the application.                                                 |                                                                                                                 |
-|                                          | This file is transferred in the real-life update procedure, as opposed to HEX files             |                                                                                                                 |
-|                                          | that are transferred with nrfjprog when emulating an update procedure.                          |                                                                                                                 |
-|                                          | :ref:`Compatible with MCUboot <mcuboot:mcuboot_ncs>`.                                           |                                                                                                                 |
-+------------------------------------------+-------------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------+
-| :file:`app_signed.hex`                   | HEX file variant of the :file:`app_update.bin` file.                                            | Programming single-image build targets and the application core                                                 |
-|                                          | Can also be used standalone for a single-image DFU.                                             | of the multi-core build targets.                                                                                |
-|                                          | Contains the signed version of the application.                                                 |                                                                                                                 |
-|                                          | :ref:`Compatible with MCUboot <mcuboot:mcuboot_ncs>`.                                           |                                                                                                                 |
-+------------------------------------------+-------------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------+
-| :file:`mcuboot_secondary_app_update.bin` | Secondary slot variant of the :file:`app_update.bin` file.                                      | DFU process for single-core build targets.                                                                      |
-|                                          | :ref:`Compatible with MCUboot <mcuboot:mcuboot_ncs>` in the direct-xip mode.                    |                                                                                                                 |
-+------------------------------------------+-------------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------+
-| :file:`mcuboot_secondary_app_signed.hex` | Secondary slot variant of the :file:`app_signed.hex` file.                                      | Programming single-core build targets.                                                                          |
-|                                          | :ref:`Compatible with MCUboot <mcuboot:mcuboot_ncs>` in the direct-xip mode.                    |                                                                                                                 |
-+------------------------------------------+-------------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------+
-| :file:`net_core_app_update.bin`          | Network core update file used to create :file:`dfu_application.zip`.                            | DFU process for the network core of multi-core build targets.                                                   |
-|                                          | This file is transferred in the real-life update procedure, as opposed to HEX files             |                                                                                                                 |
-|                                          | that are transferred with nrfjprog when emulating an update procedure.                          |                                                                                                                 |
-+------------------------------------------+-------------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------+
-| :file:`dfu_application.zip`              | Zip file containing both the MCUboot-compatible update image for one or more cores              | DFU process for both single-core and multi-core applications.                                                   |
-|                                          | and a manifest describing its contents.                                                         |                                                                                                                 |
-+------------------------------------------+-------------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------+
-| :file:`matter.ota`                       | :ref:`ug_matter`-specific OTA image that contains a Matter-compliant header                     | DFU over Matter for both single-core and multi-core applications.                                               |
-|                                          | and a DFU multi-image package that bundles user-selected firmware images.                       |                                                                                                                 |
-+------------------------------------------+-------------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------+
-| :file:`<file_name>.zigbee`               | :ref:`ug_zigbee`-specific OTA image that contains the Zigbee application                        | DFU over Zigbee for both single-core and multi-core applications                                                |
-|                                          | with the Zigbee OTA header used for providing information about the image to the OTA server.    | in the |NCS| v2.0.0 and later.                                                                                  |
-|                                          | The *<file_name>* includes manufacturer's code, image type, file version, and comment           |                                                                                                                 |
-|                                          | (customizable by user, sample name by default).                                                 |                                                                                                                 |
-|                                          | For example: :file:`127F-0141-01020003-light_switch.zigbee`.                                    |                                                                                                                 |
-+------------------------------------------+-------------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------+
+This file checks if the selected board is supported and, when available, if the selected :ref:`file suffix <app_build_file_suffixes>` or :ref:`build type <app_build_additions_build_types>` is supported.
 
-.. output_build_files_table_end
+Partition Manager
+=================
 
-.. _app_build_mcuboot_output:
+The |NCS| adds the :ref:`partition_manager` script, responsible for partitioning the available flash memory and creating the `Memory layout configuration`_.
 
-MCUboot output build files
-==========================
+Binaries and images for nRF Cloud FOTA
+======================================
 
-+------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| File                                                             | Description                                                                                                                                                                                                                                                        |
-+==================================================================+====================================================================================================================================================================================================================================================================+
-| :file:`dfu_application.zip`                                      | Contains the following:                                                                                                                                                                                                                                            |
-|                                                                  |                                                                                                                                                                                                                                                                    |
-|                                                                  | * The MCUboot-compatible update image for one or more cores when MCUboot is not in the direct-xip mode and a manifest describing its contents (all related :file:`*.bin` files and a :file:`manifest.json` file).                                                  |
-|                                                                  | * The MCUboot-compatible update image for the primary and secondary slots when MCUboot is in the direct-xip mode and manifest describing its contents (all related :file:`*.bin` files and a :file:`manifest.json` file).                                          |
-+------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| :file:`dfu_mcuboot.zip`                                          | Contains two versions of MCUboot linked against different address spaces corresponding to slot0 (s0) and slot1 (s1) and a manifest JSON file describing their MCUboot version number (``MCUBOOT_IMGTOOL_SIGN_VERSION``), NSIB version number (``FW_INFO``), board  |
-|                                                                  | type. This file can be used by FOTA servers (for example, nRF Cloud) to serve both s0 and s1 to the device.                                                                                                                                                        |
-|                                                                  | The device can then select the firmware file for the slot that is currently not in use.                                                                                                                                                                            |
-+------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| :file:`app_update.bin`                                           | Signed variant of the firmware in binary format (as opposed to HEX).                                                                                                                                                                                               |
-|                                                                  | It can be uploaded to a server as a FOTA image.                                                                                                                                                                                                                    |
-+------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| :file:`signed_by_mcuboot_and_b0_s0_image_update.bin`             | MCUboot update image for s0 signed by both MCUboot and NSIB.                                                                                                                                                                                                       |
-|                                                                  | The MCUboot signature is used by MCUboot to verify the integrity of the image before swapping and the NSIB signature is used by NSIB before booting the image.                                                                                                     |
-+------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| :file:`signed_by_mcuboot_and_b0_s1_image_update.bin`             | MCUboot update image for s1 signed by both MCUboot and NSIB.                                                                                                                                                                                                       |
-|                                                                  | The MCUboot signature is used by MCUboot to verify the integrity of the image before swapping and the NSIB signature is used by NSIB before booting the image.                                                                                                     |
-+------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| :file:`app_to_sign.bin`                                          | Unsigned variant of the firmware in binary format.                                                                                                                                                                                                                 |
-+------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| :file:`app_signed.hex`                                           | Signed variant of the firmware in the HEX format.                                                                                                                                                                                                                  |
-|                                                                  | This HEX file is linked to the same address as the application.                                                                                                                                                                                                    |
-|                                                                  | Programming this file to the device will overwrite the existing application.                                                                                                                                                                                       |
-|                                                                  | It will not trigger a DFU procedure.                                                                                                                                                                                                                               |
-+------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| :file:`app_test_update.hex`                                      | Same as :file:`app_signed.hex` except that it contains metadata that instructs MCUboot to test this firmware upon boot.                                                                                                                                            |
-|                                                                  | As :file:`app_signed.hex`, this HEX file is linked against the same address as the application.                                                                                                                                                                    |
-|                                                                  | Programming this file to the device will overwrite the existing application.                                                                                                                                                                                       |
-|                                                                  | It will not trigger a DFU procedure.                                                                                                                                                                                                                               |
-+------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| :file:`app_moved_test_update.hex`                                | Same as :file:`app_test_update.hex` except that it is linked to the address used to store the upgrade candidates.                                                                                                                                                  |
-|                                                                  | When this file is programmed to the device, MCUboot will trigger the DFU procedure upon reboot.                                                                                                                                                                    |
-+------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| :file:`signed_by_mcuboot_and_b0_s0_image_moved_test_update.hex`  | Moved to MCUboot secondary slot address space.                                                                                                                                                                                                                     |
-+------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| :file:`signed_by_mcuboot_and_b0_s0_image_test_update.hex`        | Directly overwrites s0.                                                                                                                                                                                                                                            |
-+------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| :file:`mcuboot_secondary_app_update.bin`                         | Secondary slot variant of the :file:`app_update.bin` file intended for use when MCUboot is in the direct-xip mode.                                                                                                                                                 |
-|                                                                  | Created when the :kconfig:option:`CONFIG_BOOT_BUILD_DIRECT_XIP_VARIANT` Kconfig option is enabled.                                                                                                                                                                 |
-+------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| :file:`mcuboot_secondary_app_signed.hex`                         | Secondary slot variant of the :file:`app_signed.hex` file intended for use when MCUboot is in the direct-xip mode.                                                                                                                                                 |
-|                                                                  | Created when the :kconfig:option:`CONFIG_BOOT_BUILD_DIRECT_XIP_VARIANT` Kconfig option is enabled.                                                                                                                                                                 |
-+------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| :file:`mcuboot_secondary_app_test_update.hex`                    | Secondary slot variant of the :file:`app_test_update.hex` file intended for use when MCUboot is in the direct-xip mode.                                                                                                                                            |
-|                                                                  | Created when the :kconfig:option:`CONFIG_BOOT_BUILD_DIRECT_XIP_VARIANT` Kconfig option is enabled.                                                                                                                                                                 |
-+------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| :file:`mcuboot_secondary_app_to_sign.bin`                        | Secondary slot variant of the :file:`app_to_sign.bin` file intended for use when MCUboot is in the direct-xip mode.                                                                                                                                                |
-|                                                                  | Created when the :kconfig:option:`CONFIG_BOOT_BUILD_DIRECT_XIP_VARIANT` Kconfig option is enabled.                                                                                                                                                                 |
-+------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-
-.. _app_build_output_files_other:
-
-Other output build files
-========================
-
-The following table lists secondary build files that can be generated when building firmware, but are only used to create the final output build files listed in the table above.
-
-+-----------------------------------+------------------------------------------------------------------------------------------------------+
-| File                              | Description                                                                                          |
-+===================================+======================================================================================================+
-| :file:`zephyr.elf`                | An ELF file for the image that is being built. Can be used for debugging purposes.                   |
-+-----------------------------------+------------------------------------------------------------------------------------------------------+
-| :file:`zephyr.meta`               | A file with the Zephyr and nRF Connect SDK git hashes for the commits used to build the application. |
-+-----------------------------------+------------------------------------------------------------------------------------------------------+
-| :file:`tfm_s.elf`                 | An ELF file for the TF-M image that is being built. Can be used for debugging purposes.              |
-+-----------------------------------+------------------------------------------------------------------------------------------------------+
-| :file:`manifest.json`             | Output artifact that uses information from the :file:`zephyr.meta` output file.                      |
-+-----------------------------------+------------------------------------------------------------------------------------------------------+
-| :file:`dfu_multi_image.bin`       | Multi-image package that contains a CBOR manifest and a set of user-selected update images,          |
-|                                   | such as firmware images for different cores.                                                         |
-|                                   | Used for DFU purposes by :ref:`ug_matter` and :ref:`ug_zigbee` protocols.                            |
-+-----------------------------------+------------------------------------------------------------------------------------------------------+
-| :file:`signed_by_b0_s0_image.bin` | Intermediate file only signed by NSIB.                                                               |
-+-----------------------------------+------------------------------------------------------------------------------------------------------+
-| :file:`signed_by_b0_s1_image.bin` | Intermediate file only signed by NSIB.                                                               |
-+-----------------------------------+------------------------------------------------------------------------------------------------------+
+The |NCS| build system generates :ref:`output zip files <app_build_output_files>` containing binary images and a manifest for use with `nRF Cloud FOTA`_.
+An example of such a file is :file:`dfu_mcuboot.zip`.

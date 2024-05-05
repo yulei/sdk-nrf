@@ -3,10 +3,11 @@
  *
  * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
+
 /**
  * @file
- * @brief Bluetooth mesh provisioning handler for Nordic DKs.
- * @defgroup bt_mesh_dk_prov Bluetooth mesh provisioning handler for Nordic DKs
+ * @brief Bluetooth Mesh provisioning handler for Nordic DKs.
+ * @defgroup bt_mesh_dk_prov Bluetooth Mesh provisioning handler for Nordic DKs
  * @{
  */
 

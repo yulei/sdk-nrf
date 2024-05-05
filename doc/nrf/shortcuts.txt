@@ -1,8 +1,8 @@
 .. |NCS| replace:: nRF Connect SDK
 
-.. |release| replace:: v2.4.2
-.. |release_tt| replace:: ``v2.4.2``
-.. |release_number_tt| replace:: ``2.4.2``
+.. |release| replace:: v2.6.1
+.. |release_tt| replace:: ``v2.6.1``
+.. |release_number_tt| replace:: ``2.6.1``
 
 .. ### Config shortcuts
 
@@ -20,26 +20,26 @@
 .. |connect_kit| replace:: Connect the kit to the computer using a USB cable.
    The kit is assigned a COM port (Windows) or ttyACM device (Linux), which is visible in the Device Manager.
 
-.. |connect_terminal_generic| replace:: Connect to the device with a terminal emulator (for example, PuTTY).
-   See :ref:`putty` for the required settings.
+.. |connect_terminal_generic| replace:: Connect to the device with a terminal emulator (for example, nRF Connect Serial Terminal).
+   See :ref:`test_and_optimize` for the required settings and steps.
 
-.. |connect_terminal| replace:: Connect to the kit with a terminal emulator (for example, PuTTY).
-   See :ref:`putty` for the required settings.
+.. |connect_terminal| replace:: Connect to the kit with a terminal emulator (for example, nRF Connect Serial Terminal).
+   See :ref:`test_and_optimize` for the required settings and steps.
 
-.. |connect_terminal_specific| replace:: Connect to the kit that runs this sample with a terminal emulator (for example, PuTTY).
-   See :ref:`putty` for the required settings.
+.. |connect_terminal_specific| replace:: Connect to the kit that runs this sample with a terminal emulator (for example, nRF Connect Serial Terminal).
+   See :ref:`test_and_optimize` for the required settings and steps.
 
-.. |connect_terminal_both| replace:: Connect to both kits with a terminal emulator (for example, PuTTY).
-   See :ref:`putty` for the required settings.
+.. |connect_terminal_both| replace:: Connect to both kits with a terminal emulator (for example, nRF Connect Serial Terminal).
+   See :ref:`test_and_optimize` for the required settings and steps.
 
-.. |connect_terminal_ANSI| replace:: Open a serial port connection to the kit using a terminal emulator that supports VT100/ANSI escape characters (for example, PuTTY).
-   See :ref:`putty` for the required settings.
+.. |connect_terminal_ANSI| replace:: Open a serial port connection to the kit using a terminal emulator that supports VT100/ANSI escape characters (for example, nRF Connect Serial Terminal).
+   See :ref:`test_and_optimize` for the required settings and steps.
 
-.. |connect_terminal_specific_ANSI| replace:: Connect to the kit that runs this sample with a terminal emulator that supports VT100/ANSI escape characters (for example, PuTTY).
-   See :ref:`putty` for the required settings.
+.. |connect_terminal_specific_ANSI| replace:: Connect to the kit that runs this sample with a terminal emulator that supports VT100/ANSI escape characters (for example, nRF Connect Serial Terminal).
+   See :ref:`test_and_optimize` for the required settings and steps.
 
-.. |connect_terminal_both_ANSI| replace:: Connect to both kits with a terminal emulator that supports VT100/ANSI escape characters (for example, PuTTY).
-   See :ref:`putty` for the required settings.
+.. |connect_terminal_both_ANSI| replace:: Connect to both kits with a terminal emulator that supports VT100/ANSI escape characters (for example, nRF Connect Serial Terminal).
+   See :ref:`test_and_optimize` for the required settings and steps.
 
 .. |ANSI| replace:: that supports VT100/ANSI escape characters
 
@@ -68,7 +68,7 @@
 .. ### VSC shortcuts
 
 .. |vsc_extension_description| replace:: The |nRFVSC| is a complete IDE for developing applications compatible with the |NCS|.
-   This includes an interface to the compiler and linker, an RTOS-aware debugger, a seamless interface to the |NCS|, and a serial terminal.
+   The extension includes an interface for managing SDK and toolchain installations, an interface to the compiler and linker, an RTOS-aware debugger, a seamless interface to the |NCS|, and a serial terminal.
 .. |VSC| replace:: Visual Studio Code
 .. |nRFVSC| replace:: nRF Connect for VS Code extension
 
@@ -82,8 +82,8 @@
 .. ### Zigbee & ZBOSS shortcuts
 
 .. |zigbee_version| replace:: Zigbee 3.0
-.. |zboss_version| replace:: 3.11.2.1
-.. |zigbee_ncp_package_version| replace:: 2.2.1
+.. |zboss_version| replace:: 3.11.3.0
+.. |zigbee_ncp_package_version| replace:: 2.2.2
 .. |zigbee_description| replace:: Zigbee is a portable, low-power software networking protocol that provides connectivity over an 802.15.4-based mesh network.
 .. |enable_zigbee_before_testing| replace:: Make sure to configure the Zigbee stack before building and testing this sample.
    See :ref:`ug_zigbee_configuring` for more information.
@@ -124,9 +124,6 @@
 .. |net_state| replace:: network state module
 .. |nrf_desktop_module_event_note| replace:: See the :ref:`nrf_desktop_architecture` for more information about the event-based communication in the nRF Desktop application and about how to read this table.
 .. |nrf_desktop_command_note_with_dfu_lock| replace:: With the :ref:`CONFIG_DESKTOP_DFU_LOCK <config_desktop_app_options>` option enabled, the device only executes this command when it holds the DFU owner status.
-.. |nrf_desktop_build_type_conf| replace:: In addition to these build types, some boards can have additional build type configurations that you can use to generate an application in a specific variant.
-   Such board-specific configurations use dedicated :file:`prj_*build_type*.conf` files, where the name of the configuration replaces the ``*build_type*`` part in the file name.
-   Given the potential number of such configurations, they are not listed above and you can read the description of each of them in the respective configuration file.
 .. |nRF_Desktop_confirmation_effect| replace:: After the confirmation, Bluetooth advertising using a new local identity is started.
    When a new Bluetooth Central device successfully connects and bonds, the old bond is removed and the new bond is used instead.
    If the new peer does not connect in the predefined period of time, the advertising ends and the application switches back to the old peer.
@@ -175,12 +172,15 @@
 
 .. |thingy53_sample_note| replace:: If you build this application for Thingy:53, it enables additional features. See :ref:`thingy53_app_guide` for details.
 
-.. |nrf5340_mesh_sample_note| replace:: For nRF5340 and Thingy:53, the extended advertiser has to be set manually for the network core, because the Bluetooth® Low Energy does not know that the Bluetooth mesh is enabled when built for this core. This is already done for this sample by setting ``CONFIG_BT_EXT_ADV=y`` for the network core.
+.. |nrf5340_mesh_sample_note| replace:: For nRF5340 and Thingy:53, the extended advertiser has to be set manually for the network core, because the Bluetooth® Low Energy does not know that the Bluetooth Mesh is enabled when built for this core. This is already done for this sample by setting ``CONFIG_BT_EXT_ADV=y`` for the network core.
 
-.. |nrf5340_audio_note| replace:: The |NCS| includes the :ref:`nrf53_audio_app` application, a complete project that integrates the LE Audio standard with custom reference hardware based on the nRF5340 DK.
-.. |nrf5340_audio_net_core_hex_note| replace:: The network core for both gateway and headsets is programmed with the precompiled Bluetooth Low Energy Controller binary file :file:`ble5-ctr-rpmsg_<XYZ>.hex`, where *<XYZ>* corresponds to the controller version, for example :file:`ble5-ctr-rpmsg_3216.hex`.
-   This file includes the LE Audio Controller Subsystem for nRF53 and is provided in the :file:`nrf/lib/bin/bt_ll_acs_nrf53/bin` directory.
-   If :ref:`DFU is enabled <nrf53_audio_app_configuration_configure_fota>`, the subsystem's binary file will be generated in the :file:`build/zephyr/` directory and will be called :file:`net_core_app_signed.hex`.
+.. |nrf5340_audio_external_devices_note| replace:: Nordic Semiconductor seeks to provide seamless interoperability with as many LE Audio devices as possible.
+   However, vendors have reached different levels of maturity in their implementation.
+   Also, different platforms have different methods of connecting, pairing, and streaming.
+   For these reasons, providing a general guide on how to test with external devices is challenging.
+   The suggested approach is to test with Nordic Semiconductor devices on both sides first to verify basic functionalities and get familiar with the solution before using custom devices.
+   Contact `Technical Support team <DevZone_>`_ if you need assistance.
+.. |usb_known_issues| replace:: Make sure to check the :ref:`nRF5340 Audio application known issues <known_issues_nrf5340audio>` related to serial connection with the USB.
 
 .. |trusted_execution| replace:: nRF5340 and nRF9160
 
@@ -198,3 +198,10 @@
 .. |no_changes_yet_note| replace:: No changes since the latest |NCS| release.
 
 .. |serial_port_sec_tag| replace:: where ``<serial port>`` is the serial port of your device and ``<sec tag>`` is the previously chosen unused security tag.
+
+.. |hex_format| replace:: The certificate is automatically converted to a HEX format in the :file:`CMakeLists.txt` file.
+   The generated :file:`.inc` file is then included in the code, where it is provisioned to the modem.
+
+.. |build_target| replace:: Replace the *build_target* with the build target of the nRF91 Series device you are using (see the Requirements section).
+
+.. |thingy52_not_supported_note| replace:: Despite being supported in :ref:`Zephyr <zephyr:thingy52_nrf52832>`, the |NCS| does not support `Nordic Thingy:52`_.

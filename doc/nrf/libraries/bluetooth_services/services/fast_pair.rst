@@ -7,7 +7,7 @@ Google Fast Pair Service (GFPS)
    :local:
    :depth: 2
 
-The Google Fast Pair Service (Fast Pair for short) implements a Bluetooth® Low Energy (LE) GATT Service required when :ref:`ug_bt_fast_pair`.
+The Google Fast Pair Service (Fast Pair for short) implements a Bluetooth® Low Energy (LE) GATT Service required for :ref:`ug_bt_fast_pair` with the |NCS|.
 
 Service UUID
 ************
@@ -20,19 +20,27 @@ Characteristics
 The Fast Pair GATT characteristics are described in detail in the `Fast Pair GATT Characteristics`_ documentation.
 The implementation in the |NCS| follows these requirements.
 
+The Fast Pair service also contains additional GATT characteristics under the following conditions:
+
+* The Additional Data GATT characteristic is enabled when an extension requires it.
+  Currently, only the Personalized Name extension (:kconfig:option:`CONFIG_BT_FAST_PAIR_PN`) requires this characteristic.
+
 Configuration
 *************
 
-Set the :kconfig:option:`CONFIG_BT_FAST_PAIR` Kconfig option to enable the module.
+Set the :kconfig:option:`CONFIG_BT_FAST_PAIR` Kconfig option to enable the service.
 
-The following Kconfig options are also available for this module:
+The following Kconfig options are also available for this service:
 
+* :kconfig:option:`CONFIG_BT_FAST_PAIR_STORAGE_USER_RESET_ACTION` - The option enables user reset action that is executed together with the Fast Pair factory reset operation.
+  See the :ref:`ug_bt_fast_pair_factory_reset_custom_user_reset_action` for more details.
 * :kconfig:option:`CONFIG_BT_FAST_PAIR_STORAGE_ACCOUNT_KEY_MAX` - The option configures maximum number of stored Account Keys.
-* :kconfig:option:`CONFIG_BT_FAST_PAIR_CRYPTO_TINYCRYPT`, :kconfig:option:`CONFIG_BT_FAST_PAIR_CRYPTO_MBEDTLS`, and :kconfig:option:`CONFIG_BT_FAST_PAIR_CRYPTO_OBERON` - These options are used to select the cryptographic backend for Fast Pair.
+* :kconfig:option:`CONFIG_BT_FAST_PAIR_CRYPTO_TINYCRYPT`, :kconfig:option:`CONFIG_BT_FAST_PAIR_CRYPTO_MBEDTLS`, :kconfig:option:`CONFIG_BT_FAST_PAIR_CRYPTO_OBERON`, and :kconfig:option:`CONFIG_BT_FAST_PAIR_CRYPTO_PSA` - These options are used to select the cryptographic backend for Fast Pair.
   The Oberon backend is used by default.
-  The Mbed TLS backend uses Mbed TLS crypto APIs, which are now considered legacy APIs.
+  The Mbed TLS backend uses Mbed TLS crypto APIs that are now considered legacy APIs.
 * :kconfig:option:`CONFIG_BT_FAST_PAIR_PN` - The option enables the `Fast Pair Personalized Name extension`_.
-* :kconfig:option:`CONFIG_BT_FAST_PAIR_STORAGE_PN_LEN_MAX` - The option specifies the maximum length of a stored Fast Pair Personalized Name.
+
+  * :kconfig:option:`CONFIG_BT_FAST_PAIR_STORAGE_PN_LEN_MAX` - The option specifies the maximum length of a stored Fast Pair Personalized Name.
 
 See the Kconfig help for details.
 
@@ -124,9 +132,19 @@ The pairing flow and the set of Bluetooth authentication callbacks in use depend
 API documentation
 *****************
 
-| Header file: :file:`include/bluetooth/services/fast_pair.h`
+| Header file: :file:`include/bluetooth/services/fast_pair/fast_pair.h`
 | Source files: :file:`subsys/bluetooth/services/fast_pair`
 
 .. doxygengroup:: bt_fast_pair
+   :project: nrf
+   :members:
+
+Fast Pair UUID API
+==================
+
+| Header file: :file:`include/bluetooth/services/fast_pair/uuid.h`
+| Source files: :file:`subsys/bluetooth/services/fast_pair`
+
+.. doxygengroup:: bt_fast_pair_uuid
    :project: nrf
    :members:

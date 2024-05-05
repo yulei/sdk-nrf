@@ -10,6 +10,7 @@
 #include <zephyr/sys/timeutil.h>
 #include <zephyr/logging/log.h>
 #include <nrf_modem_at.h>
+#include <modem/nrf_modem_lib.h>
 #include <modem/lte_lc.h>
 #if defined(CONFIG_DATE_TIME_AUTO_UPDATE)
 #include <modem/at_monitor.h>
@@ -19,9 +20,14 @@
 
 LOG_MODULE_DECLARE(date_time, CONFIG_DATE_TIME_LOG_LEVEL);
 
+extern struct k_work_q date_time_work_q;
+
 #if defined(CONFIG_DATE_TIME_AUTO_UPDATE)
 /* AT monitor for %XTIME notifications */
 AT_MONITOR(xtime, "%XTIME", date_time_at_xtime_handler);
+
+void date_time_modem_xtime_subscribe_work_fn(struct k_work *work_item);
+K_WORK_DEFINE(date_time_modem_xtime_subscribe_work, date_time_modem_xtime_subscribe_work_fn);
 
 /* Indicates whether modem network time has been received with XTIME notification. */
 static bool modem_valid_network_time;
@@ -32,10 +38,11 @@ static bool modem_valid_network_time;
 static bool modem_valid_network_time = true;
 #endif /* defined(CONFIG_DATE_TIME_AUTO_UPDATE) */
 
-int date_time_modem_get(int64_t *date_time_ms)
+int date_time_modem_get(int64_t *date_time_ms, int *date_time_tz)
 {
 	int rc;
 	struct tm date_time;
+	int tz = DATE_TIME_TZ_INVALID;
 
 #if defined(CONFIG_DATE_TIME_NTP)
 	if (!modem_valid_network_time) {
@@ -53,17 +60,18 @@ int date_time_modem_get(int64_t *date_time_ms)
 	 * "+CCLK: \"20/02/25,17:15:02+04\"\r\n\000{"
 	 */
 	rc = nrf_modem_at_scanf("AT+CCLK?",
-		"+CCLK: \"%u/%u/%u,%u:%u:%u",
+		"+CCLK: \"%u/%u/%u,%u:%u:%u%d",
 		&date_time.tm_year,
 		&date_time.tm_mon,
 		&date_time.tm_mday,
 		&date_time.tm_hour,
 		&date_time.tm_min,
-		&date_time.tm_sec
+		&date_time.tm_sec,
+		&tz
 	);
 
-	/* Want to match 6 args */
-	if (rc != 6) {
+	/* Want to match 6 or 7 args */
+	if (rc != 6 && rc != 7) {
 		LOG_WRN("Did not get time from cellular network (error: %d). "
 			"This is normal as some cellular networks don't provide it or "
 			"time may not be available yet.", rc);
@@ -76,6 +84,7 @@ int date_time_modem_get(int64_t *date_time_ms)
 	date_time.tm_mon = date_time.tm_mon - 1;
 
 	*date_time_ms = (int64_t)timeutil_timegm64(&date_time) * 1000;
+	*date_time_tz = tz;
 
 	LOG_DBG("Time obtained from cellular network");
 
@@ -107,10 +116,11 @@ static void date_time_at_xtime_handler(const char *notif)
 {
 	struct tm date_time;
 	int64_t date_time_ms;
-	uint8_t time_buf[6];
+	uint8_t time_buf[7];
 	size_t time_buf_len;
 	char *time_str_start;
 	int err;
+	int tz;
 
 	if (notif == NULL) {
 		return;
@@ -147,7 +157,7 @@ static void date_time_at_xtime_handler(const char *notif)
 	}
 
 	time_str_start += 2;
-	time_buf_len = hex2bin(time_str_start, 12, time_buf, sizeof(time_buf));
+	time_buf_len = hex2bin(time_str_start, 14, time_buf, sizeof(time_buf));
 
 	if (time_buf_len < sizeof(time_buf)) {
 		LOG_ERR("%%XTIME notification decoding failed (ret=%d): %s", time_buf_len, notif);
@@ -161,6 +171,11 @@ static void date_time_at_xtime_handler(const char *notif)
 	date_time.tm_min  = semioctet_to_dec(time_buf[4]);
 	date_time.tm_sec  = semioctet_to_dec(time_buf[5]);
 
+	tz = semioctet_to_dec(time_buf[6] & 0xF7);
+	if (time_buf[6] & 0x08) {
+		tz = -tz;
+	}
+
 	/* Relative to 1900, as per POSIX */
 	date_time.tm_year = date_time.tm_year + 2000 - 1900;
 	/* Range is 0-11, as per POSIX */
@@ -170,11 +185,11 @@ static void date_time_at_xtime_handler(const char *notif)
 
 	LOG_DBG("Time obtained from cellular network (XTIME notification)");
 
-	date_time_core_store(date_time_ms, DATE_TIME_OBTAINED_MODEM);
+	date_time_core_store_tz(date_time_ms, DATE_TIME_OBTAINED_MODEM, tz);
 }
 #endif /* defined(CONFIG_DATE_TIME_AUTO_UPDATE) */
 
-void date_time_modem_store(struct tm *ltm)
+void date_time_modem_store(struct tm *ltm, int tz)
 {
 	int ret;
 
@@ -190,14 +205,13 @@ void date_time_modem_store(struct tm *ltm)
 		 *   "AT+CCLK="18/12/06,22:10:00+08"
 		 */
 
-		/* Time zone is not known and it's mandatory so setting to zero.
-		 * POSIX year is relative to 1900 which doesn't affect as last two digits are taken
+		/* POSIX year is relative to 1900 which doesn't affect as last two digits are taken
 		 * with modulo 100.
 		 * POSIX month is in range 0-11 so adding 1.
 		 */
-		ret = nrf_modem_at_printf("AT+CCLK=\"%02u/%02u/%02u,%02u:%02u:%02u+%02u\"",
+		ret = nrf_modem_at_printf("AT+CCLK=\"%02u/%02u/%02u,%02u:%02u:%02u%+03d\"",
 			ltm->tm_year % 100, ltm->tm_mon + 1, ltm->tm_mday,
-			ltm->tm_hour, ltm->tm_min, ltm->tm_sec, 0);
+			ltm->tm_hour, ltm->tm_min, ltm->tm_sec, tz);
 		if (ret) {
 			LOG_ERR("Setting modem time failed, %d", ret);
 			return;
@@ -207,12 +221,29 @@ void date_time_modem_store(struct tm *ltm)
 	}
 }
 
-void date_time_modem_xtime_subscribe(void)
+#if defined(CONFIG_DATE_TIME_AUTO_UPDATE)
+
+void date_time_modem_xtime_subscribe_work_fn(struct k_work *work_item)
 {
 	/* Subscribe to modem time notifications */
 	int err = nrf_modem_at_printf("AT%%XTIME=1");
 
 	if (err) {
 		LOG_ERR("Subscribing to modem AT%%XTIME notifications failed, err=%d", err);
+	} else {
+		LOG_DBG("Subscribing to modem AT%%XTIME notifications succeeded");
 	}
 }
+
+NRF_MODEM_LIB_ON_CFUN(date_time_cfun_hook, date_time_modem_on_cfun, NULL);
+
+static void date_time_modem_on_cfun(int mode, void *ctx)
+{
+	ARG_UNUSED(ctx);
+
+	if (mode == LTE_LC_FUNC_MODE_NORMAL || mode == LTE_LC_FUNC_MODE_ACTIVATE_LTE) {
+		k_work_submit_to_queue(&date_time_work_q, &date_time_modem_xtime_subscribe_work);
+	}
+}
+
+#endif /* defined(CONFIG_DATE_TIME_AUTO_UPDATE) */

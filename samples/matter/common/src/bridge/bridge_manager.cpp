@@ -5,6 +5,9 @@
  */
 
 #include "bridge_manager.h"
+#include "bridge/bridge_storage_manager.h"
+
+#include "binding/binding_handler.h"
 
 #include <app-common/zap-generated/ids/Clusters.h>
 #include <app/reporting/reporting.h>
@@ -17,6 +20,9 @@ LOG_MODULE_DECLARE(app, CONFIG_CHIP_APP_LOG_LEVEL);
 
 using namespace ::chip;
 using namespace ::chip::app;
+
+namespace Nrf
+{
 
 CHIP_ERROR BridgeManager::Init(LoadStoredBridgedDevicesCallback loadStoredBridgedDevicesCb)
 {
@@ -39,6 +45,13 @@ CHIP_ERROR BridgeManager::Init(LoadStoredBridgedDevicesCallback loadStoredBridge
 	emberAfEndpointEnableDisable(emberAfEndpointFromIndex(static_cast<uint16_t>(emberAfFixedEndpointCount() - 1)),
 				     false);
 
+	if (!Nrf::BridgeStorageManager::Instance().Init()) {
+		LOG_INF("BridgeStorageManager initialization failed.");
+		return CHIP_ERROR_INTERNAL;
+	}
+
+	Nrf::Matter::BindingHandler::Init();
+
 	/* Invoke the callback to load stored devices in a proper moment. */
 	CHIP_ERROR err = loadStoredBridgedDevicesCb();
 
@@ -54,16 +67,21 @@ CHIP_ERROR BridgeManager::AddBridgedDevices(MatterBridgedDevice *devices[], Brid
 {
 	chip::Optional<uint8_t> indexes[deviceListSize];
 	uint16_t endpoints[deviceListSize];
+	Platform::UniquePtr<BridgedDeviceDataProvider> providerPtr(dataProvider);
 
 	VerifyOrReturnError(devicesPairIndexes, CHIP_ERROR_INTERNAL);
-
-	return AddBridgedDevices(devices, dataProvider, deviceListSize, devicesPairIndexes, endpoints, indexes);
+	CHIP_ERROR err =
+		DoAddBridgedDevices(devices, providerPtr.get(), deviceListSize, devicesPairIndexes, endpoints, indexes);
+	/* The ownership was transferred unconditionally. */
+	providerPtr.release();
+	return err;
 }
 
 CHIP_ERROR BridgeManager::AddBridgedDevices(MatterBridgedDevice *devices[], BridgedDeviceDataProvider *dataProvider,
 					    uint8_t deviceListSize, uint8_t devicesPairIndexes[],
 					    uint16_t endpointIds[])
 {
+	Platform::UniquePtr<BridgedDeviceDataProvider> providerPtr(dataProvider);
 	chip::Optional<uint8_t> indexes[deviceListSize];
 
 	VerifyOrReturnError(devicesPairIndexes, CHIP_ERROR_INTERNAL);
@@ -71,13 +89,16 @@ CHIP_ERROR BridgeManager::AddBridgedDevices(MatterBridgedDevice *devices[], Brid
 	for (auto i = 0; i < deviceListSize; i++) {
 		indexes[i].SetValue(devicesPairIndexes[i]);
 	}
-
-	return AddBridgedDevices(devices, dataProvider, deviceListSize, devicesPairIndexes, endpointIds, indexes);
+	CHIP_ERROR err = DoAddBridgedDevices(devices, providerPtr.get(), deviceListSize, devicesPairIndexes,
+					     endpointIds, indexes);
+	/* The ownership was transferred unconditionally. */
+	providerPtr.release();
+	return err;
 }
 
-CHIP_ERROR BridgeManager::AddBridgedDevices(MatterBridgedDevice *devices[], BridgedDeviceDataProvider *dataProvider,
-					    uint8_t deviceListSize, uint8_t devicesPairIndexes[],
-					    uint16_t endpointIds[], chip::Optional<uint8_t> indexes[])
+CHIP_ERROR BridgeManager::DoAddBridgedDevices(MatterBridgedDevice *devices[], BridgedDeviceDataProvider *dataProvider,
+					      uint8_t deviceListSize, uint8_t devicesPairIndexes[],
+					      uint16_t endpointIds[], chip::Optional<uint8_t> indexes[])
 {
 	CHIP_ERROR err = AddDevices(devices, dataProvider, deviceListSize, indexes, endpointIds);
 
@@ -220,6 +241,9 @@ CHIP_ERROR BridgeManager::AddSingleDevice(MatterBridgedDevice *device, BridgedDe
 			 * biggest assigned number. */
 			mCurrentDynamicEndpointId =
 				mCurrentDynamicEndpointId > endpointId ? mCurrentDynamicEndpointId : endpointId + 1;
+		} else {
+			/* The pair was added to a map, so we have to take care about removing it in case of failure. */
+			mDevicesMap.Erase(index);
 		}
 
 		return err;
@@ -231,6 +255,12 @@ CHIP_ERROR BridgeManager::AddSingleDevice(MatterBridgedDevice *device, BridgedDe
 					/* Assign the free endpoint ID. */
 					do {
 						err = CreateEndpoint(index, mCurrentDynamicEndpointId);
+
+						if (err != CHIP_NO_ERROR) {
+							/* The pair was added to a map, so we have to take care about
+							 * removing it in case of failure. */
+							mDevicesMap.Erase(index);
+						}
 
 						/* Handle wrap condition */
 						if (++mCurrentDynamicEndpointId < mFirstDynamicEndpointId) {
@@ -246,7 +276,7 @@ CHIP_ERROR BridgeManager::AddSingleDevice(MatterBridgedDevice *device, BridgedDe
 
 					return err;
 				} else {
-					/* Failing Insert metod means the BridgedDevicePair destructor will be called
+					/* Failing Insert method means the BridgedDevicePair destructor will be called
 					 * and pointers wiped out. It's not safe to iterate further. */
 					return CHIP_ERROR_INTERNAL;
 				}
@@ -270,7 +300,8 @@ CHIP_ERROR BridgeManager::CreateEndpoint(uint8_t index, uint16_t endpointId)
 	EmberAfStatus ret = emberAfSetDynamicEndpoint(
 		index, endpointId, storedDevice->mEp,
 		Span<DataVersion>(storedDevice->mDataVersion, storedDevice->mDataVersionSize),
-		Span<const EmberAfDeviceType>(storedDevice->mDeviceTypeList, storedDevice->mDeviceTypeListSize));
+		Span<const EmberAfDeviceType>(storedDevice->mDeviceTypeList, storedDevice->mDeviceTypeListSize),
+		kAggregatorEndpointId);
 
 	if (ret == EMBER_ZCL_STATUS_SUCCESS) {
 		LOG_INF("Added device to dynamic endpoint %d (index=%d)", endpointId, index);
@@ -291,37 +322,38 @@ CHIP_ERROR BridgeManager::AddDevices(MatterBridgedDevice *devices[], BridgedDevi
 				     uint8_t deviceListSize, chip::Optional<uint8_t> devicesPairIndexes[],
 				     uint16_t endpointIds[])
 {
-	VerifyOrReturnError(devices && dataProvider, CHIP_ERROR_INTERNAL);
+	CHIP_ERROR err{ CHIP_NO_ERROR };
 
-	/* Wrap input data into unique_ptr to avoid memory leakage in case any error occurs. */
-	Platform::UniquePtr<MatterBridgedDevice> devicesPtr[deviceListSize];
-	for (auto i = 0; i < deviceListSize; ++i) {
-		devicesPtr[i] = std::move(Platform::UniquePtr<MatterBridgedDevice>(devices[i]));
-	}
-	Platform::UniquePtr<BridgedDeviceDataProvider> dataProviderPtr(dataProvider);
+	VerifyOrReturnError(devices || dataProvider, CHIP_ERROR_INVALID_ARGUMENT);
+	VerifyOrExit(devices, err = CHIP_ERROR_INVALID_ARGUMENT);
+	VerifyOrExit(dataProvider, err = CHIP_ERROR_INVALID_ARGUMENT);
 
 	/* Maximum number of Matter bridged devices is controlled inside mDevicesMap,
 	   but the data providers may be created independently, so let's ensure we do not
 	   violate the maximum number of supported instances. */
-	VerifyOrReturnError(mDevicesMap.FreeSlots() >= deviceListSize, CHIP_ERROR_NO_MEMORY,
-			    LOG_ERR("Not enough free slots in the map"));
+	VerifyOrExit(mDevicesMap.FreeSlots() >= deviceListSize, err = CHIP_ERROR_NO_MEMORY);
 
-	CHIP_ERROR cumulativeStatus{ CHIP_NO_ERROR };
-	CHIP_ERROR status{ CHIP_NO_ERROR };
 	for (auto i = 0; i < deviceListSize; ++i) {
-		MatterBridgedDevice *device = devicesPtr[i].get();
-		status = AddSingleDevice(device, dataProviderPtr.get(), devicesPairIndexes[i], endpointIds[i]);
-		if (status == CHIP_NO_ERROR) {
-			devicesPtr[i].release();
-		} else {
-			cumulativeStatus = status;
+		err = AddSingleDevice(devices[i], dataProvider, devicesPairIndexes[i], endpointIds[i]);
+
+		if (err != CHIP_NO_ERROR) {
+			return err;
 		}
 	}
+exit:
+	/* This method takes care of the resources, so objects have to be deleted in case of failures. */
+	if (err != CHIP_NO_ERROR) {
+		if (dataProvider) {
+			chip::Platform::Delete(dataProvider);
+		}
 
-	if (cumulativeStatus == CHIP_NO_ERROR) {
-		dataProviderPtr.release();
+		if (devices) {
+			for (auto i = 0; i < deviceListSize; ++i) {
+				chip::Platform::Delete(devices[i]);
+			}
+		}
 	}
-	return cumulativeStatus;
+	return err;
 }
 
 CHIP_ERROR BridgeManager::HandleRead(uint16_t index, ClusterId clusterId,
@@ -339,8 +371,8 @@ CHIP_ERROR BridgeManager::HandleRead(uint16_t index, ClusterId clusterId,
 	case Clusters::BridgedDeviceBasicInformation::Id:
 		return device->HandleReadBridgedDeviceBasicInformation(attributeMetadata->attributeId, buffer,
 								       maxReadLength);
-	case Clusters::Descriptor::Id:
-		return device->HandleReadDescriptor(attributeMetadata->attributeId, buffer, maxReadLength);
+	case Clusters::Identify::Id:
+		return device->HandleReadIdentify(attributeMetadata->attributeId, buffer, maxReadLength);
 	default:
 		break;
 	}
@@ -362,12 +394,21 @@ CHIP_ERROR BridgeManager::HandleWrite(uint16_t index, ClusterId clusterId,
 	/* Verify if the device is reachable or we should return prematurely. */
 	VerifyOrReturnError(device->GetIsReachable(), CHIP_ERROR_INCORRECT_STATE);
 
+	/* Handle Identify cluster write - for now it does not imply updating the provider's state */
+	if (clusterId == Clusters::Identify::Id) {
+		return device->HandleWriteIdentify(attributeMetadata->attributeId, buffer, attributeMetadata->size);
+	}
+
 	CHIP_ERROR err = device->HandleWrite(clusterId, attributeMetadata->attributeId, buffer);
 
 	/* After updating MatterBridgedDevice state, forward request to the non-Matter device. */
 	if (err == CHIP_NO_ERROR) {
-		return Instance().mDevicesMap[index].mProvider->UpdateState(clusterId, attributeMetadata->attributeId,
-									    buffer);
+		CHIP_ERROR updateError = Instance().mDevicesMap[index].mProvider->UpdateState(
+			clusterId, attributeMetadata->attributeId, buffer);
+		/* This is acceptable that not all writable attributes can be reflected in the provider device. */
+		if (updateError != CHIP_ERROR_UNSUPPORTED_CHIP_FEATURE) {
+			return updateError;
+		}
 	}
 	return err;
 }
@@ -391,14 +432,54 @@ void BridgeManager::HandleUpdate(BridgedDeviceDataProvider &dataProvider, Cluste
 	}
 }
 
+void BridgeManager::HandleCommand(BridgedDeviceDataProvider &dataProvider, ClusterId clusterId, CommandId commandId,
+				  Nrf::Matter::BindingHandler::InvokeCommand invokeCommand)
+{
+	Nrf::Matter::BindingHandler::BindingData *bindingData =
+		Platform::New<Nrf::Matter::BindingHandler::BindingData>();
+
+	if (!bindingData) {
+		return;
+	}
+
+	bindingData->CommandId = commandId;
+	bindingData->ClusterId = clusterId;
+	bindingData->InvokeCommandFunc = invokeCommand;
+
+	for (auto &item : Instance().mDevicesMap.mMap) {
+		if (item.value.mProvider == &dataProvider) {
+			auto *device = item.value.mDevice;
+
+			if (emberAfContainsClient(device->GetEndpointId(), clusterId)) {
+				bindingData->EndpointId = device->GetEndpointId();
+			}
+		}
+	}
+
+	Nrf::Matter::BindingHandler::RunBoundClusterAction(bindingData);
+}
+
+BridgedDeviceDataProvider *BridgeManager::GetProvider(EndpointId endpoint, uint16_t &deviceType)
+{
+	uint16_t endpointIndex = emberAfGetDynamicIndexFromEndpoint(endpoint);
+	if (Instance().mDevicesMap.Contains(endpointIndex)) {
+		BridgedDevicePair &bridgedDevices = Instance().mDevicesMap[endpointIndex];
+		deviceType = bridgedDevices.mDevice->GetDeviceType();
+		return bridgedDevices.mProvider;
+	}
+	return nullptr;
+}
+
+} /* namespace Nrf */
+
 EmberAfStatus emberAfExternalAttributeReadCallback(EndpointId endpoint, ClusterId clusterId,
 						   const EmberAfAttributeMetadata *attributeMetadata, uint8_t *buffer,
 						   uint16_t maxReadLength)
 {
 	uint16_t endpointIndex = emberAfGetDynamicIndexFromEndpoint(endpoint);
 
-	if (CHIP_NO_ERROR ==
-	    BridgeManager::Instance().HandleRead(endpointIndex, clusterId, attributeMetadata, buffer, maxReadLength)) {
+	if (CHIP_NO_ERROR == Nrf::BridgeManager::Instance().HandleRead(endpointIndex, clusterId, attributeMetadata,
+								       buffer, maxReadLength)) {
 		return EMBER_ZCL_STATUS_SUCCESS;
 	} else {
 		return EMBER_ZCL_STATUS_FAILURE;
@@ -411,7 +492,7 @@ EmberAfStatus emberAfExternalAttributeWriteCallback(EndpointId endpoint, Cluster
 	uint16_t endpointIndex = emberAfGetDynamicIndexFromEndpoint(endpoint);
 
 	if (CHIP_NO_ERROR ==
-	    BridgeManager::Instance().HandleWrite(endpointIndex, clusterId, attributeMetadata, buffer)) {
+	    Nrf::BridgeManager::Instance().HandleWrite(endpointIndex, clusterId, attributeMetadata, buffer)) {
 		return EMBER_ZCL_STATUS_SUCCESS;
 	} else {
 		return EMBER_ZCL_STATUS_FAILURE;
