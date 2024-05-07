@@ -223,6 +223,12 @@ nRF Desktop
   * Enabled the :ref:`CONFIG_DESKTOP_CONFIG_CHANNEL_OUT_REPORT <config_desktop_app_options>` Kconfig option for the nRF Desktop peripherals with :ref:`nrf_desktop_dfu`.
     The option mitigates HID report rate drops during DFU image transfer through the nRF Desktop dongle.
     The output report is also enabled for the ``nrf52kbd_nrf52832`` build target in the debug configuration to maintain consistency with the release configuration.
+  * Replaced the :kconfig:option:`CONFIG_BT_L2CAP_TX_BUF_COUNT` Kconfig option with :kconfig:option:`CONFIG_BT_ATT_TX_COUNT` in nRF Desktop dongle configurations.
+    This update is needed to align with the new approach introduced in ``sdk-zephyr`` by commit ``a05a47573a11ba8a78dadc5d3229659f24ddd32f``.
+  * The :ref:`nrf_desktop_hid_forward` no longer uses a separate HID report queue for a HID peripheral connected over Bluetooth LE.
+    The module relies only on the HID report queue of a HID subscriber.
+    This is done to simplify implementation, reduce memory consumption and speed up retrieving enqueued HID reports.
+    You can modify the enqueued HID report limit through the :ref:`CONFIG_DESKTOP_HID_FORWARD_MAX_ENQUEUED_REPORTS <config_desktop_app_options>` Kconfig option.
 
 Thingy:53: Matter weather station
 ---------------------------------
@@ -704,6 +710,11 @@ Modem libraries
     * Convenience function to get :c:struct:`location_data_details` from the :c:struct:`location_event_data`.
     * Location data details for event :c:enum:`LOCATION_EVT_RESULT_UNKNOWN`.
 
+* :ref:`lte_lc_readme` library:
+
+  * Removed ``AT%XRAI`` related deprecated functions ``lte_lc_rai_param_set()`` and ``lte_lc_rai_req()``, and Kconfig option :kconfig:option:`CONFIG_LTE_RAI_REQ_VALUE`.
+    The application uses the Kconfig option :kconfig:option:`CONFIG_LTE_RAI_REQ` and ``SO_RAI`` socket option instead.
+
 Libraries for networking
 ------------------------
 
@@ -758,6 +769,10 @@ Libraries for networking
 
   * :c:func:`lwm2m_init_firmware` is deprecated in favour of :c:func:`lwm2m_init_firmware_cb` that allows application to set a callback to receive FOTA events.
   * Fixed an issue where the Location Area Code was not updated when the Connection Monitor object version 1.3 was enabled.
+
+* :ref:`lib_nrf_cloud_pgps` library:
+
+  * Fixed a NULL pointer issue that could occur when there are some valid predictions in flash but not the one required at the current time.
 
 Libraries for NFC
 -----------------

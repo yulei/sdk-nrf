@@ -114,7 +114,7 @@ manifest:
     - name: hostap
       repo-path: sdk-hostap
       path: modules/lib/hostap
-      revision: 62d2acea5430ad78240df341bad5b3c489a8dc0d
+      revision: b33e82ef00813f33e22ab9f867a58be6bb318c7d
       userdata:
         ncs:
           upstream-url: https://w1.fi/cgit/hostap/
@@ -148,7 +148,7 @@ manifest:
     - name: nrfxlib
       repo-path: sdk-nrfxlib
       path: nrfxlib
-      revision: 646a678c8d7b79a758236557161241caf678c9ab
+      revision: 54ab9c34bdc0632587d1c68b58db104c9a2f5939
     - name: trusted-firmware-m
       repo-path: sdk-trusted-firmware-m
       path: modules/tee/tf-m/trusted-firmware-m
@@ -181,7 +181,7 @@ manifest:
     - name: nrf-802154
       repo-path: sdk-nrf-802154
       path: nrf-802154
-      revision: b23a4e2711ec9b00b53cdaba5869cb4587a5d420
+      revision: d28f2f4f8e6c3c19256136ee69bf1f6c08ed2a41
       groups:
         - nrf-802154
     - name: dragoon
@@ -239,7 +239,7 @@ manifest:
           upstream-sha: c6eaeda5a1c1c5dbb24dce7e027340cb8893a77b
           compare-by-default: false
     - name: suit-generator
-      revision: 60afbb26d3a00e5b2243f1304ba2bc4a6722960d
+      revision: c0165159dac566fafbf67be75d86ca64a34834f0
       path: modules/lib/suit-generator
     - name: suit-processor
       revision: 5603911b75f037dc3822fd95542c3435c0bf812d
