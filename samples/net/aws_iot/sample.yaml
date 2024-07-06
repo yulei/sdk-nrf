@@ -2,7 +2,8 @@ sample:
   name: AWS IoT sample
 tests:
   sample.net.aws_iot:
-    tags: ci_build
+    sysbuild: true
+    tags: ci_build sysbuild
     build_only: true
     build_on_all: true
     integration_platforms:
@@ -11,6 +12,7 @@ tests:
       - nrf9151dk/nrf9151/ns
       - thingy91/nrf9160/ns
       - nrf7002dk/nrf5340/cpuapp/ns
+      - native_sim
     platform_allow:
       - nrf9160dk/nrf9160/ns
       - nrf9161dk/nrf9161/ns
@@ -18,3 +20,4 @@ tests:
       - thingy91/nrf9160/ns
       - thingy91x/nrf9151/ns
       - nrf7002dk/nrf5340/cpuapp/ns
+      - native_sim

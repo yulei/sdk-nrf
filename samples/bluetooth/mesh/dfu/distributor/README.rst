@@ -10,8 +10,6 @@ Bluetooth Mesh: Device Firmware Update (DFU) distributor
 The Bluetooth® Mesh DFU distributor sample demonstrates how device firmware can be distributed over a Bluetooth Mesh network.
 The sample implements the Firmware Distribution role of the :ref:`Bluetooth Mesh DFU subsystem <zephyr:bluetooth_mesh_dfu>`.
 
-The specification that the Bluetooth Mesh DFU subsystem is based on is not adopted yet, and therefore this feature should be used for experimental purposes only.
-
 Requirements
 ************
 
@@ -116,8 +114,6 @@ Building and running
 Testing
 =======
 
-This sample has been tested with the nRF52840 DK (nrf52840dk/nrf52840) board.
-
 .. _ble_mesh_dfu_distributor_provisioning:
 
 Provisioning the device
@@ -170,7 +166,7 @@ The management subsystem uses the Simple Management Protocol (SMP), provided by 
 This sample supports Bluetooth Low Energy and UART as the SMP transport.
 See :ref:`zephyr:device_mgmt` for more information about Mcumgr and SMP.
 
-In this sample, the device flash is split into fixed partitions using devicetree as defined in :zephyr_file:`nrf52840dk_nrf52840.dts<boards/nordic/nrf52840dk/nrf52840dk_nrf52840.dts>`.
+In this sample, the device flash is split into fixed partitions using devicetree as defined in :zephyr_file:`nrf52840dk_nrf52840.dts<boards/nordic/nrf52840dk/nrf52840dk_nrf52840.dts>`  and :zephyr_file:`nrf54l15pdk_nrf54l15_cpuapp.dts<boards/nordic/nrf54l15pdk/nrf54l15pdk_nrf54l15_cpuapp.dts>`.
 The firmware image that is to be distributed over Bluetooth Mesh network should be stored at slot-1.
 The sample uses :ref:`zephyr:flash_map_api` to read the firmware image from slot-1 when distributes it to Target nodes.
 

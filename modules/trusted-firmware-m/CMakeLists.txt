@@ -26,10 +26,6 @@ if(CONFIG_TFM_USE_NS_APP)
   set_property(GLOBAL PROPERTY
     app_PM_HEX_FILE $<TARGET_PROPERTY:tfm,TFM_NS_HEX_FILE>
     )
-elseif(SYSBUILD)
-  set(BYPRODUCT_KERNEL_SIGNED_HEX_NAME "${CMAKE_BINARY_DIR}/zephyr/tfm_merged.hex"
-      CACHE FILEPATH "Kernel hex file" FORCE
-  )
 endif()
 
 if (CONFIG_BOOTLOADER_MCUBOOT AND NOT CONFIG_PM_EXTERNAL_FLASH_MCUBOOT_SECONDARY)
@@ -102,6 +98,30 @@ endif()
 if (CONFIG_TFM_SECURE_UART1)
   set_property(TARGET zephyr_property_target
     APPEND PROPERTY TFM_CMAKE_OPTIONS -DNRF_SECURE_UART_INSTANCE=1
+  )
+endif()
+
+if (CONFIG_TFM_SECURE_UART00)
+  set_property(TARGET zephyr_property_target
+    APPEND PROPERTY TFM_CMAKE_OPTIONS -DNRF_SECURE_UART_INSTANCE=00
+  )
+endif()
+
+if (CONFIG_TFM_SECURE_UART20)
+  set_property(TARGET zephyr_property_target
+    APPEND PROPERTY TFM_CMAKE_OPTIONS -DNRF_SECURE_UART_INSTANCE=20
+  )
+endif()
+
+if (CONFIG_TFM_SECURE_UART21)
+  set_property(TARGET zephyr_property_target
+    APPEND PROPERTY TFM_CMAKE_OPTIONS -DNRF_SECURE_UART_INSTANCE=21
+  )
+endif()
+
+if (CONFIG_TFM_SECURE_UART22)
+  set_property(TARGET zephyr_property_target
+    APPEND PROPERTY TFM_CMAKE_OPTIONS -DNRF_SECURE_UART_INSTANCE=22
   )
 endif()
 
@@ -211,9 +231,6 @@ set_property(TARGET zephyr_property_target
   APPEND PROPERTY TFM_CMAKE_OPTIONS
     # Pass Zephyr Python to TF-M so both uses identical Python.
     -DPython3_EXECUTABLE=${Python3_EXECUTABLE}
-    # TF-M calls back into nrf_security which loads Zephyr Python lookup
-    # mechanism, thus also set PYTHON_PREFER.
-    -DPYTHON_PREFER=${Python3_EXECUTABLE}
 )
 
 # CONN_HANDLE_MAX_NUM is only needed if IPC mode is used
@@ -279,3 +296,9 @@ set_property(TARGET zephyr_property_target
   APPEND PROPERTY TFM_CMAKE_OPTIONS
     -DPROJECT_CONFIG_HEADER_FILE=${CMAKE_CURRENT_BINARY_DIR}/tfm_config.h
 )
+
+if(SYSBUILD)
+  set(BYPRODUCT_KERNEL_SIGNED_HEX_NAME "${CMAKE_BINARY_DIR}/zephyr/tfm_merged.hex"
+      CACHE FILEPATH "Kernel hex file" FORCE
+  )
+endif()

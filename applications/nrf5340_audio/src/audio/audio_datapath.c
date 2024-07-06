@@ -13,18 +13,17 @@
 #include <zephyr/kernel.h>
 #include <zephyr/shell/shell.h>
 #include <nrfx_clock.h>
+#include <contin_array.h>
+#include <tone.h>
+#include <pcm_mix.h>
 
-#include "nrf5340_audio_common.h"
+#include "zbus_common.h"
 #include "macros_common.h"
 #include "led.h"
 #include "audio_i2s.h"
 #include "sw_codec_select.h"
 #include "audio_system.h"
-#include "tone.h"
-#include "contin_array.h"
-#include "pcm_mix.h"
 #include "streamctrl.h"
-#include "audio_sync_timer.h"
 #include "sd_card_playback.h"
 
 #include <zephyr/logging/log.h>
@@ -1041,6 +1040,16 @@ int audio_datapath_init(void)
 	ctrl_blk.datapath_initialized = true;
 	ctrl_blk.drift_comp.enabled = true;
 	ctrl_blk.pres_comp.enabled = true;
+
+	if (IS_ENABLED(CONFIG_STREAM_BIDIRECTIONAL) && (CONFIG_AUDIO_DEV == GATEWAY)) {
+		/* Disable presentation compensation feature for microphone return on gateway,
+		 * since there's only one stream output from gateway for now, so no need to
+		 * qhave presentation compensation.
+		 */
+		ctrl_blk.pres_comp.enabled = false;
+	} else {
+		ctrl_blk.pres_comp.enabled = true;
+	}
 
 	ctrl_blk.pres_comp.pres_delay_us = CONFIG_BT_AUDIO_PRESENTATION_DELAY_US;
 

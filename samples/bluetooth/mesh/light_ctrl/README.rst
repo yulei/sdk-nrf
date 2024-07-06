@@ -105,7 +105,7 @@ The models are used for the following purposes:
   The Health Server provides ``attention`` callbacks that are used during provisioning to call your attention to the device.
   These callbacks trigger blinking of the LEDs.
 * The next seven models in the first element are the product of a single instance of the Light Lightness Server.
-  The application implements callbacks for the Light Lightness Server to control the first LED on the device using the PWM (pulse width modulation) driver.
+  The application implements callbacks for the Light Lightness Server to control an LED on the device using the PWM (pulse width modulation) driver.
 * The next two models in the first element are the product of a single instance of the Scene Server.
   The Scene Server allows the device to store and recall scenes.
 * The last two models in the first element are the product of a single instance of the Sensor Server.
@@ -129,22 +129,38 @@ The model handling is implemented in :file:`src/model_handler.c`, which uses the
 User interface
 **************
 
-Buttons:
-   Can be used to input the out-of-band (OOB) authentication value during provisioning.
-   All buttons have the same functionality during this procedure.
-   If the :ref:`emds_readme` feature is enabled and the provisioning and configuration are complete, **Button 4** can be used to trigger storing for data with emergency data storage and halt the system.
+.. tabs::
 
-LEDs:
-   Show the OOB authentication value during provisioning if the "Push button" OOB method is used.
-   First LED outputs the current light level of the Light Lightness Server in the first element.
-   If the :ref:`emds_readme` feature is enabled and **Button 4** is pressed LEDs 2 to 4 will light up to show that the board is halted.
+   .. group-tab:: nRF21, nRF52 and nRF53 DKs
 
-.. note::
-   :ref:`zephyr:thingy53_nrf5340` supports only one RGB LED.
-   Each RGB LED channel is used as separate LED.
+      Buttons:
+        Can be used to input the out-of-band (OOB) authentication value during provisioning.
+        All buttons have the same functionality during this procedure.
+        If the :ref:`emds_readme` feature is enabled and the provisioning and configuration are complete, **Button 4** can be used to trigger storing for data with emergency data storage and halt the system.
 
-.. note::
-   :ref:`zephyr:thingy53_nrf5340` and the :ref:`zephyr:nrf52840dongle_nrf52840` do not support emergency data storage.
+      LEDs:
+        Show the OOB authentication value during provisioning if the "Push button" OOB method is used.
+        **LED 1** outputs the current light level of the Light Lightness Server in the first element.
+        If the :ref:`emds_readme` feature is enabled and **Button 4** is pressed **LEDs 2** to **LED 4** will light up to show that the board is halted.
+
+      .. note::
+        :ref:`zephyr:thingy53_nrf5340` supports only one RGB LED.
+        Each RGB LED channel is used as separate LED.
+
+      .. note::
+        :ref:`zephyr:thingy53_nrf5340` and the :ref:`zephyr:nrf52840dongle_nrf52840` do not support emergency data storage.
+
+   .. group-tab:: nRF54 DKs
+
+      Buttons:
+        Can be used to input the out-of-band (OOB) authentication value during provisioning.
+        All buttons have the same functionality during this procedure.
+        If the :ref:`emds_readme` feature is enabled and the provisioning and configuration are complete, **Button 3** can be used to trigger storing for data with emergency data storage and halt the system.
+
+      LEDs:
+        Show the OOB authentication value during provisioning if the "Push button" OOB method is used.
+        **LED 1** outputs the current light level of the Light Lightness Server in the first element.
+        If the :ref:`emds_readme` feature is enabled and **Button 3** is pressed **LEDs 1** to **LED 3** will light up to show that the board is halted.
 
 Configuration
 *************
@@ -197,8 +213,17 @@ Testing
 After programming the sample to your development kit, you can test it by using a smartphone with `nRF Mesh mobile app`_ installed.
 Testing consists of provisioning the device and configuring it for communication with the mesh models.
 
-When the development kit is started, it will keep its previous Light state as the ``BT_MESH_ON_POWER_UP_RESTORE`` is set for the :ref:`bt_mesh_lightness_srv_readme`.
-When :ref:`emds_readme` is enabled it is important that the **Button 4** is used to store the data before the development kit is halted and then restarted.
+.. tabs::
+
+   .. group-tab:: nRF21, nRF52 and nRF53 DKs
+
+      When the development kit is started, it will keep its previous Light state as the ``BT_MESH_ON_POWER_UP_RESTORE`` is set for the :ref:`bt_mesh_lightness_srv_readme`.
+      When :ref:`emds_readme` is enabled it is important that the **Button 4** is used to store the data before the development kit is halted and then restarted.
+
+   .. group-tab:: nRF54 DKs
+
+      When the development kit is started, it will keep its previous Light state as the ``BT_MESH_ON_POWER_UP_RESTORE`` is set for the :ref:`bt_mesh_lightness_srv_readme`.
+      When :ref:`emds_readme` is enabled it is important that the **Button 3** is used to store the data before the development kit is halted and then restarted.
 
 Provisioning the device
 -----------------------
@@ -216,7 +241,7 @@ Configure the Generic OnOff Server model on each element on the **Mesh Light Fix
 
 * Bind the model to **Application Key 1**.
 
-  Once the model is bound to the application key, you can control the first LED on the device.
+  Once the model is bound to the application key, you can control the LED on the device.
 * Open the Generic OnOff Server in the second element, then tap :guilabel:`ON` at the bottom of the Generic On Off Controls.
 
 You should now see the following actions:
@@ -238,17 +263,11 @@ The default value of :kconfig:option:`CONFIG_BT_MESH_LIGHT_CTRL_SRV_LVL_STANDBY`
 .. note::
    The configuration of light levels, fade time, and timeouts can be changed by altering the configuration parameters in the :file:`prj.conf` file, and rebuilding the sample.
 
-Configure the Sensor Server model on the **Mesh Light Fixture** node:
+This sample can be configured to report energy usage sensor data to any device implementing the :ref:`bt_mesh_sensor_cli_readme` model by configuring the Sensor Server model on the **Mesh Light Fixture** node:
 
 * Bind the model to **Application Key 1**. Make sure to bind the same application key to the peer Sensor Client.
 
 The Sensor Server model is now configured and able to receive messages from and send data to the peer Sensor Client.
-
-Configure the Sensor Setup Server model on the **Mesh Sensor** node:
-
-* Bind the model to **Application Key 1**. Make sure to bind the same application key to the peer Sensor Client.
-
-The Sensor Setup Server model is now configured and able to receive sensor setting messages from the Sensor Client.
 
 .. _bluetooth_mesh_light_lc_occupancy_mode:
 
@@ -264,9 +283,9 @@ To do this, first configure the Light LC Server on the **Mesh Light Fixture** no
 
 Prepare the :ref:`bluetooth_mesh_sensor_server` sample:
 
-* Build, run and provision the **Occupancy Sensor** node as described in the sample's documentation.
+* Build, run and provision the **Mesh Sensor** node as described in the sample's documentation.
 
-Configure the Occupancy Sensor Server that is instantiated on the Element 2 of the :ref:`bluetooth_mesh_sensor_server` sample:
+Configure the Sensor Server that is instantiated on the Element 2 of the :ref:`bluetooth_mesh_sensor_server` sample:
 
 * Bind the model to **Application Key 1**.
 * Set the publication parameters:
@@ -278,7 +297,7 @@ To evaluate occupancy inputs when light is not in **Standby** state:
 * Open the **Mesh Light Fixture** node in the mobile app.
 * Open the Generic OnOff Server in the second element, then tap :guilabel:`ON` at the bottom of the Generic On Off Controls.
   This will bring the Light LC Server out of **Standby** state.
-* Now, when the Light LC Server is not in the **Standby** state, press ``Button 2`` on the **Occupancy Sensor** node to keep the light in the **On** state.
+* Now, when the Light LC Server is not in the **Standby** state, press and release ``Button 2`` on the **Mesh Sensor** node to extend the light's **On** state (otherwise the light will turn off after some time as per the state machine's action).
 * If the Light LC Server enters the **Standby** state, Occupancy sensor inputs will not have any effect because the default value of the Light LC Occupancy Mode state is ``0``.
 
 When using the `nRF Mesh mobile app for iOS`_, you can change the value of the Light LC Occupancy Mode state to ``1``, and see how Occupancy sensor inputs will turn the light ON from the **Standby** state.
@@ -287,7 +306,7 @@ Do this in the following way:
 * Open the **Mesh Light Fixture** node in the mobile app for iOS.
 * Go to the Light LC Server configuration that is located on the Element 2.
 * Scroll down to the **OCCUPANCY MODE** and tap :guilabel:`ON` to enable the Occupancy mode in the **Standby** state.
-* When the Light LC Server is in the **Standby** state, press ``Button 2`` on the **Occupancy Sensor** node.
+* When the Light LC Server is in the **Standby** state, press ``Button 2`` on the **Mesh Sensor** node.
 
 Dependencies
 ************

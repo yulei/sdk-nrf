@@ -5,7 +5,7 @@ Build and configuration system
 
 .. contents::
    :local:
-   :depth: 2
+   :depth: 3
 
 The |NCS| build and configuration system is based on the one from Zephyr, with some additions.
 
@@ -65,7 +65,7 @@ When you start building, a CMake build is executed in two stages: configuration 
 Configuration phase
 ===================
 
-During this phase, CMake executes build scripts from :file:`CMakeLists.txt` and gathers configuration from different sources, for example :ref:`app_build_file_suffixes`, to generate the final build scripts and create a model of the build for the specified build target.
+During this phase, CMake executes build scripts from :file:`CMakeLists.txt` and gathers configuration from different sources, for example :ref:`app_build_file_suffixes`, to generate the final build scripts and create a model of the build for the specified board target.
 The result of this process is a :term:`build configuration`, a set of files that will drive the build process.
 
 For more information about this phase, see the respective sections on Zephyr's :ref:`zephyr:cmake-details` page, which describes in-depth the usage of CMake for Zephyr-based applications.
@@ -101,7 +101,10 @@ The :file:`zephyr.dts` file contains the entire hardware-related configuration o
 The header file contains the same kind of information, but with defines usable by source code.
 
 For more information, see :ref:`configuring_devicetree` and Zephyr's :ref:`zephyr:dt-guide`.
-In particular, :ref:`zephyr:set-devicetree-overlays` explains how to use devicetree and its overlays to customize an application's devicetree.
+In particular, :ref:`zephyr:set-devicetree-overlays` explains how the base devicetree files are selected.
+
+In the |NCS|, you can use the |nRFVSC| to `create the devicetree files <How to create devicetree files_>`_ and work with them using the dedicated `Devicetree Visual Editor <How to work with Devicetree Visual Editor_>`_.
+You can also select the devicetree files when :ref:`cmake_options`.
 
 .. _configure_application_sw:
 
@@ -119,7 +122,12 @@ Information from devicetree is available to Kconfig, through the functions defin
 The :file:`.config` file in the :file:`<build_dir>/zephyr/` directory describes most of the software configuration of the constructed binary.
 Some subsystems can use their own configuration files.
 
-For more information, see :ref:`configure_application` and Zephyr's :ref:`zephyr:application-kconfig`.
+For more information, see Zephyr's :ref:`zephyr:application-kconfig`.
+In particular, :ref:`zephyr:initial-conf` explains how the base configuration files are selected.
+
+In the |NCS|, just as in Zephyr, you can :ref:`configure Kconfig temporarily or permanently <configuring_kconfig>`.
+You can also select the Kconfig options and files when :ref:`cmake_options`.
+
 The :ref:`Kconfig Reference <configuration_options>` provides the documentation for each configuration option in the |NCS|.
 
 Memory layout configuration
@@ -143,6 +151,9 @@ This process also creates a set of header files that provides defines, which can
 
 Child images
 ------------
+
+.. important::
+    |sysbuild_related_deprecation_note|
 
 The |NCS| build system allows the application project to become a root for the sub-applications known in the |NCS| as child images.
 Examples of child images are bootloader images, network core images, or security-related images.
@@ -170,12 +181,25 @@ See the Configuration section of the given application or sample's documentation
 
 .. important::
     The file suffixes feature is replacing the :ref:`app_build_additions_build_types` that used the :makevar:`CONF_FILE` variable.
-    File suffixes are backward compatible with this variable, but the following software components are not compatible with file suffixes:
-
-    * :ref:`Child image Kconfig configuration <ug_multi_image_permanent_changes>`.
-      Use the :makevar:`CONF_FILE` variable during the deprecation period of the build types.
+    File suffixes are backward compatible with this variable.
+    Some applications might still require using the :makevar:`CONF_FILE` variable during the deprecation period of the build types.
 
 For information about how to provide file suffixes when building an application, see :ref:`cmake_options`.
+
+.. _app_build_snippets:
+
+Snippets
+--------
+
+Snippets are a Zephyr mechanism for defining portable build system overrides that could be applied to any application.
+Read Zephyr's :ref:`zephyr:snippets` documentation for more information.
+
+.. important::
+  When using :ref:`configuration_system_overview_sysbuild`, the snippet is applied to all images, unless the image is specified explicitly (``-D<image_name>_SNIPPET="<your_snippet>"``).
+
+You can set snippets for use with your application when you :ref:`set up your build configuration <building>` by :ref:`providing them as CMake options <cmake_options>`.
+
+Usage of snippets is optional.
 
 .. _configuration_system_overview_build:
 
@@ -187,11 +211,39 @@ The build phase begins when the user invokes ``make`` or `ninja <Ninja documenta
 The compiler (for example, `GCC compiler`_) then creates object files used to create the final executables.
 You can customize this stage by :ref:`cmake_options` and using :ref:`compiler_settings`.
 
-The result of this process is a complete application in a format suitable for flashing on the desired target board.
+The result of this process is a complete application in a format suitable for flashing on the desired board target.
 See :ref:`output build files <app_build_output_files>` for details.
 
 The build phase can be broken down, conceptually, into four stages: the pre-build, first-pass binary, final binary, and post-processing.
 To read about each of these stages, see :ref:`zephyr:cmake-details` in the Zephyr documentation.
+
+.. _configuration_system_overview_sysbuild:
+
+Sysbuild
+========
+
+The |NCS| supports Zephyr's System Build (sysbuild).
+
+.. ncs-include:: build/sysbuild/index.rst
+   :docset: zephyr
+   :start-after: #######################
+   :end-before: Definitions
+
+To distinguish CMake variables and Kconfig options specific to the underlying build systems, :ref:`sysbuild uses namespacing <zephyr:sysbuild_kconfig_namespacing>`.
+For example, sysbuild-specific Kconfig options are preceded by `SB_` before `CONFIG` and application-specific CMake options are preceded by the application name.
+
+Sysbuild is integrated with west.
+The sysbuild build configuration is generated using the sysbuild's :file:`CMakeLists.txt` file (which provides information about each underlying build system and CMake variables) and the sysbuild's Kconfig options (which are gathered in the :file:`sysbuild.conf` file).
+
+.. note::
+    In the |NCS|, building with sysbuild is :ref:`enabled by default <sysbuild_enabled_ncs>`.
+
+For more information about sysbuild, see the following pages:
+
+* :ref:`Sysbuild documentation in Zephyr <zephyr:sysbuild>`
+* :ref:`sysbuild_images`
+* :ref:`zephyr_samples_sysbuild`
+* :ref:`sysbuild_forced_options`
 
 .. _app_build_additions:
 
@@ -219,6 +271,55 @@ For example, when building a sample that enables :kconfig:option:`CONFIG_BT_EXT_
 
 To disable these warnings, disable the :kconfig:option:`CONFIG_WARN_EXPERIMENTAL` Kconfig option.
 
+.. _sysbuild_enabled_ncs:
+
+Sysbuild enabled by default
+===========================
+
+The |NCS| `modifies the default behavior <sdk-zephyr west build patch_>`_ of ``west build``, so that the :ref:`standard building procedure <building>` will use sysbuild by default for :ref:`repository applications <create_application_types_repository>` in the :ref:`SDK repositories <dm_repo_types>`.
+For this reason, unlike in Zephyr, ``--sysbuild`` does not have to be explicitly mentioned in the command prompt when building a repository application.
+This setting only applies to repositories delivered with the |NCS|, to maintain compatibility with child/parent images.
+
+This setting does not apply to out-of-tree applications, such as :ref:`workspace <create_application_types_workspace>` or :ref:`freestanding applications <create_application_types_freestanding>`.
+In such cases, once you ported your application to sysbuild, it is up to you to either use the ``--sysbuild`` parameter on the command line every time you build or to :ref:`configure west to always use it <sysbuild_enabled_ncs_configuring>`.
+
+Moreover, this |NCS| setting does not apply to the following areas:
+
+* :ref:`Twister <running_unit_tests>` will not use sysbuild unless tests are updated.
+* CMake will not configure projects using sysbuild unless the invocation command is updated.
+
+.. _sysbuild_enabled_ncs_configuring:
+
+Configuring sysbuild usage in west
+----------------------------------
+
+You can configure your project to use sysbuild by default whenever invoking ``west build``.
+You can do this either per-workspace, using the local configuration option, or for all your workspaces, using the global configuration option:
+
+.. tabs::
+
+   .. group-tab:: Local sysbuild configuration
+
+      Use the following command to configure west to use sysbuild by default for building all projects in the current workspace (including any freestanding applications that are built against it):
+
+      .. parsed-literal::
+         :class: highlight
+
+         west config --local build.sysbuild True
+
+   .. group-tab:: Global sysbuild configuration
+
+      Use the following command to configure west to use sysbuild by default for building all projects in all workspaces:
+
+      .. parsed-literal::
+         :class: highlight
+
+         west config --global build.sysbuild True
+
+.. note::
+    |parameters_override_west_config|
+    This means that you can pass ``--no-sysbuild`` to the build command to disable using sysbuild for a given build even if you configured west to always use sysbuild by default.
+
 .. _app_build_additions_build_types:
 .. _gs_modifying_build_types:
 .. _modifying_build_types:
@@ -227,9 +328,8 @@ Custom build types
 ==================
 
 .. important::
-    The build types are deprecated and are being replaced by :ref:`suffix-based configurations <app_build_additions_build_types>` and Zephyr's :ref:`zephyr:sysbuild`.
-    You can continue to use the build types feature until the transition is complete in the |NCS|.
-    It is still required for applications that use build types with :ref:`multiple images <ug_multi_image>`.
+    |file_suffix_related_deprecation_note|
+    It is still required for some applications that use build types with :ref:`multiple images <ug_multi_image>`.
     Check the application and sample documentation pages for which variable to use.
 
 A build type is a feature that defines the way in which the configuration files are to be handled.
@@ -263,6 +363,9 @@ For more information about how to invoke build types, see :ref:`cmake_options`.
 
 Multi-image builds
 ==================
+
+.. important::
+    |sysbuild_related_deprecation_note|
 
 The |NCS| build system extends Zephyr's with support for multi-image builds.
 You can find out more about these in the :ref:`ug_multi_image` section.

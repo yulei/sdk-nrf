@@ -567,6 +567,16 @@ void configure_tx_pwr_settings(struct nrf_wifi_tx_pwr_ctrl_params *tx_pwr_ctrl_p
 #endif /* CONFIG_NRF70_2_4G_ONLY */
 }
 
+void configure_board_dep_params(struct nrf_wifi_board_params *board_params)
+{
+	board_params->pcb_loss_2g = CONFIG_NRF700X_PCB_LOSS_2G;
+#ifndef CONFIG_NRF70_2_4G_ONLY
+	board_params->pcb_loss_5g_band1 = CONFIG_NRF700X_PCB_LOSS_5G_BAND1;
+	board_params->pcb_loss_5g_band2 = CONFIG_NRF700X_PCB_LOSS_5G_BAND2;
+	board_params->pcb_loss_5g_band3 = CONFIG_NRF700X_PCB_LOSS_5G_BAND3;
+#endif /* CONFIG_NRF70_2_4G_ONLY */
+}
+
 enum nrf_wifi_status nrf_wifi_fmac_dev_add_zep(struct nrf_wifi_drv_priv_zep *drv_priv_zep)
 {
 	enum nrf_wifi_status status = NRF_WIFI_STATUS_FAIL;
@@ -584,6 +594,7 @@ enum nrf_wifi_status nrf_wifi_fmac_dev_add_zep(struct nrf_wifi_drv_priv_zep *drv
 #endif /* CONFIG_NRF_WIFI_LOW_POWER */
 	struct nrf_wifi_tx_pwr_ctrl_params tx_pwr_ctrl_params;
 	struct nrf_wifi_tx_pwr_ceil_params tx_pwr_ceil_params;
+	struct nrf_wifi_board_params board_params;
 
 	unsigned int fw_ver = 0;
 
@@ -624,6 +635,7 @@ enum nrf_wifi_status nrf_wifi_fmac_dev_add_zep(struct nrf_wifi_drv_priv_zep *drv
 	configure_tx_pwr_settings(&tx_pwr_ctrl_params,
 				  &tx_pwr_ceil_params);
 
+	configure_board_dep_params(&board_params);
 
 #ifdef CONFIG_NRF700X_RADIO_TEST
 	status = nrf_wifi_fmac_dev_init_rt(rpu_ctx_zep->rpu_ctx,
@@ -634,7 +646,8 @@ enum nrf_wifi_status nrf_wifi_fmac_dev_add_zep(struct nrf_wifi_drv_priv_zep *drv
 					op_band,
 					IS_ENABLED(CONFIG_NRF_WIFI_BEAMFORMING),
 					&tx_pwr_ctrl_params,
-					&tx_pwr_ceil_params);
+					&tx_pwr_ceil_params,
+					&board_params);
 #else
 	status = nrf_wifi_fmac_dev_init(rpu_ctx_zep->rpu_ctx,
 #ifdef CONFIG_NRF_WIFI_LOW_POWER
@@ -644,7 +657,8 @@ enum nrf_wifi_status nrf_wifi_fmac_dev_add_zep(struct nrf_wifi_drv_priv_zep *drv
 					op_band,
 					IS_ENABLED(CONFIG_NRF_WIFI_BEAMFORMING),
 					&tx_pwr_ctrl_params,
-					&tx_pwr_ceil_params);
+					&tx_pwr_ceil_params,
+					&board_params);
 #endif /* CONFIG_NRF700X_RADIO_TEST */
 
 
@@ -652,6 +666,8 @@ enum nrf_wifi_status nrf_wifi_fmac_dev_add_zep(struct nrf_wifi_drv_priv_zep *drv
 		LOG_ERR("%s: nrf_wifi_fmac_dev_init failed", __func__);
 		goto err;
 	}
+
+	k_mutex_init(&rpu_ctx_zep->rpu_lock);
 
 	return status;
 err:
@@ -678,6 +694,11 @@ enum nrf_wifi_status nrf_wifi_fmac_dev_rem_zep(struct nrf_wifi_drv_priv_zep *drv
 	nrf_wifi_fmac_dev_deinit(rpu_ctx_zep->rpu_ctx);
 	nrf_wifi_fmac_dev_rem(rpu_ctx_zep->rpu_ctx);
 #endif /* CONFIG_NRF700X_RADIO_TEST */
+
+	k_free(rpu_ctx_zep->extended_capa);
+	rpu_ctx_zep->extended_capa = NULL;
+	k_free(rpu_ctx_zep->extended_capa_mask);
+	rpu_ctx_zep->extended_capa_mask = NULL;
 
 	rpu_ctx_zep->rpu_ctx = NULL;
 	LOG_DBG("%s: FMAC device removed", __func__);
@@ -717,6 +738,9 @@ static int nrf_wifi_drv_main_zep(const struct device *dev)
 	rx_buf_pools[1].buf_sz = rx2_buf_sz;
 	rx_buf_pools[2].buf_sz = rx3_buf_sz;
 
+#ifdef CONFIG_NRF_WIFI_RPU_RECOVERY
+	callbk_fns.rpu_recovery_callbk_fn = nrf_wifi_rpu_recovery_cb;
+#endif /* CONFIG_NRF_WIFI_RPU_RECOVERY */
 	callbk_fns.scan_start_callbk_fn = nrf_wifi_event_proc_scan_start_zep;
 	callbk_fns.scan_done_callbk_fn = nrf_wifi_event_proc_scan_done_zep;
 	callbk_fns.reg_change_callbk_fn = reg_change_callbk_fn;
@@ -726,7 +750,7 @@ static int nrf_wifi_drv_main_zep(const struct device *dev)
 #ifdef CONFIG_WIFI_MGMT_RAW_SCAN_RESULTS
 	callbk_fns.rx_bcn_prb_resp_callbk_fn = nrf_wifi_rx_bcn_prb_resp_frm;
 #endif /* CONFIG_WIFI_MGMT_RAW_SCAN_RESULTS */
-#ifdef CONFIG_NRF700X_SYSTEM_MODE
+#if defined(CONFIG_NRF700X_SYSTEM_MODE) || defined(CONFIG_NRF700X_SYSTEM_WITH_RAW_MODES)
 	callbk_fns.set_if_callbk_fn = nrf_wifi_set_iface_event_handler;
 #endif /* CONFIG_NRF700X_SYSTEM_MODE */
 #ifdef CONFIG_NRF700X_STA_MODE

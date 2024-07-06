@@ -45,7 +45,7 @@ Requirements
 ************
 
 Some configuration options related to Bluetooth Low Energy must be the same on the host and client.
-Set the following options in the same way for the :ref:`ble_rpc_host` and application core:
+Set the following options in the same way for the :ref:`ble_rpc_host` or :ref:`ipc_radio`, and application core:
 
   * :kconfig:option:`CONFIG_BT_CENTRAL`
   * :kconfig:option:`CONFIG_BT_PERIPHERAL`
@@ -89,7 +89,7 @@ Then, you can invoke build command like this:
 .. parsed-literal::
    :class: highlight
 
-   west build -b *board* -- -DEXTRA_CONF_FILE=my_overlay_file.conf
+   west build -b *board_target* -- -DEXTRA_CONF_FILE=my_overlay_file.conf
 
 Configuration
 *************
@@ -99,7 +99,7 @@ Build the application using the following command:
 
 .. code-block:: console
 
-   west build -b nrf5340dk_nrf5340_cpuapp -- -DCONFIG_BT_RPC_STACK=y
+   west build -b nrf5340dk/nrf5340/cpuapp -- -DCONFIG_BT_RPC_STACK=y
 
 Additionally, you can use the following options:
 

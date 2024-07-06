@@ -17,11 +17,8 @@
 
 LOG_MODULE_REGISTER(slm_carrier, CONFIG_SLM_LOG_LEVEL);
 
-
 /* Static variable to report the memory free resource. */
 static int m_mem_free;
-
-#define SLM_CARRIER_OP_STR_MAX (sizeof("battery_status") + 1)
 
 struct k_work_delayable reconnect_work;
 
@@ -42,19 +39,24 @@ static void print_err(const lwm2m_carrier_event_t *evt)
 		[LWM2M_CARRIER_ERROR_LTE_LINK_DOWN_FAIL] =
 			"Failed to disconnect from the LTE network",
 		[LWM2M_CARRIER_ERROR_FOTA_FAIL] =
-			"Modem firmware update failed",
+			"Firmware update failed",
 		[LWM2M_CARRIER_ERROR_CONFIGURATION] =
 			"Illegal object configuration detected",
 		[LWM2M_CARRIER_ERROR_INIT] =
 			"Initialization failure",
 		[LWM2M_CARRIER_ERROR_RUN] =
 			"Configuration failure",
+		[LWM2M_CARRIER_ERROR_CONNECT] =
+			"Connection failure",
 	};
 
 	__ASSERT(PART_OF_ARRAY(strerr[err->type]),
 		 "Unhandled liblwm2m_carrier error");
 
 	LOG_ERR("LWM2M_CARRIER_EVENT_ERROR: %s, reason %d", strerr[err->type], err->value);
+
+	rsp_send("\r\n#XCARRIEREVT: %u,%u,%d\r\n",
+		 LWM2M_CARRIER_EVENT_ERROR, err->type, err->value);
 }
 
 static void print_deferred(const lwm2m_carrier_event_t *evt)
@@ -89,10 +91,14 @@ static void print_deferred(const lwm2m_carrier_event_t *evt)
 
 	LOG_INF("LWM2M_CARRIER_EVENT_DEFERRED: reason %s, timeout %d seconds",
 		strdef[def->reason], def->timeout);
+
+	rsp_send("\r\n#XCARRIEREVT: %u,%u,%d\r\n",
+		 LWM2M_CARRIER_EVENT_DEFERRED, def->reason, def->timeout);
 }
 
 static void on_event_app_data(const lwm2m_carrier_event_t *event)
 {
+	int ret;
 	lwm2m_carrier_event_app_data_t *app_data = event->data.app_data;
 
 	if (app_data->path_len > ARRAY_SIZE(app_data->path)) {
@@ -112,11 +118,26 @@ static void on_event_app_data(const lwm2m_carrier_event_t *event)
 		}
 	}
 
-	rsp_send("\r\n#XCARRIEREVT: %d,%d,\"%s\"\r\n", event->type, app_data->buffer_len, uri_path);
+	if (app_data->type == LWM2M_CARRIER_APP_DATA_EVENT_DATA_WRITE) {
+		/* In theory, slm_data_buf should be twice as large as
+		 * SLM_CARRIER_APP_DATA_BUFFER_LEN to account for the hex string.
+		 * However, slm_data_buf is not expected to receive more than 512 bytes in downlink.
+		 */
+		ret = slm_util_htoa(app_data->buffer, app_data->buffer_len,
+				    slm_data_buf, sizeof(slm_data_buf));
+		if (ret < 0) {
+			LOG_ERR("Failed to encode hex array to hex string: %d", ret);
+			return;
+		}
 
-	memcpy(slm_data_buf, app_data->buffer, app_data->buffer_len);
-
-	data_send(slm_data_buf, app_data->buffer_len);
+		rsp_send("\r\n#XCARRIEREVT: %u,%hhu,\"%s\",%d\r\n\"", event->type, app_data->type,
+			 uri_path, ret);
+		data_send(slm_data_buf, ret);
+		rsp_send("\"");
+	} else {
+		rsp_send("\r\n#XCARRIEREVT: %u,%hhu,\"%s\"\r\n", event->type, app_data->type,
+			 uri_path);
+	}
 }
 
 static void reconnect_wk(struct k_work *work)
@@ -156,9 +177,12 @@ int lwm2m_carrier_event_handler(const lwm2m_carrier_event_t *event)
 	case LWM2M_CARRIER_EVENT_REGISTERED:
 		LOG_DBG("LWM2M_CARRIER_EVENT_REGISTERED");
 		break;
+	case LWM2M_CARRIER_EVENT_DEREGISTERED:
+		LOG_DBG("LWM2M_CARRIER_EVENT_DEREGISTERED");
+		break;
 	case LWM2M_CARRIER_EVENT_DEFERRED:
 		print_deferred(event);
-		break;
+		return 0;
 	case LWM2M_CARRIER_EVENT_FOTA_START:
 		LOG_DBG("LWM2M_CARRIER_EVENT_FOTA_START");
 		fota_started = true;
@@ -186,9 +210,12 @@ int lwm2m_carrier_event_handler(const lwm2m_carrier_event_t *event)
 		LOG_DBG("LWM2M_CARRIER_EVENT_MODEM_SHUTDOWN");
 		nrf_modem_lib_shutdown();
 		break;
+	case LWM2M_CARRIER_EVENT_ERROR_CODE_RESET:
+		LOG_DBG("LWM2M_CARRIER_EVENT_ERROR_CODE_RESET");
+		break;
 	case LWM2M_CARRIER_EVENT_ERROR:
 		print_err(event);
-		break;
+		return 0;
 	}
 
 	rsp_send("\r\n#XCARRIEREVT: %d,%d\r\n", event->type, err);
@@ -204,20 +231,61 @@ static int carrier_datamode_callback(uint8_t op, const uint8_t *data, int len, u
 	if (op == DATAMODE_SEND) {
 		if ((flags & SLM_DATAMODE_FLAGS_MORE_DATA) != 0) {
 			LOG_ERR("Datamode buffer overflow");
-			(void)exit_datamode_handler(-EOVERFLOW);
+			exit_datamode_handler(-EOVERFLOW);
 			return -EOVERFLOW;
 		}
+
+		size_t size = CONFIG_SLM_CARRIER_APP_DATA_BUFFER_LEN / 2;
+
+		ret = slm_util_atoh(data, len, slm_data_buf, size);
+		if (ret < 0) {
+			LOG_ERR("Failed to decode hex string to hex array");
+			return ret;
+		}
+
 		uint16_t path[3] = { LWM2M_CARRIER_OBJECT_APP_DATA_CONTAINER, 0, 0 };
 		uint8_t path_len = 3;
 
-		ret = lwm2m_carrier_app_data_set(path, path_len, data, len);
+		ret = lwm2m_carrier_app_data_set(path, path_len, slm_data_buf, ret);
 		LOG_INF("datamode send: %d", ret);
 		if (ret < 0) {
-			(void)exit_datamode_handler(ret);
+			exit_datamode_handler(ret);
 		}
 	} else if (op == DATAMODE_EXIT) {
 		LOG_DBG("datamode exit");
 	}
+
+	return ret;
+}
+
+/* AT#XCARRIER="app_data_create",<obj_inst_id>,<res_inst_id> */
+SLM_AT_CMD_CUSTOM(xcarrier_app_data_create, "AT#XCARRIER=\"app_data_create\"",
+		  do_carrier_appdata_create);
+static int do_carrier_appdata_create(enum at_cmd_type, const struct at_param_list *param_list,
+				     uint32_t param_count)
+{
+	int ret;
+	uint16_t inst_id, res_inst_id;
+
+	if (param_count != 4) {
+		return -EINVAL;
+	}
+
+	ret = at_params_unsigned_short_get(param_list, param_count - 2, &inst_id);
+	if (ret) {
+		return ret;
+	}
+
+	ret = at_params_unsigned_short_get(param_list, param_count - 1, &res_inst_id);
+	if (ret) {
+		return ret;
+	}
+
+	uint16_t path[4] = { LWM2M_CARRIER_OBJECT_BINARY_APP_DATA_CONTAINER, inst_id, 0,
+			     res_inst_id };
+	uint8_t path_len = 4;
+
+	ret = lwm2m_carrier_app_data_set(path, path_len, "", 0);
 
 	return ret;
 }
@@ -227,30 +295,39 @@ SLM_AT_CMD_CUSTOM(xcarrier_app_data_set, "AT#XCARRIER=\"app_data_set\"", do_carr
 static int do_carrier_appdata_set(enum at_cmd_type, const struct at_param_list *param_list,
 				  uint32_t param_count)
 {
-	int ret = 0;
-
 	if (param_count == 2) {
 		/* enter data mode */
-		ret = enter_datamode(carrier_datamode_callback);
-		if (ret) {
-			return ret;
-		}
-	} else if (param_count == 3) {
-		char data[CONFIG_SLM_CARRIER_APP_DATA_BUFFER_LEN] = {0};
-		int size = CONFIG_SLM_CARRIER_APP_DATA_BUFFER_LEN;
+		return enter_datamode(carrier_datamode_callback);
+	} else if ((param_count < 2) || (param_count > 5)) {
+		return -EINVAL;
+	}
 
+	int ret = 0;
+
+	char data_ascii[CONFIG_SLM_CARRIER_APP_DATA_BUFFER_LEN] = {0};
+	size_t data_ascii_len = CONFIG_SLM_CARRIER_APP_DATA_BUFFER_LEN;
+
+	char data_hex[CONFIG_SLM_CARRIER_APP_DATA_BUFFER_LEN / 2];
+	size_t data_hex_len = CONFIG_SLM_CARRIER_APP_DATA_BUFFER_LEN / 2;
+
+	if (param_count == 3) {
 		uint16_t path[3] = { LWM2M_CARRIER_OBJECT_APP_DATA_CONTAINER, 0, 0 };
 		uint8_t path_len = 3;
 
-		ret = util_string_get(param_list, 2, data, &size);
+		ret = util_string_get(param_list, 2, data_ascii, &data_ascii_len);
 		if (ret) {
 			return ret;
 		}
 
-		ret = lwm2m_carrier_app_data_set(path, path_len, data, size);
+		ret = slm_util_atoh(data_ascii, data_ascii_len, data_hex, data_hex_len);
+		if (ret < 0) {
+			LOG_ERR("Failed to decode hex string to hex array");
+			return ret;
+		}
+
+		ret = lwm2m_carrier_app_data_set(path, path_len, data_hex, ret);
 	} else if (param_count == 4 || param_count == 5) {
 		uint8_t *data = NULL;
-		char buffer[CONFIG_SLM_CARRIER_APP_DATA_BUFFER_LEN] = {0};
 		int size = 0;
 
 		uint16_t inst_id;
@@ -272,14 +349,19 @@ static int do_carrier_appdata_set(enum at_cmd_type, const struct at_param_list *
 		uint8_t path_len = 4;
 
 		if (param_count == 5) {
-			size = CONFIG_SLM_CARRIER_APP_DATA_BUFFER_LEN;
-
-			ret = util_string_get(param_list, 2, buffer, &size);
+			ret = util_string_get(param_list, 2, data_ascii, &data_ascii_len);
 			if (ret) {
 				return ret;
 			}
 
-			data = buffer;
+			ret = slm_util_atoh(data_ascii, data_ascii_len, data_hex, data_hex_len);
+			if (ret < 0) {
+				LOG_ERR("Failed to decode hex string to hex array");
+				return ret;
+			}
+
+			data = data_hex;
+			size = ret;
 		}
 
 		ret = lwm2m_carrier_app_data_set(path, path_len, data, size);
@@ -343,7 +425,7 @@ static int do_carrier_device_current(enum at_cmd_type, const struct at_param_lis
 }
 
 /* AT#XCARRIER="error","add|remove",<error> */
-SLM_AT_CMD_CUSTOM(xcarrie_error, "AT#XCARRIER=\"error\"", do_carrier_device_error);
+SLM_AT_CMD_CUSTOM(xcarrier_error, "AT#XCARRIER=\"error\"", do_carrier_device_error);
 static int do_carrier_device_error(enum at_cmd_type, const struct at_param_list *param_list,
 				   uint32_t)
 {
@@ -637,16 +719,25 @@ SLM_AT_CMD_CUSTOM(xcarrier_log_data, "AT#XCARRIER=\"log_data\"",
 static int do_carrier_event_log_log_data(enum at_cmd_type, const struct at_param_list *param_list,
 					 uint32_t)
 {
-	char data[CONFIG_SLM_CARRIER_APP_DATA_BUFFER_LEN] = {0};
-	int size = CONFIG_SLM_CARRIER_APP_DATA_BUFFER_LEN;
+	char data_ascii[CONFIG_SLM_CARRIER_APP_DATA_BUFFER_LEN] = {0};
+	size_t data_ascii_len = CONFIG_SLM_CARRIER_APP_DATA_BUFFER_LEN;
 
-	int ret = util_string_get(param_list, 2, data, &size);
+	char data_hex[CONFIG_SLM_CARRIER_APP_DATA_BUFFER_LEN / 2];
+	size_t data_hex_len = CONFIG_SLM_CARRIER_APP_DATA_BUFFER_LEN / 2;
+
+	int ret = util_string_get(param_list, 2, data_ascii, &data_ascii_len);
 
 	if (ret) {
 		return ret;
 	}
 
-	return lwm2m_carrier_log_data_set(data, size);
+	ret = slm_util_atoh(data_ascii, data_ascii_len, data_hex, data_hex_len);
+	if (ret < 0) {
+		LOG_ERR("Failed to decode hex string to hex array");
+		return ret;
+	}
+
+	return lwm2m_carrier_log_data_set(data_hex, ret);
 }
 
 /* AT#XCARRIER="position",<latitude>,<longitude>,<altitude>,<timestamp>,<uncertainty> */
@@ -795,6 +886,20 @@ SLM_AT_CMD_CUSTOM(xcarrier_reboot, "AT#XCARRIER=\"reboot\"", do_carrier_request_
 static int do_carrier_request_reboot(enum at_cmd_type, const struct at_param_list *, uint32_t)
 {
 	return lwm2m_carrier_request(LWM2M_CARRIER_REQUEST_REBOOT);
+}
+
+/* AT#XCARRIER="regup" */
+SLM_AT_CMD_CUSTOM(xcarrier_regup, "AT#XCARRIER=\"regup\"", do_carrier_request_regup);
+static int do_carrier_request_regup(enum at_cmd_type, const struct at_param_list *, uint32_t)
+{
+	return lwm2m_carrier_request(LWM2M_CARRIER_REQUEST_REGISTER);
+}
+
+/* AT#XCARRIER="dereg" */
+SLM_AT_CMD_CUSTOM(xcarrier_dereg, "AT#XCARRIER=\"dereg\"", do_carrier_request_dereg);
+static int do_carrier_request_dereg(enum at_cmd_type, const struct at_param_list *, uint32_t)
+{
+	return lwm2m_carrier_request(LWM2M_CARRIER_REQUEST_DEREGISTER);
 }
 
 /* AT#XCARRIER="link_down" */

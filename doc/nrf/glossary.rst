@@ -79,9 +79,19 @@ Glossary
       A layer of the Bluetooth LE protocol stack comprised of multiple (non real-time) network and transport protocols enabling applications to communicate with peer devices in a standard and interoperable way.
 
    Board
-      In Zephyr and the |NCS|, the name of a specific supported hardware target.
-      Every board has a software support package in a file system directory.
-      The support package includes a :term:`devicetree <Devicetree>` describing the hardware, :term:`Kconfig files <Kconfig file>` and :term:`fragments <Kconfig fragment>` defining its default software configuration, and may include target-specific source files, documentation, and other metadata.
+      In Zephyr and the |NCS|, a target system with a defined set of devices and capabilities, which can load and execute an application image.
+      A board can contain one or more :term:`System on Chip (SoC)` and follows Zephyr's :ref:`zephyr:hw_support_hierarchy`.
+
+      This hierarchy is reflected in the file structure used to describe the board.
+      The file structure includes :term:`devicetree <Devicetree>` files describing the hardware, :term:`Kconfig files <Kconfig file>` and :term:`fragments <Kconfig fragment>` defining its default software configuration, and may include target-specific source files, documentation, and other metadata.
+
+      The file structure for boards matches the :ref:`zephyr:board_terminology`, which defines the board targets available for the given board.
+      You can choose a board target for your application when you are :ref:`adding or editing a build configuration <building>`.
+
+      For the list of boards supported by the |NCS|, see :ref:`app_boards`.
+
+   Board Information Configuration Registers (BICR)
+      Non-volatile memory (NVM) registers that contain information on how the SoC must interact with other board elements, including the information about the power and clock delivery to the SoC.
 
    Branch
       A line of development composed of a sequence of Git :term:`commits <Commit>`.
@@ -151,12 +161,20 @@ Glossary
    Commit tag
       A tag prepended to the first line of the commit message to ease filtering and identification of particular :term:`commit <Commit>` types.
 
+   Companion component
+      A firmware component that is independent from the application and is included in your project as a separate firmware image.
+      The |NCS| provides several :ref:`companion components <companion_components>` tailored for different purposes.
+
    Connected Isochronous Stream (CIS)
       A configuration of the :term:`Isochronous channels (ISO)` feature of the :term:`LE Audio` standard.
       In this configuration, one audio source sends the audio data using both the left and the right ISO channels at the same time, allowing for stereophonic sound reproduction with synchronized playback.
 
    Contribution
       A change to the codebase sent to a remote :term:`repository <Repository>` for inclusion.
+
+   Convergence Layer (CVG)
+      The CVG layer is not always present in all protocol stacks.
+      It can be found above the :term:`Data Link Control Layer (DLC)` and acts as an abstraction layer between the network layer and the lower layers (PHY, MAC, DLC).
 
    Core
       Subsets of :term:`domains <Domain>`.
@@ -175,6 +193,10 @@ Glossary
    Data Terminal Ready (DTR)
       A control signal in RS-232 serial communications transmitted from data terminal equipment, such as a computer, to data communication equipment.
 
+   Data Link Control Layer (DLC)
+      The DLC layer resides above the :term:`Medium Access Control layer (MAC)` in a protocol stack.
+      It is responsible for reliable and error-free data transfer between network entities.
+
    Delivery Traffic Indication Message (DTIM)
       A type of :term:`Traffic Indication Map (TIM)` that informs the clients about the presence of buffered multicast or broadcast data on the access point.
       It is generated within the periodic beacon at a frequency specified by the DTIM Interval.
@@ -182,6 +204,12 @@ Glossary
 
    Development Kit (DK)
       A hardware development platform used for application development.
+      See :ref:`app_boards_names` for more information.
+
+   Device
+      A piece of hardware that is considered together with the software it is running.
+      For example, this can be a :term:`development kit (DK)` provided by Nordic Semiconductor and programmed with a sample from the |NCS|, a prototyping platform such as Nordic Thingy:53 programmed with the :ref:`Matter weather station <matter_weather_station_app>` application, or the nPM1300 EK connected to a compatible development kit.
+      These can also be third-party development kits compatible with Nordic :term:`boards <Board>` or end-user devices.
 
    Device Firmware Update (DFU)
       A mechanism for upgrading the firmware of a device.
@@ -289,6 +317,17 @@ Glossary
 
    Frequency-locked loop (FLL)
       An electronic control system that generates a signal that is locked to the frequency of an input or "reference" signal.
+
+   Front-End Module (FEM)
+     A device that amplifies the radio frequency (RF) signal, to increase the range distance, the strength, and the robustness of a link connection.
+     A more robust link reduces packet loss, causing fewer retransmissions and increasing the probability of successfully receiving the first packet, resulting in a lower link latency.
+
+     FEMs provide a :term:`Power Amplifier (PA)` that increases the TX power or a :term:`Low-Noise Amplifier (LNA)` that increases the RX sensitivity, or both.
+     Some FEMs, like the nRF21540, also provide a power down (PDN) control that powers down the FEM internal circuits, to reduce energy consumption.
+
+     For testing purposes, a FEM is usually integrated in either a development kit or a shield that you can connect to a development kit.
+
+     See :ref:`ug_radio_fem` for more information about FEM support in the |NCS|.
 
    Fully Depleted Silicon-on-Insulator (FD-SOI)
       A type of SOI technology that uses a thin layer of silicon that is fully depleted of electrons.
@@ -476,6 +515,10 @@ Glossary
    Media Access Control address (MAC address)
       The unique 48-bit serial number in the network circuitry of every Ethernet and Wi-Fi device.
 
+   Medium Access Control layer (MAC)
+      The MAC layer sits above the :term:`Physical layer (PHY)` in a protocol stack.
+      It is responsible for managing access to the shared physical medium and ensuring orderly communication between devices.
+
    Memory Privilege Controller (MPC)
       Performs security configuration, enforcement, and bus decoding.
       It implements security filtering, checking bus accesses against the configured access properties and blocking any unauthorized accesses.
@@ -625,6 +668,10 @@ Glossary
 
    Personal Unblocking Key (PUK)
       A key used to reset a PIN that has been lost or forgotten for a SIM card.
+
+   Physical layer (PHY)
+      The PHY layer resides at the bottom of a protocol stack.
+      It is responsible for the physical transmission and reception of data bits across the physical medium (for example, cables, radio waves).
 
    Physically Unclonable Function (PUF)
       A function device that exploits inherent randomness introduced during manufacturing to give a physical entity a unique "fingerprint" or a trust anchor.
@@ -780,6 +827,10 @@ Glossary
       A sequence of characters that uniquely names a wireless local area network (WLAN).
       Sometimes referred to as a network name.
       This name allows stations to connect to the desired network when multiple independent networks operate in the same physical area.
+
+   Shield
+      A hardware add-on that you can attach to the development kit to extend its feature and functionalities.
+      See :ref:`shield_names_nrf`.
 
    Signal-to-Noise Ratio (SNR)
       The level of signal power compared to the level of noise power, often expressed in decibels (dB).

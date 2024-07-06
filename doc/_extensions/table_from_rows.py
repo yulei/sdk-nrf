@@ -106,6 +106,7 @@ class TableFromRows(SphinxDirective):
         if shields:
             header_lines[0] += ' Shields |'
             for i, target in enumerate(rows_sections):
+                target = target.replace("_", "/")
                 if target in shields:
                     rows[i][0] += f'``{"`` ``".join(shields[target])}``'
                 rows[i][0] += ' |'
@@ -175,10 +176,16 @@ class TableFromSampleYaml(TableFromRows):
         """Associate all integration platforms for a sample with any shield used.
         """
 
-        if 'extra_args' not in sample_data:
+        extra_args_raw = sample_data.get('extra_args')
+        if not extra_args_raw:
             return
 
-        shield_args = re.findall(r'SHIELD=(\S*)', sample_data['extra_args'])
+        if isinstance(extra_args_raw, list):
+            extra_args = " ".join(extra_args_raw)
+        else:
+            extra_args = extra_args_raw
+
+        shield_args = re.findall(r'SHIELD=(\S*)', extra_args)
         if not shield_args:
             return
 

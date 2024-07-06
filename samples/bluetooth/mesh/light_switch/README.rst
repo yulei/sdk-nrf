@@ -112,12 +112,25 @@ Low Power node support
 
 The mesh light switch sample can also be run as a Low Power node (LPN), giving the possibility of lowering the power consumption.
 
-While running the sample with the LPN configuration, the fourth :ref:`bt_mesh_onoff_cli_readme` instance will be omitted.
-Instead, button 4 will be used to temporarily enable Node ID advertisement on the LPN device.
+.. tabs::
 
-Running continuous proxy advertisement with Network ID consumes considerable power, and is therefore disabled in the configuration.
-Instead, the user can manually enable the Node ID advertisement for a period of 30 seconds by pressing **Button 4** on the device.
-This will give the user a short period of time to connect directly to the LPN, and thus perform necessary configuration of the device.
+   .. group-tab:: nRF21, nRF52 and nRF53 DKs
+
+      While running the sample with the LPN configuration, the fourth :ref:`bt_mesh_onoff_cli_readme` instance will be omitted.
+      Instead, **Button 4** will be used to temporarily enable Node ID advertisement on the LPN device.
+
+      Running continuous proxy advertisement with Network ID consumes considerable power, and is therefore disabled in the configuration.
+      Instead, the user can manually enable the Node ID advertisement for a period of 30 seconds by pressing **Button 4** on the device.
+      This will give the user a short period of time to connect directly to the LPN, and thus perform necessary configuration of the device.
+
+   .. group-tab:: nRF21, nRF52 and nRF53 DKs
+
+      While running the sample with the LPN configuration, the fourth :ref:`bt_mesh_onoff_cli_readme` instance will be omitted.
+      Instead, **Button 3** will be used to temporarily enable Node ID advertisement on the LPN device.
+
+      Running continuous proxy advertisement with Network ID consumes considerable power, and is therefore disabled in the configuration.
+      Instead, the user can manually enable the Node ID advertisement for a period of 30 seconds by pressing **Button 3** on the device.
+      This will give the user a short period of time to connect directly to the LPN, and thus perform necessary configuration of the device.
 
 After the connection to the LPN is terminated, and the Node ID advertisement has stopped, the LPN will return to its previous state.
 
@@ -185,8 +198,17 @@ LEDs:
 The LPN assignments
 ===================
 
-Button 4:
-	When pressed, enables the Node ID advertisement for a short period of time.
+.. tabs::
+
+   .. group-tab:: nRF21, nRF52 and nRF53 DKs
+
+      Button 4:
+         When pressed, enables the Node ID advertisement for a short period of time.
+
+   .. group-tab:: nRF54 DKs
+
+      Button 3:
+         When pressed, enables the Node ID advertisement for a short period of time.
 
 Configuration
 *************
@@ -207,11 +229,12 @@ LPN configuration
 =================
 
 To make the light switch run as an LPN, set :makevar:`EXTRA_CONF_FILE` to :file:`overlay-lpn.conf` when building the sample.
-For example, when building from the command line, use the following command:
+For example, when building from the command line, use the following command, where *board_target* is the target for the development kit for which you are building:
 
-  .. code-block:: console
+.. parsed-literal::
+   :class: highlight
 
-     west build -b <BOARD> -p -- -DEXTRA_CONF_FILE="overlay-lpn.conf"
+   west build -b *board_target* -p -- -DEXTRA_CONF_FILE="overlay-lpn.conf"
 
 The configuration overlay :file:`overlay-lpn.conf` enables the LPN feature, and alters certain configuration options to further lower the power consumption.
 To review the specific alterations, open and inspect the :file:`overlay-lpn.conf` file.

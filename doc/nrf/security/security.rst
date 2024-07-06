@@ -55,7 +55,7 @@ Different storage options have different features.
 One of the options is to use the :ref:`trusted_storage_readme` library.
 
 The trusted storage library enables the users to provide features like integrity, confidentiality and authenticity of the stored data, without using the TF-M Platform Root of Trust (PRoT).
-The library implements the PSA Cerified Secure Storage API.
+The library implements the PSA Certified Secure Storage API.
 It consists of PSA Internal Trusted Storage API and PSA Protected Storage API.
 
 The Internal Trusted Storage and the Protected Storage are designed to work in :ref:`environments both with and without security by separation <app_boards_spe_nspe>`.
@@ -145,7 +145,7 @@ The module can be enabled through the :kconfig:option:`CONFIG_NRF_SECURITY` Kcon
 The :ref:`nrf_security` acts as an orchestrator for the different cryptographic libraries available in the system.
 These libraries include the binary versions of accelerated cryptographic libraries listed in :ref:`nrfxlib:crypto`, and the open source Mbed TLS implementation in |NCS| located in `sdk-mbedtls`_.
 
-The Kconfig option :kconfig:option:`CONFIG_NRF_SECURITY` prioritizes the usage of the accelerated libraries by default when this is supported by the platform.
+HW accelerated libraries are prioritized over SW libraries when both are enabled.
 For more information about the configuration and usage of the :ref:`nrf_security`, see the :ref:`nrf_security_config` page.
 
 See also :ref:`crypto_samples` for examples of how to configure and perform different cryptographic operations in the |NCS|.

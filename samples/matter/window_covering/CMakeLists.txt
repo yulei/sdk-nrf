@@ -6,10 +6,6 @@
 
 cmake_minimum_required(VERSION 3.20.0)
 
-# Set Kconfig root files that will be processed as a first Kconfig for used child images.
-set(mcuboot_KCONFIG_ROOT "\\\${ZEPHYR_CONNECTEDHOMEIP_MODULE_DIR}/config/nrfconnect/chip-module/Kconfig.mcuboot.root")
-set(multiprotocol_rpmsg_KCONFIG_ROOT "\\\${ZEPHYR_CONNECTEDHOMEIP_MODULE_DIR}/config/nrfconnect/chip-module/Kconfig.multiprotocol_rpmsg.root")
-
 find_package(Zephyr HINTS $ENV{ZEPHYR_BASE})
 
 project(matter-window-app)

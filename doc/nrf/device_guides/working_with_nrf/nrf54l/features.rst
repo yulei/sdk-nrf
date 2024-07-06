@@ -27,7 +27,7 @@ Amazon Sidewalk is a shared network designed to provide a stable and reliable co
 Ring and Echo device can act as a gateway, meaning they can share a portion of internet bandwidth providing the connection and services to Sidewalk end devices.
 Amazon Sidewalk for the nRF Connect SDK is based on two variants, one using Bluetooth® LE (more suited for home applications) and the other one using sub-GHz with the Semtech radio transceiver (for applications requiring longer range).
 
-To learn more about the Amazon Sidewalk solution, see the `Sidewalk documentation`_ page.
+To learn more about the Amazon Sidewalk solution, see the `Amazon Sidewalk documentation`_ page.
 
 Bluetooth Low Energy
 ====================
@@ -95,7 +95,7 @@ The nRF54L15 PDK supports MCUboot as its bootloader, in the experimental phase.
 This means the following:
 
   * Only software cryptography is supported.
-  * Single image pair is supported for dual-bank Device Firmware Update (DFU) targeted at the CPU application (the ``nrf54l15pdk_nrf54l51_cpuapp`` build target).
+  * Single image pair is supported for dual-bank Device Firmware Update (DFU) targeted at the CPU application (the ``nrf54l15pdk/nrf54l51/cpuapp`` board target).
   * MCUboot can be configured as a first-stage bootloader (second-stage bootloader functionality is not yet available).
   * Serial recovery mode is also not yet supported.
 
@@ -105,24 +105,4 @@ Supported DFU protocols
 The DFU process in the nRF54L15 PDK uses the MCUmgr protocol.
 It can be used for performing updates over Bluetooth® Low Energy (LE) and serial connections.
 
-Testing the DFU solution
-========================
-
-You can evaluate the DFU functionality by running the :zephyr:code-sample:`smp-svr` sample for the ``nrf54l15pdk_nrf54l51_cpuapp`` build target, which is available for both Bluetooth LE and serial channels.
-This allows you to build and test the DFU solutions that are facilitated through integration with child images and the partition manager.
-
-To compile the SMP server sample for testing secondary image slots on external SPI NOR flash, run the following command:
-
-.. code-block:: console
-
-   west build -b nrf54l15pdk_nrf54l15_cpuapp -d build/smp_svr_54l_3 zephyr/samples/subsys/mgmt/mcumgr/smp_svr -T sample.mcumgr.smp_svr.bt.nrf54l15pdk.ext_flash
-
-.. note::
-
-   Make sure to use the correct build target depending on your PDK version:
-
-   * For the PDK revision v0.2.1, AB0-ES7, use the ``nrf54l15pdk_nrf54l15_cpuapp`` build target.
-   * For the PDK revisions v0.3.0 and v0.7.0, use the ``nrf54l15pdk_nrf54l15_cpuapp@0.3.0`` build target.
-
-This configuration sets up the secondary image slot on the serial flash memory installed on the nRF54L15 PDK.
-It also enables the relevant SPI and the SPI NOR flash drivers.
+For instructions on testing, see :ref:`nrf54l_testing_dfu`.

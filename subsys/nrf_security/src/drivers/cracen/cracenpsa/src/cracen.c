@@ -14,10 +14,17 @@
 
 #include "common.h"
 #include "microcode_binary.h"
+#include <nrf_security_mutexes.h>
+
+#if !defined(CONFIG_BUILD_WITH_TFM)
+#define LOG_ERR_MSG(msg) LOG_ERR(msg)
+#define LOG_INF_MSG(msg) LOG_INF(msg)
+#define LOG_DBG_MSG(msg) LOG_DBG(msg)
+#endif
 
 static int users;
 
-K_MUTEX_DEFINE(cracen_mutex);
+NRF_SECURITY_MUTEX_DEFINE(cracen_mutex);
 
 LOG_MODULE_REGISTER(cracen, CONFIG_CRACEN_LOG_LEVEL);
 
@@ -44,22 +51,22 @@ static void cracen_load_microcode(void)
 
 void cracen_acquire(void)
 {
-	k_mutex_lock(&cracen_mutex, K_FOREVER);
+	nrf_security_mutex_lock(cracen_mutex);
 
 	if (users++ == 0) {
 		nrf_cracen_module_enable(NRF_CRACEN, CRACEN_ENABLE_CRYPTOMASTER_Msk |
 							     CRACEN_ENABLE_RNG_Msk |
 							     CRACEN_ENABLE_PKEIKG_Msk);
-		LOG_DBG("Power on CRACEN.");
 		irq_enable(CRACEN_IRQn);
+		LOG_DBG_MSG("Power on CRACEN.");
 	}
 
-	k_mutex_unlock(&cracen_mutex);
+	nrf_security_mutex_unlock(cracen_mutex);
 }
 
 void cracen_release(void)
 {
-	k_mutex_lock(&cracen_mutex, K_FOREVER);
+	nrf_security_mutex_lock(cracen_mutex);
 
 	if (--users == 0) {
 		/* Disable IRQs in the ARM NVIC as the first operation to be
@@ -92,11 +99,10 @@ void cracen_release(void)
 
 		/* Clear pending IRQs at the ARM NVIC */
 		NVIC_ClearPendingIRQ(CRACEN_IRQn);
-
-		LOG_DBG("Powered off CRACEN.");
+		LOG_DBG_MSG("Powered off CRACEN.");
 	}
 
-	k_mutex_unlock(&cracen_mutex);
+	nrf_security_mutex_unlock(cracen_mutex);
 }
 
 #define CRACEN_NOT_INITIALIZED 0x207467
