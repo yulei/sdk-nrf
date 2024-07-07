@@ -64,9 +64,11 @@ config NET_SOCKETS_OFFLOAD_TLS
 # nRF Connect SDK needs a larger default stacks in certain configurations
 #  - For running tests.
 #  - For CC3XX RNG
+#  - For Cracen RNG
 config MAIN_STACK_SIZE
 	default 2048 if ZTEST
 	default 2048 if ENTROPY_CC3XX && !BUILD_WITH_TFM
+	default 2048 if PSA_NEED_CRACEN_CTR_DRBG_DRIVER && !BUILD_WITH_TFM
 
 config ZTEST_STACK_SIZE
 	default 2048 if ZTEST
@@ -107,7 +109,17 @@ config NORDIC_QSPI_NOR_FLASH_LAYOUT_PAGE_SIZE
 config GETOPT
 	default n
 
-rsource "kernel/Kconfig"
+# Temporary hack to be able to build samples and tests on the nRF51L15 FLPR core
+if SOC_NRF54L15_ENGA_CPUFLPR && PARTITION_MANAGER_ENABLED
+config FLASH_BASE_ADDRESS
+	hex
+	default 0x0
+config FLASH_SIZE
+	int
+	default 1524
+endif
+
+
 rsource "samples/Kconfig"
 rsource "subsys/Kconfig"
 rsource "modules/Kconfig"

@@ -87,9 +87,9 @@ When building on the command line, run the following command:
 .. parsed-literal::
    :class: highlight
 
-   west build -b *build_target* -- *dfu_build_flag*
+   west build -b *board_target* -- *dfu_build_flag*
 
-Replace *build_target* with the build target name of the hardware platform you are using (see `Requirements`_), and *dfu_build_flag* with the desired DFU build flag.
+Replace *board_target* with the board target name of the hardware platform you are using (see `Requirements`_), and *dfu_build_flag* with the desired DFU build flag.
 For example:
 
 .. code-block:: console
@@ -125,7 +125,7 @@ Remote testing in a network
 By default, the Matter accessory device has no IPv6 network configured.
 To use the device within a Wi-Fi network, you must pair it with the Matter controller over Bluetooth® LE to get the configuration from the controller.
 
-The Bluetooth LE advertising starts automatically upon device startup, but only for a predefined period of time (15 minutes by default).
+The Bluetooth LE advertising starts automatically upon device startup, but only for a predefined period of time (1 hour by default).
 If the Bluetooth LE advertising times out, you can re-enable it manually by pressing **Button (SW1)**.
 
 Additionally, the controller must get the `Onboarding information`_ from the Matter accessory device and provision the device into the network.
@@ -134,30 +134,11 @@ For details, see the `Testing`_ section.
 User interface
 **************
 
-.. include:: ../../../samples/matter/lock/README.rst
-    :start-after: matter_door_lock_sample_led1_start
-    :end-before: matter_door_lock_sample_led1_end
-
 Button 1:
-    Depending on how long you press the button:
+   .. include:: /includes/matter_sample_button.txt
 
-    * If pressed for less than three seconds:
-
-      * If the device is not provisioned to the Matter network, it initiates the SMP server (Simple Management Protocol) and Bluetooth LE advertising for Matter commissioning.
-        After that, the Device Firmware Update (DFU) over Bluetooth Low Energy can be started.
-        (See `Updating the device firmware`_.)
-        Bluetooth LE advertising makes the device discoverable over Bluetooth LE for the predefined period of time (15 minutes by default).
-
-      * If the device is already provisioned to the Matter network it re-enables the SMP server.
-        After that, the DFU over Bluetooth Low Energy can be started.
-        (See `Updating the device firmware`_.)
-
-    * If pressed for more than three seconds, it initiates the factory reset of the device.
-      Releasing the button within a 3-second window of the initiation cancels the factory reset procedure.
-
-.. include:: ../../../samples/matter/lock/README.rst
-    :start-after: matter_door_lock_sample_led1_start
-    :end-before: matter_door_lock_sample_led1_end
+LED 1:
+   .. include:: /includes/matter_sample_state_led.txt
 
 LED 2:
    If the :ref:`CONFIG_BRIDGED_DEVICE_BT <CONFIG_BRIDGED_DEVICE_BT>` Kconfig option is set to ``y``, shows the current state of Bridge's Bluetooth LE connectivity.
@@ -169,9 +150,7 @@ LED 2:
    * Even Flashing (300 ms on / 300 ms off) - The scan for Bluetooth LE devices is in progress.
    * Fast Even Flashing (100 ms on / 100 ms off) - The Bridge device is connecting to the Bluetooth LE device and waiting for the Bluetooth LE authentication PIN code.
 
-.. include:: ../../../samples/matter/lock/README.rst
-    :start-after: matter_door_lock_sample_jlink_start
-    :end-before: matter_door_lock_sample_jlink_end
+.. include:: /includes/matter_segger_usb.txt
 
 .. _matter_bridge_cli:
 
@@ -246,7 +225,7 @@ Controlling a simulated On/Off Light bridged device
       uart:~$ matter_bridge onoff 1 3
 
    Note that the above command will only work if the :ref:`CONFIG_BRIDGED_DEVICE_SIMULATED_ONOFF_SHELL <CONFIG_BRIDGED_DEVICE_SIMULATED_ONOFF_SHELL>` option is selected in the build configuration.
-   If the Kconfig option is not selected, the simulated device changes its state periodically in autonomous manner and can not be controlled by using shell commands.
+   If the Kconfig option is not selected, the simulated device changes its state periodically in autonomous manner and cannot be controlled by using shell commands.
 
 Controlling a simulated On/Off Light Switch bridged device
    Use the following command:
@@ -437,7 +416,7 @@ If you selected the Bluetooth LE device implementation using the :ref:`CONFIG_BR
 .. _CONFIG_BRIDGE_BT_MAX_SCANNED_DEVICES:
 
 CONFIG_BRIDGE_BT_MAX_SCANNED_DEVICES
-   Set the maximum amount of scanned devices.
+   Set the maximum number of scanned devices.
 
 .. _CONFIG_BRIDGE_BT_MINIMUM_SECURITY_LEVEL:
 
@@ -516,9 +495,7 @@ Build the target using the following command in the project directory to enable 
 .. parsed-literal::
    :class: highlight
 
-   west build -b nrf7002dk/nrf5340/cpuapp -- -DCONFIG_BRIDGED_DEVICE_BT=y -DEXTRA_CONF_FILE="overlay-bt_max_connections_app.conf" -Dhci_ipc_EXTRA_CONF_FILE="*absoule_path*/overlay-bt_max_connections_net.conf"
-
-Replace *absolute_path* with the absolute path to the Matter bridge application on your local disk.
+   west build -b nrf7002dk/nrf5340/cpuapp -- -DCONFIG_BRIDGED_DEVICE_BT=y -DEXTRA_CONF_FILE="overlay-bt_max_connections_app.conf" -Dipc_radio_EXTRA_CONF_FILE="overlay-bt_max_connections_net.conf"
 
 .. _matter_bridge_app_bt_security:
 
@@ -549,35 +526,43 @@ If the bridged device supports also levels higher than the selected minimum, the
 In case the bridged device does not support the minimum required level, the connection will be terminated.
 To select the minimum security level, set the :ref:`CONFIG_BRIDGE_BT_MINIMUM_SECURITY_LEVEL <CONFIG_BRIDGE_BT_MINIMUM_SECURITY_LEVEL>` Kconfig option to ``2``, ``3`` or ``4``.
 
-.. _matter_bridge_app_build_types:
+.. _matter_bridge_app_custom_configs:
 
-Matter bridge build types
-=========================
+Matter bridge custom configurations
+===================================
 
-The Matter bridge application does not use a single :file:`prj.conf` file.
-Before you start testing the application, you can select one of the build types supported by the application.
-Not every board supports both mentioned build types.
+The Matter bridge application uses a :file:`prj.conf` configuration file located in the application root directory for the default configuration.
+It also provides additional files for different custom configurations.
+When you build the application, you can select one of these configurations using the :makevar:`FILE_SUFFIX` variable.
 
-See :ref:`app_build_additions_build_types` and :ref:`modifying_build_types` for more information about this feature of the |NCS|.
+See :ref:`app_build_file_suffixes` and :ref:`cmake_options` for more information.
 
-The application supports the following build types:
 
-.. list-table:: Matter bridge build types
+The application supports the following configurations:
+
+.. list-table:: Matter bridge configurations
    :widths: auto
    :header-rows: 1
 
-   * - Build type
+   * - Configuration
      - File name
+     - :makevar:`FILE_SUFFIX`
      - Supported board
      - Description
    * - Debug (default)
      - :file:`prj.conf`
+     - No suffix
      - All from `Requirements`_
-     - Debug version of the application; can be used to enable additional features for verifying the application behavior, such as logs.
+     - Debug version of the application.
+
+       Enables additional features for verifying the application behavior, such as logs.
    * - Release
      - :file:`prj_release.conf`
+     - ``release``
      - All from `Requirements`_
-     - Release version of the application; can be used to enable only the necessary application functionalities to optimize its performance.
+     - Release version of the application.
+
+       Enables only the necessary application functionalities to optimize its performance.
 
 Building and running
 ********************
@@ -594,13 +579,13 @@ For example:
 
    .. code-block:: console
 
-      west build -b nrf5340dk/nrf5340/cpuapp -p -- -DSHIELD=nrf7002ek -DCONFIG_NRF_WIFI_PATCHES_EXT_FLASH_STORE=y -Dmcuboot_CONFIG_UPDATEABLE_IMAGE_NUMBER=3
+      west build -b nrf5340dk/nrf5340/cpuapp -p -- -Dmatter_bridge_SHIELD=nrf7002ek -DSB_CONFIG_WIFI_PATCHES_EXT_FLASH_STORE=y -DSB_CONFIG_DFU_MULTI_IMAGE_PACKAGE_WIFI_FW_PATCH=y -DSB_CONFIG_WIFI_NRF700X=y -Dmcuboot_CONFIG_UPDATEABLE_IMAGE_NUMBER=3
 
-Selecting a build type
-======================
+Selecting a configuration
+=========================
 
-Before you start testing the application, you can select one of the :ref:`matter_bridge_app_build_types`.
-See :ref:`modifying_build_types` for detailed steps how to select a build type.
+Before you start testing the application, you can select one of the :ref:`matter_bridge_app_custom_configs`.
+See :ref:`app_build_file_suffixes` and :ref:`cmake_options` for more information how to select a configuration.
 
 .. _matter_bridge_testing:
 
@@ -968,8 +953,8 @@ For this application, you can use one of the following :ref:`onboarding informat
 
 .. _matter_bridge_app_dfu:
 
-Updating the device firmware
-============================
+Upgrading the device firmware
+=============================
 
 To update the device firmware, complete the steps listed for the selected method in the :doc:`matter:nrfconnect_examples_software_update` tutorial in the Matter documentation.
 

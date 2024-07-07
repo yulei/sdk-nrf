@@ -52,6 +52,7 @@ struct wifi_credentials_header {
 	uint8_t bssid[WIFI_MAC_ADDR_LEN];
 	uint32_t flags;
 	uint8_t channel;
+	uint32_t timeout;
 };
 
 /**
@@ -96,6 +97,7 @@ struct wifi_credentials_enterprise {
  * @param[out] password_len		length of password
  * @param[out] flags			flags
  * @param[out] channel			channel
+ * @param[out] timeout			timeout
  *
  * @return 0		Success.
  * @return -ENOENT	No network with this SSID was found.
@@ -112,7 +114,8 @@ int wifi_credentials_get_by_ssid_personal(
 	size_t password_buf_len,
 	size_t *password_len,
 	uint32_t *flags,
-	uint8_t *channel
+	uint8_t *channel,
+	uint32_t *timeout
 );
 
 /**
@@ -127,6 +130,7 @@ int wifi_credentials_get_by_ssid_personal(
  * @param[in] password_len		length of password
  * @param[in] flags			flags
  * @param[in] channel			Channel
+ * @param[in] timeout			Timeout
  *
  * @return 0			Success. Credentials are stored in persistent storage.
  * @return -EINVAL		A required buffer was NULL or security type is not supported.
@@ -142,7 +146,8 @@ int wifi_credentials_set_personal(
 	const char *password,
 	size_t password_len,
 	uint32_t flags,
-	uint8_t channel
+	uint8_t channel,
+	uint32_t timeout
 );
 
 /**

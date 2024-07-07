@@ -14,12 +14,12 @@ Zephyr and the |NCS| provide support and contain board definitions for developin
 
    * - DK
      - PCA number
-     - Build target
+     - Board target
      - Documentation
    * - :ref:`zephyr:nrf54l15pdk_nrf54l15`
      - PCA10156
-     - | ``nrf54l15pdk/nrf54l15/cpuapp`` for the PDK revision v0.2.1, AB0-ES7 (Engineering A).
-       | ``nrf54l15pdk@0.3.0/nrf54l15/cpuapp`` for the PDK revisions v0.3.0 and v0.7.0 (Engineering A).
+     - | ``nrf54l15pdk@0.2.1/nrf54l15/cpuapp`` for the PDK revision v0.2.1, AB0-ES7 (Engineering A).
+       | ``nrf54l15pdk/nrf54l15/cpuapp`` for the PDK revisions v0.3.0 and v0.7.0 (Engineering A).
      - --
 
 .. note::
@@ -32,4 +32,5 @@ Zephyr and the |NCS| provide support and contain board definitions for developin
    :caption: Subpages:
 
    working_with_nrf/nrf54l/features
-   working_with_nrf/nrf54l/ug_nrf54l15_gs
+   working_with_nrf/nrf54l/nrf54l15_gs
+   working_with_nrf/nrf54l/testing_dfu

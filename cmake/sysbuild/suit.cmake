@@ -5,78 +5,6 @@
 #
 include(${CMAKE_CURRENT_LIST_DIR}/suit_utilities.cmake)
 
-# Copy input template into destination directory.
-#
-# Usage:
-#   suit_copy_input_templates(<destination_template_directory> <soure_template_path> <output_variable>)
-#
-# Parameters:
-#   'destination_template_directory' - destination directory
-#   'source_template_path' - path to the source template
-#   'output_variable' - variable to store new path to the copied template
-function(suit_copy_input_template destination_template_directory source_template_path output_variable)
-  cmake_path(GET source_template_path FILENAME source_filename)
-  set(destination_template_path "${destination_template_directory}/${source_filename}")
-  if(NOT EXISTS ${source_template_path})
-    message(SEND_ERROR "DFU: Could not find default SUIT template: '${source_template_path}'. Corrupted configuration?")
-    return()
-  endif()
-  if(NOT EXISTS ${destination_template_path})
-    # copy default template and create digest
-    configure_file(${source_template_path} ${destination_template_path} COPYONLY)
-    file(SHA256 ${destination_template_path} checksum_variable)
-    file(WRITE "${destination_template_path}.digest" ${checksum_variable})
-  endif()
-  if(NOT EXISTS "${destination_template_path}.digest")
-    # restore digest removed by user to discard warning about changes in the source template
-    file(SHA256 ${source_template_path} checksum_variable)
-    file(WRITE "${destination_template_path}.digest" ${checksum_variable})
-  endif()
-  cmake_path(GET source_template_path FILENAME copied_filename)
-  set(${output_variable} "${destination_template_directory}/${copied_filename}" PARENT_SCOPE)
-endfunction()
-
-# Check digests for template.
-#
-# Usage:
-#   suit_check_template_digest(<destination_template_directory> <template_path>)
-#
-# Parameters:
-#   'destination_template_directory' - destination directory
-#   'template_path' - path to the source template
-function(suit_check_template_digest destination_template_directory source_template_path)
-    suit_set_absolute_or_relative_path(${source_template_path} ${PROJECT_BINARY_DIR} source_template_path)
-    if(NOT EXISTS ${source_template_path})
-      message(SEND_ERROR "DFU: Could not find default SUIT template: '${source_template_path}'. Corrupted configuration?")
-      return()
-    endif()
-    cmake_path(GET source_template_path FILENAME source_filename)
-    set(input_file "${destination_template_directory}/${source_filename}")
-
-    file(SHA256 ${source_template_path} CHECKSUM_DEFAULT)
-    set(DIGEST_STORAGE "${input_file}.digest")
-    file(STRINGS ${DIGEST_STORAGE} CHECKSUM_STORED)
-    if(NOT ${CHECKSUM_DEFAULT} STREQUAL ${CHECKSUM_STORED})
-      message(SEND_ERROR "DFU: Outdated input SUIT template detected - consider update.\n"
-      "Some changes has been done to the SUIT_ENVELOPE_DEFAULT_TEMPLATE which was used to create your ${input_file}.\n"
-      "Please review these changes and remove ${input_file}.digest file to bypass this error.\n"
-      )
-    endif()
-endfunction()
-
-# Create digest for input file.
-#
-# Usage:
-#   suit_create_digest(<input_file> <output_file>)
-#
-# Parameters:
-#   'input_file' - input file to calculate digest on
-#   'output_file' - output file to store calculated digest
-function(suit_create_digest input_file output_file)
-  file(SHA256 ${input_file} CHECKSUM_VARIABLE)
-  file(WRITE ${output_file} ${CHECKSUM_VARIABLE})
-endfunction()
-
 # Resolve passed absolute or relative path to real path.
 #
 # Usage:
@@ -103,10 +31,9 @@ endfunction()
 #   'output_file' - path to output signed envelope
 function(suit_sign_envelope input_file output_file)
   cmake_path(GET ZEPHYR_NRF_MODULE_DIR PARENT_PATH NRF_DIR_PARENT)
-  sysbuild_get(CONFIG_SUIT_ENVELOPE_SIGN_SCRIPT IMAGE ${DEFAULT_IMAGE} VAR CONFIG_SUIT_ENVELOPE_SIGN_SCRIPT KCONFIG)
-  suit_set_absolute_or_relative_path(${CONFIG_SUIT_ENVELOPE_SIGN_SCRIPT} ${NRF_DIR_PARENT} SIGN_SCRIPT)
+  suit_set_absolute_or_relative_path(${SB_CONFIG_SUIT_ENVELOPE_SIGN_SCRIPT} ${NRF_DIR_PARENT} SIGN_SCRIPT)
   if(NOT EXISTS ${SIGN_SCRIPT})
-    message(SEND_ERROR "DFU: ${CONFIG_SUIT_ENVELOPE_SIGN_SCRIPT} does not exist. Corrupted configuration?")
+    message(SEND_ERROR "DFU: ${SB_CONFIG_SUIT_ENVELOPE_SIGN_SCRIPT} does not exist. Corrupted configuration?")
     return()
   endif()
   set_property(
@@ -135,6 +62,10 @@ function(suit_register_post_build_commands)
     list(APPEND dependencies "${BINARY_DIR}/zephyr/${BINARY_FILE}.bin")
   endforeach()
 
+  if (SB_CONFIG_SUIT_BUILD_RECOVERY)
+    list(APPEND dependencies recovery)
+  endif()
+
   add_custom_target(
     create_suit_artifacts
     ALL
@@ -143,6 +74,28 @@ function(suit_register_post_build_commands)
     ${dependencies}
     COMMAND_EXPAND_LISTS
     COMMENT "Create SUIT artifacts"
+  )
+endfunction()
+
+function(suit_generate_dfu_zip)
+  get_property(
+    dfu_artifacts
+    GLOBAL PROPERTY
+    SUIT_DFU_ARTIFACTS
+  )
+
+  set(root_name "${SB_CONFIG_SUIT_ENVELOPE_ROOT_ARTIFACT_NAME}.suit")
+  set(script_params "${root_name}type=suit-envelope")
+
+  include(${ZEPHYR_NRF_MODULE_DIR}/cmake/fw_zip.cmake)
+
+  generate_dfu_zip(
+    OUTPUT ${PROJECT_BINARY_DIR}/dfu_suit.zip
+    BIN_FILES ${dfu_artifacts}
+    TYPE bin
+    IMAGE ${DEFAULT_IMAGE}
+    DEPENDS ${create_suit_artifacts}
+    SCRIPT_PARAMS "${script_params}"
   )
 endfunction()
 
@@ -163,65 +116,100 @@ function(suit_create_package)
   set(SUIT_OUTPUT_ARTIFACTS_TARGETS)
   set(CORE_ARGS)
   set(STORAGE_BOOT_ARGS)
+  sysbuild_get(app_config_dir IMAGE ${DEFAULT_IMAGE} VAR APPLICATION_CONFIG_DIR CACHE)
 
-  sysbuild_get(CONFIG_SUIT_ENVELOPE_EDITABLE_TEMPLATES_LOCATION IMAGE ${DEFAULT_IMAGE} VAR CONFIG_SUIT_ENVELOPE_EDITABLE_TEMPLATES_LOCATION KCONFIG)
-  suit_set_absolute_or_relative_path(${CONFIG_SUIT_ENVELOPE_EDITABLE_TEMPLATES_LOCATION} ${PROJECT_BINARY_DIR} INPUT_TEMPLATES_DIRECTORY)
-  sysbuild_get(ENVELOPE_SHALL_BE_SIGNED IMAGE ${DEFAULT_IMAGE} VAR CONFIG_SUIT_ENVELOPE_SIGN KCONFIG)
-  if(NOT DEFINED ENVELOPE_SHALL_BE_SIGNED)
-    set(ENVELOPE_SHALL_BE_SIGNED FALSE)
+  if(NOT DEFINED SB_CONFIG_SUIT_ENVELOPE_SIGN)
+    set(SB_CONFIG_SUIT_ENVELOPE_SIGN FALSE)
   endif()
 
+  list(APPEND CORE_ARGS
+    --core sysbuild,,,${PROJECT_BINARY_DIR}/.config
+  )
+
   foreach(image ${IMAGES})
-    sysbuild_get(INPUT_ENVELOPE_JINJA_FILE IMAGE ${image} VAR CONFIG_SUIT_ENVELOPE_TEMPLATE KCONFIG)
-    sysbuild_get(target IMAGE ${image} VAR CONFIG_SUIT_ENVELOPE_TARGET KCONFIG)
+    unset(target)
     sysbuild_get(BINARY_DIR IMAGE ${image} VAR APPLICATION_BINARY_DIR CACHE)
     sysbuild_get(BINARY_FILE IMAGE ${image} VAR CONFIG_KERNEL_BIN_NAME KCONFIG)
-    suit_copy_input_template(${INPUT_TEMPLATES_DIRECTORY} "${INPUT_ENVELOPE_JINJA_FILE}" ENVELOPE_JINJA_FILE)
-    if(NOT DEFINED ENVELOPE_JINJA_FILE)
-      message(SEND_ERROR "DFU: Creation of SUIT artifacts failed.")
-      return()
-    endif()
-    suit_check_template_digest(${INPUT_TEMPLATES_DIRECTORY} "${INPUT_ENVELOPE_JINJA_FILE}")
+    sysbuild_get(target IMAGE ${image} VAR CONFIG_SUIT_ENVELOPE_TARGET KCONFIG)
+
     set(BINARY_FILE "${BINARY_FILE}.bin")
 
     list(APPEND CORE_ARGS
-      --core ${target},${SUIT_ROOT_DIRECTORY}${target}.bin,${BINARY_DIR}/zephyr/edt.pickle
+      --core ${image},${SUIT_ROOT_DIRECTORY}${image}.bin,${BINARY_DIR}/zephyr/edt.pickle,${BINARY_DIR}/zephyr/.config
     )
 
-    sysbuild_get(CONFIG_SUIT_ENVELOPE_ROOT_ARTIFACT_NAME IMAGE ${DEFAULT_IMAGE} VAR CONFIG_SUIT_ENVELOPE_ROOT_ARTIFACT_NAME KCONFIG)
+    if(DEFINED target AND NOT target STREQUAL "")
+      list(APPEND CORE_ARGS
+      --core ${target},${SUIT_ROOT_DIRECTORY}${image}.bin,${BINARY_DIR}/zephyr/edt.pickle,${BINARY_DIR}/zephyr/.config
+      )
+    endif()
+    suit_copy_artifact_to_output_directory(${image} ${BINARY_DIR}/zephyr/${BINARY_FILE})
+  endforeach()
+
+  foreach(image ${IMAGES})
+    unset(GENERATE_LOCAL_ENVELOPE)
+    sysbuild_get(GENERATE_LOCAL_ENVELOPE IMAGE ${image} VAR CONFIG_SUIT_LOCAL_ENVELOPE_GENERATE KCONFIG)
+    if(NOT DEFINED GENERATE_LOCAL_ENVELOPE)
+      continue()
+    endif()
+
+    sysbuild_get(INPUT_ENVELOPE_JINJA_FILE IMAGE ${image} VAR CONFIG_SUIT_ENVELOPE_TEMPLATE KCONFIG)
+    suit_set_absolute_or_relative_path(${INPUT_ENVELOPE_JINJA_FILE} ${app_config_dir} INPUT_ENVELOPE_JINJA_FILE)
+    sysbuild_get(target IMAGE ${image} VAR CONFIG_SUIT_ENVELOPE_TARGET KCONFIG)
+    sysbuild_get(BINARY_DIR IMAGE ${image} VAR APPLICATION_BINARY_DIR CACHE)
+    sysbuild_get(BINARY_FILE IMAGE ${image} VAR CONFIG_KERNEL_BIN_NAME KCONFIG)
+    if (NOT DEFINED INPUT_ENVELOPE_JINJA_FILE OR INPUT_ENVELOPE_JINJA_FILE STREQUAL "")
+      message(STATUS "DFU: Input SUIT template for ${image} is not defined. Skipping.")
+      continue()
+    endif()
+    if(NOT DEFINED INPUT_ENVELOPE_JINJA_FILE)
+      message(SEND_ERROR "DFU: Creation of SUIT artifacts failed.")
+      return()
+    endif()
+
     set(ENVELOPE_YAML_FILE ${SUIT_ROOT_DIRECTORY}${target}.yaml)
     set(ENVELOPE_SUIT_FILE ${SUIT_ROOT_DIRECTORY}${target}.suit)
 
-    suit_copy_artifact_to_output_directory(${target} ${BINARY_DIR}/zephyr/${BINARY_FILE})
-    suit_render_template(${ENVELOPE_JINJA_FILE} ${ENVELOPE_YAML_FILE} "${CORE_ARGS}")
-    suit_create_envelope(${ENVELOPE_YAML_FILE} ${ENVELOPE_SUIT_FILE} ${ENVELOPE_SHALL_BE_SIGNED})
+    suit_render_template(${INPUT_ENVELOPE_JINJA_FILE} ${ENVELOPE_YAML_FILE} "${CORE_ARGS}")
+    suit_create_envelope(${ENVELOPE_YAML_FILE} ${ENVELOPE_SUIT_FILE} ${SB_CONFIG_SUIT_ENVELOPE_SIGN})
     list(APPEND STORAGE_BOOT_ARGS
       --input-envelope ${ENVELOPE_SUIT_FILE}
     )
   endforeach()
 
-  sysbuild_get(INPUT_ROOT_ENVELOPE_JINJA_FILE IMAGE ${DEFAULT_IMAGE} VAR CONFIG_SUIT_ENVELOPE_ROOT_TEMPLATE KCONFIG)
+  set(INPUT_ROOT_ENVELOPE_JINJA_FILE ${SB_CONFIG_SUIT_ENVELOPE_ROOT_TEMPLATE})
 
   # create root envelope if defined
   if(DEFINED INPUT_ROOT_ENVELOPE_JINJA_FILE AND NOT INPUT_ROOT_ENVELOPE_JINJA_FILE STREQUAL "")
-    sysbuild_get(ROOT_NAME IMAGE ${DEFAULT_IMAGE} VAR CONFIG_SUIT_ENVELOPE_ROOT_ARTIFACT_NAME KCONFIG)
-    if(NOT DEFINED ROOT_NAME OR ROOT_NAME STREQUAL "")
-      set(ROOT_NAME "root")
-    endif()
-    suit_copy_input_template(${INPUT_TEMPLATES_DIRECTORY} "${INPUT_ROOT_ENVELOPE_JINJA_FILE}" ROOT_ENVELOPE_JINJA_FILE)
-    suit_check_template_digest(${INPUT_TEMPLATES_DIRECTORY} "${INPUT_ROOT_ENVELOPE_JINJA_FILE}")
+    set(ROOT_NAME ${SB_CONFIG_SUIT_ENVELOPE_ROOT_ARTIFACT_NAME})
+    suit_set_absolute_or_relative_path(${INPUT_ROOT_ENVELOPE_JINJA_FILE} ${app_config_dir} INPUT_ROOT_ENVELOPE_JINJA_FILE)
     set(ROOT_ENVELOPE_YAML_FILE ${SUIT_ROOT_DIRECTORY}${ROOT_NAME}.yaml)
     set(ROOT_ENVELOPE_SUIT_FILE ${SUIT_ROOT_DIRECTORY}${ROOT_NAME}.suit)
-    suit_render_template(${ROOT_ENVELOPE_JINJA_FILE} ${ROOT_ENVELOPE_YAML_FILE} "${CORE_ARGS}")
-    suit_create_envelope(${ROOT_ENVELOPE_YAML_FILE} ${ROOT_ENVELOPE_SUIT_FILE} ${ENVELOPE_SHALL_BE_SIGNED})
+    suit_render_template(${INPUT_ROOT_ENVELOPE_JINJA_FILE} ${ROOT_ENVELOPE_YAML_FILE} "${CORE_ARGS}")
+    suit_create_envelope(${ROOT_ENVELOPE_YAML_FILE} ${ROOT_ENVELOPE_SUIT_FILE} ${SB_CONFIG_SUIT_ENVELOPE_SIGN})
       list(APPEND STORAGE_BOOT_ARGS
         --input-envelope ${ROOT_ENVELOPE_SUIT_FILE}
       )
   endif()
 
   sysbuild_get(DEFAULT_BINARY_DIR IMAGE ${DEFAULT_IMAGE} VAR APPLICATION_BINARY_DIR CACHE)
+
+  # Read SUIT storage addresses, set during MPI generation
+  sysbuild_get(SUIT_STORAGE_ADDRESS IMAGE ${DEFAULT_IMAGE} VAR SUIT_STORAGE_ADDRESS CACHE)
+  if (DEFINED SUIT_STORAGE_ADDRESS)
+    list(APPEND STORAGE_BOOT_ARGS --storage-address ${SUIT_STORAGE_ADDRESS})
+  else()
+    message(WARNING "Using default value of the SUIT storage address")
+  endif()
+
   # create all storages in the DEFAULT_IMAGE output directory
-  list(APPEND STORAGE_BOOT_ARGS --storage-output-directory "${DEFAULT_BINARY_DIR}/zephyr" --zephyr-base ${ZEPHYR_BASE} ${CORE_ARGS})
+  list(APPEND STORAGE_BOOT_ARGS
+    --storage-output-directory
+    "${DEFAULT_BINARY_DIR}/zephyr"
+    --zephyr-base ${ZEPHYR_BASE}
+    --config-file "${DEFAULT_BINARY_DIR}/zephyr/.config"
+    ${CORE_ARGS}
+  )
   set_property(
     GLOBAL APPEND PROPERTY SUIT_POST_BUILD_COMMANDS
     COMMAND ${PYTHON_EXECUTABLE}
@@ -242,9 +230,20 @@ function(suit_setup_merge)
   sysbuild_get(BINARY_DIR IMAGE ${DEFAULT_IMAGE} VAR APPLICATION_BINARY_DIR CACHE)
   foreach(image ${IMAGES})
     set(ARTIFACTS_TO_MERGE)
+
+    unset(GENERATE_LOCAL_ENVELOPE)
+    sysbuild_get(GENERATE_LOCAL_ENVELOPE IMAGE ${image} VAR CONFIG_SUIT_LOCAL_ENVELOPE_GENERATE KCONFIG)
+    if(NOT DEFINED GENERATE_LOCAL_ENVELOPE)
+      continue()
+    endif()
+
     sysbuild_get(IMAGE_BINARY_DIR IMAGE ${image} VAR APPLICATION_BINARY_DIR CACHE)
     sysbuild_get(IMAGE_BINARY_FILE IMAGE ${image} VAR CONFIG_KERNEL_BIN_NAME KCONFIG)
     sysbuild_get(IMAGE_TARGET_NAME IMAGE ${image} VAR CONFIG_SUIT_ENVELOPE_TARGET KCONFIG)
+    if (NOT DEFINED IMAGE_TARGET_NAME OR IMAGE_TARGET_NAME STREQUAL "")
+      message(STATUS "DFU: Target name for ${image} is not defined. Skipping.")
+      continue()
+    endif()
 
     sysbuild_get(CONFIG_SUIT_ENVELOPE_OUTPUT_ARTIFACT IMAGE ${image} VAR CONFIG_SUIT_ENVELOPE_OUTPUT_ARTIFACT KCONFIG)
     sysbuild_get(CONFIG_NRF_REGTOOL_GENERATE_UICR IMAGE ${image} VAR CONFIG_NRF_REGTOOL_GENERATE_UICR KCONFIG)
@@ -252,13 +251,23 @@ function(suit_setup_merge)
 
     set(OUTPUT_HEX_FILE "${IMAGE_BINARY_DIR}/zephyr/${CONFIG_SUIT_ENVELOPE_OUTPUT_ARTIFACT}")
 
-    list(APPEND ARTIFACTS_TO_MERGE ${BINARY_DIR}/zephyr/storage_${IMAGE_TARGET_NAME}.hex)
+    list(APPEND ARTIFACTS_TO_MERGE ${BINARY_DIR}/zephyr/suit_installed_envelopes_${IMAGE_TARGET_NAME}_merged.hex)
     list(APPEND ARTIFACTS_TO_MERGE ${IMAGE_BINARY_DIR}/zephyr/${IMAGE_BINARY_FILE}.hex)
     if(CONFIG_SUIT_ENVELOPE_OUTPUT_MPI_MERGE)
       list(APPEND ARTIFACTS_TO_MERGE ${BINARY_DIR}/zephyr/suit_mpi_${IMAGE_TARGET_NAME}_merged.hex)
     endif()
     if(CONFIG_NRF_REGTOOL_GENERATE_UICR)
       list(APPEND ARTIFACTS_TO_MERGE ${IMAGE_BINARY_DIR}/zephyr/uicr.hex)
+    endif()
+
+    if(SB_CONFIG_SUIT_BUILD_RECOVERY)
+      get_property(
+        recovery_artifacts
+        GLOBAL PROPERTY
+        SUIT_RECOVERY_ARTIFACTS_TO_MERGE_${IMAGE_TARGET_NAME}
+      )
+
+      list(APPEND ARTIFACTS_TO_MERGE ${recovery_artifacts})
     endif()
 
     set_property(
@@ -275,8 +284,62 @@ function(suit_setup_merge)
   endforeach()
 endfunction()
 
-# Enable SUIT envelope generation only if DEFAULT_IMAGE has it enabled.
-sysbuild_get(CONFIG_SUIT_ENVELOPE IMAGE ${DEFAULT_IMAGE} VAR CONFIG_SUIT_ENVELOPE KCONFIG)
-if(CONFIG_SUIT_ENVELOPE)
+# Build recovery image.
+#
+# Usage:
+#   suit_build_recovery()
+#
+function(suit_build_recovery)
+  include(ExternalProject)
+
+  set(sysbuild_root_path "${ZEPHYR_NRF_MODULE_DIR}/../zephyr/share/sysbuild")
+  set(board_target "${SB_CONFIG_BOARD}/${target_soc}/cpuapp")
+
+  # Get class and vendor ID-s to pass to recovery application
+  sysbuild_get(APP_RECOVERY_VENDOR_NAME IMAGE ${DEFAULT_IMAGE} VAR CONFIG_SUIT_MPI_APP_RECOVERY_VENDOR_NAME KCONFIG)
+  sysbuild_get(APP_RECOVERY_CLASS_NAME IMAGE ${DEFAULT_IMAGE} VAR CONFIG_SUIT_MPI_APP_RECOVERY_CLASS_NAME KCONFIG)
+  sysbuild_get(RAD_RECOVERY_VENDOR_NAME IMAGE ${DEFAULT_IMAGE} VAR CONFIG_SUIT_MPI_RAD_RECOVERY_VENDOR_NAME KCONFIG)
+  sysbuild_get(RAD_RECOVERY_CLASS_NAME IMAGE ${DEFAULT_IMAGE} VAR CONFIG_SUIT_MPI_RAD_RECOVERY_CLASS_NAME KCONFIG)
+
+  ExternalProject_Add(
+    recovery
+    SOURCE_DIR ${sysbuild_root_path}
+    PREFIX ${CMAKE_BINARY_DIR}/recovery
+    INSTALL_COMMAND ""
+    CMAKE_CACHE_ARGS
+      "-DAPP_DIR:PATH=${ZEPHYR_NRF_MODULE_DIR}/samples/suit/recovery"
+      "-DBOARD:STRING=${board_target}"
+      "-DEXTRA_DTC_OVERLAY_FILE:STRING=${APP_DIR}/sysbuild/recovery.overlay"
+      "-Dhci_ipc_EXTRA_DTC_OVERLAY_FILE:STRING=${APP_DIR}/sysbuild/recovery_hci_ipc.overlay"
+      "-DSB_CONFIG_SUIT_ENVELOPE_ROOT_TEMPLATE:STRING=\\\"${ZEPHYR_NRF_MODULE_DIR}/samples/suit/recovery/app_recovery_envelope.yaml.jinja2\\\""
+      "-Dhci_ipc_CONFIG_SUIT_ENVELOPE_TEMPLATE:STRING=\\\"${ZEPHYR_NRF_MODULE_DIR}/samples/suit/recovery/rad_recovery_envelope.yaml.jinja2\\\""
+      "-DCONFIG_SUIT_MPI_APP_RECOVERY_VENDOR_NAME:STRING=\\\"${APP_RECOVERY_VENDOR_NAME}\\\""
+      "-DCONFIG_SUIT_MPI_APP_RECOVERY_CLASS_NAME:STRING=\\\"${APP_RECOVERY_CLASS_NAME}\\\""
+      "-DCONFIG_SUIT_MPI_RAD_RECOVERY_VENDOR_NAME:STRING=\\\"${RAD_RECOVERY_VENDOR_NAME}\\\""
+      "-DCONFIG_SUIT_MPI_RAD_RECOVERY_CLASS_NAME:STRING=\\\"${RAD_RECOVERY_CLASS_NAME}\\\""
+    BUILD_ALWAYS True
+)
+  ExternalProject_Get_property(recovery BINARY_DIR)
+
+  set_property(
+    GLOBAL APPEND PROPERTY SUIT_RECOVERY_ARTIFACTS_TO_MERGE_application
+    ${BINARY_DIR}/recovery/zephyr/suit_installed_envelopes_application_merged.hex)
+  set_property(
+    GLOBAL APPEND PROPERTY SUIT_RECOVERY_ARTIFACTS_TO_MERGE_application ${BINARY_DIR}/recovery/zephyr/zephyr.hex)
+
+  set_property(
+    GLOBAL APPEND PROPERTY SUIT_RECOVERY_ARTIFACTS_TO_MERGE_radio
+    ${BINARY_DIR}/recovery/zephyr/suit_installed_envelopes_radio_merged.hex)
+  set_property(
+    GLOBAL APPEND PROPERTY SUIT_RECOVERY_ARTIFACTS_TO_MERGE_radio ${BINARY_DIR}/hci_ipc/zephyr/zephyr.hex)
+
+endfunction()
+
+if(SB_CONFIG_SUIT_BUILD_RECOVERY)
+  suit_build_recovery()
+endif()
+
+if(SB_CONFIG_SUIT_ENVELOPE)
   suit_create_package()
+  suit_generate_dfu_zip()
 endif()

@@ -188,8 +188,8 @@ Working with nRF91 Series
 
   * New partition layout configuration options for Thingy:91.
     See :ref:`thingy91_partition_layout` for more details.
-  * :ref:`ug_nrf9161` user guide.
-  * A section on :ref:`tfm_enable_share_uart` in :ref:`ug_nrf9160`.
+  * Developing with nRF9161 DK user guide.
+  * A section on :ref:`tfm_enable_share_uart` in the developing with nRF9161 DK user guide.
 
 * Updated:
 
@@ -221,7 +221,7 @@ Working with nRF53 Series
 Working with RF front-end modules
 =================================
 
-* Added a clarification that the Simple GPIO implementation is intended for multiple front-end modules (not just one specific device) in the :ref:`ug_radio_fem_sw_support_mpsl` section of the :ref:`ug_radio_fem` guide.
+* Added a clarification that the Simple GPIO implementation is intended for multiple front-end modules (not just one specific device) in the :ref:`ug_radio_fem_sw_support` section of the :ref:`ug_radio_fem` guide.
 
 Protocols
 =========

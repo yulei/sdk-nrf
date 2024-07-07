@@ -539,12 +539,15 @@ void hci_internal_supported_commands(sdc_hci_ip_supported_commands_t *cmds)
 	cmds->hci_le_enhanced_read_transmit_power_level = 1;
 	cmds->hci_le_read_remote_transmit_power_level = 1;
 	cmds->hci_le_set_transmit_power_reporting_enable = 1;
-	cmds->hci_le_set_path_loss_reporting_parameters = 1;
-	cmds->hci_le_set_path_loss_reporting_enable = 1;
 	/* NOTE: The DTM commands are *not* supported by the SoftDevice
 	 * controller. See doc/nrf/known_issues.rst.
 	 */
 	cmds->hci_le_transmitter_test_v4 = 1;
+#endif
+
+#if defined(CONFIG_BT_CTLR_SDC_LE_PATH_LOSS_MONITORING)
+	cmds->hci_le_set_path_loss_reporting_parameters = 1;
+	cmds->hci_le_set_path_loss_reporting_enable = 1;
 #endif
 
 #if defined(CONFIG_BT_CTLR_LE_POWER_CONTROL) || defined(CONFIG_BT_CTLR_ADV_EXT)
@@ -618,7 +621,6 @@ static void vs_zephyr_supported_commands(sdc_hci_vs_zephyr_supported_commands_t 
 	cmds->read_version_info = 1;
 	cmds->read_supported_commands = 1;
 
-#if defined(CONFIG_BT_HCI_VS_EXT)
 	cmds->write_bd_addr = 1;
 	cmds->read_static_addresses = 1;
 	cmds->read_key_hierarchy_roots = 1;
@@ -630,7 +632,6 @@ static void vs_zephyr_supported_commands(sdc_hci_vs_zephyr_supported_commands_t 
 	cmds->write_tx_power_level = 1;
 	cmds->read_tx_power_level = 1;
 #endif /* CONFIG_BT_CTLR_TX_PWR_DYNAMIC_CONTROL */
-#endif /* CONFIG_BT_HCI_VS_EXT */
 }
 
 static void vs_supported_commands(sdc_hci_vs_supported_vs_commands_t *cmds)
@@ -746,6 +747,9 @@ void hci_internal_le_supported_features(
 #if defined(CONFIG_BT_CTLR_LE_POWER_CONTROL)
 	features->params.le_power_control_request = 1;
 	features->params.le_power_change_indication = 1;
+#endif
+
+#if defined(CONFIG_BT_CTLR_SDC_LE_PATH_LOSS_MONITORING)
 	features->params.le_path_loss_monitoring = 1;
 #endif
 
@@ -1306,7 +1310,9 @@ static uint8_t le_controller_cmd_put(uint8_t const * const cmd,
 			sizeof(sdc_hci_cmd_le_set_transmit_power_reporting_enable_return_t);
 		return sdc_hci_cmd_le_set_transmit_power_reporting_enable((void *)cmd_params,
 									  (void *)event_out_params);
+#endif
 
+#if defined(CONFIG_BT_CTLR_SDC_LE_PATH_LOSS_MONITORING)
 	case SDC_HCI_OPCODE_CMD_LE_SET_PATH_LOSS_REPORTING_PARAMS:
 		*param_length_out += sizeof(sdc_hci_cmd_le_set_path_loss_reporting_params_return_t);
 		return sdc_hci_cmd_le_set_path_loss_reporting_params((void *)cmd_params,
@@ -1550,7 +1556,6 @@ static uint8_t vs_cmd_put(uint8_t const *const cmd, uint8_t *const raw_event_out
 		vs_zephyr_supported_commands((void *)event_out_params);
 		return 0;
 
-#if defined(CONFIG_BT_HCI_VS_EXT)
 	case SDC_HCI_OPCODE_CMD_VS_ZEPHYR_READ_STATIC_ADDRESSES:
 		/* We always return one entry */
 		*param_length_out += sizeof(sdc_hci_cmd_vs_zephyr_read_static_addresses_return_t);
@@ -1579,7 +1584,6 @@ static uint8_t vs_cmd_put(uint8_t const *const cmd, uint8_t *const raw_event_out
 		return sdc_hci_cmd_vs_zephyr_read_tx_power((void *)cmd_params,
 							   (void *)event_out_params);
 #endif /* CONFIG_BT_CTLR_TX_PWR_DYNAMIC_CONTROL */
-#endif /* CONFIG_BT_HCI_VS_EXT */
 	case SDC_HCI_OPCODE_CMD_VS_READ_SUPPORTED_VS_COMMANDS:
 		*param_length_out += sizeof(sdc_hci_cmd_vs_read_supported_vs_commands_return_t);
 		vs_supported_commands((void *)event_out_params);

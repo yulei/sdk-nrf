@@ -39,3 +39,4 @@ ext/BSEC_*
 applications/nrf5340_audio/src/fw_info_app.c
 
 applications/ble_client
+scripts/hid_configurator/hidapi.dll

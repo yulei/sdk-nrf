@@ -234,11 +234,7 @@ function(add_child_image_from_source)
   elseif (NOT ACI_BOARD)
     # No BOARD is given as argument, this triggers automatic conversion of
     # *.ns board from parent image.
-    if(DEFINED BOARD_REVISION)
-      get_board_without_ns_suffix(${BOARD}@${BOARD_REVISION}${BOARD_QUALIFIERS} ACI_BOARD)
-    else()
-      get_board_without_ns_suffix(${BOARD}${BOARD_QUALIFIERS} ACI_BOARD)
-    endif()
+    get_board_without_ns_suffix(${BOARD}${BOARD_QUALIFIERS} ACI_BOARD)
   endif()
 
   if (NOT ACI_DOMAIN AND DOMAIN)
@@ -404,6 +400,17 @@ function(add_child_image_from_source)
       WEST_PYTHON
       )
 
+    # Construct a list of cache variables that, when present in the root
+    # image, should be passed on to all child images as well.
+    list(APPEND
+      SHARED_CACHED_MULTI_IMAGE_VARIABLES
+      ARCH_ROOT
+      BOARD_ROOT
+      SOC_ROOT
+      MODULE_EXT_ROOT
+      SCA_ROOT
+    )
+
     foreach(kconfig_target ${EXTRA_KCONFIG_TARGETS})
       list(APPEND
         SHARED_MULTI_IMAGE_VARIABLES
@@ -422,6 +429,17 @@ function(add_child_image_from_source)
           APPEND
           ${preload_file}
           "set(${shared_var} \"${${shared_var}}\" CACHE INTERNAL \"NCS child image controlled\")\n"
+          )
+      endif()
+    endforeach()
+
+    list(REMOVE_DUPLICATES SHARED_CACHED_MULTI_IMAGE_VARIABLES)
+    foreach(shared_var ${SHARED_CACHED_MULTI_IMAGE_VARIABLES})
+      if(DEFINED CACHE{${shared_var}} AND NOT DEFINED ${ACI_NAME}_${shared_var})
+        file(
+          APPEND
+          ${preload_file}
+          "set(${shared_var} \"$CACHE{${shared_var}}\" CACHE INTERNAL \"NCS child image controlled\")\n"
           )
       endif()
     endforeach()

@@ -32,8 +32,8 @@ IPv6 network support
 
 The development kits for this sample offer the following IPv6 network support for Matter:
 
-* Matter over Thread is supported for ``nrf52840dk_nrf52840``, ``nrf5340dk_nrf5340_cpuapp``, ``nrf21540dk_nrf52840``, and ``nrf54l15pdk_nrf54l15``.
-* Matter over Wi-Fi is supported for ``nrf5340dk_nrf5340_cpuapp`` with the ``nrf7002ek`` shield attached or for ``nrf7002dk/nrf5340/cpuapp``.
+* Matter over Thread is supported for ``nrf52840dk/nrf52840``, ``nrf5340dk/nrf5340/cpuapp``, ``nrf21540dk/nrf52840``, ``nrf54l15pdk/nrf54l15/cpuapp``, and ``nrf54h20dk/nrf54h20/cpuapp``.
+* Matter over Wi-Fi is supported for ``nrf5340dk/nrf5340/cpuapp`` or ``nrf54h20dk/nrf54h20/cpuapp`` with the ``nrf7002ek`` shield attached, or for ``nrf7002dk/nrf5340/cpuapp``.
 
 Overview
 ********
@@ -99,8 +99,10 @@ Configuration
 
 |config|
 
-Matter template build types
-===========================
+.. _matter_template_custom_configs:
+
+Matter template custom configurations
+=====================================
 
 .. include:: ../light_bulb/README.rst
     :start-after: matter_light_bulb_sample_configuration_file_types_start
@@ -113,37 +115,17 @@ Device Firmware Upgrade support
     :start-after: matter_door_lock_sample_build_with_dfu_start
     :end-before: matter_door_lock_sample_build_with_dfu_end
 
-.. matter_template_nrf54l15_build_with_dfu_start
+Alternatively, for the nRF54L15 PDK, the DFU can be configured to only use the internal MRAM for storage.
+This means that both the currently running firmware and the new firmware to be updated will be stored within the device's internal flash memory.
+This configuration is only available for the :ref:`release configuration <matter_template_custom_configs>`.
 
-The Device Firmware Upgrade (DFU) for the nRF54L15 PDK is exclusively available for the ``release`` build configuration and is limited to using the internal MRAM for storage.
-This means that both the currently running firmware and the new firmware to be updated must be stored within the device's internal flash memory.
-Currently, there is no support for utilizing external flash memory for this purpose.
-
-To build the sample with DFU support, use the ``-DCONF_FILE=prj_release.conf`` flag in your CMake build command.
-
-The following is an example command to build the sample with support for OTA DFU only:
+The following is an example command to build the sample on the nRF54L15 PDK with support for Matter OTA DFU and DFU over Bluetooth® SMP, and using internal MRAM only:
 
 .. code-block:: console
 
-    west build -b nrf54l15pdk_nrf54l15_cpuapp -- -DCONF_FILE=prj_release.conf
+    west build -p -b nrf54l15pdk/nrf54l15/cpuapp -- -DFILE_SUFFIX=release -DCONFIG_CHIP_DFU_OVER_BT_SMP=y -DPM_STATIC_YML_FILE=pm_static_nrf54l15pdk_nrf54l15_cpuapp_internal.yml -Dmcuboot_EXTRA_CONF_FILE=<absolute_path_to_the_template_sample>/sysbuild/mcuboot/boards/nrf54l15pdk_nrf54l15_cpuapp_internal.conf -Dmcuboot_EXTRA_DTC_OVERLAY_FILE=<absolute_path_to_the_template_sample>/sysbuild/mcuboot/boards/nrf54l15pdk_nrf54l15_cpuapp_internal.overlay
 
-If you want to build the sample with support for both OTA DFU and SMP DFU, use the following command:
-
-.. code-block:: console
-
-    west build -b nrf54l15pdk_nrf54l15_cpuapp -- -DCONF_FILE=prj_release.conf -DCONFIG_CHIP_DFU_OVER_BT_SMP=y
-
-You can disable DFU support for the ``release`` build configuration to double available application memory space.
-Do this by setting the :kconfig:option:`CONFIG_CHIP_DFU_OVER_BT_SMP` and :kconfig:option:`CONFIG_CHIP_OTA_REQUESTOR` Kconfig options to ``n``, and removing the :file:`pm_static_nrf54l15pdk_nrf54l15_cpuapp_release.yml` file.
-
-For example:
-
-.. code-block:: console
-
-    west build -b nrf54l15pdk_nrf54l15_cpuapp -- -DCONF_FILE=prj_release.conf -DCONFIG_CHIP_DFU_OVER_BT_SMP=n -DCONFIG_CHIP_OTA_REQUESTOR=n
-
-
-.. matter_template_nrf54l15_build_with_dfu_end
+Note that in this case, the size of the application partition is half of what it would be when using a configuration with external flash memory support.
 
 FEM support
 ===========
@@ -160,29 +142,28 @@ Factory data support
 User interface
 **************
 
-.. matter_template_nrf54l15_0_3_0_interface_start
+.. tabs::
 
-.. note::
+   .. group-tab:: nRF52, nRF53 and nRF70 DKs
 
-    The nRF54L15 PDK revision v0.3.0 uses a different numbering system for buttons and LEDs compared to previous boards.
-    All numbers start from 0 instead of 1, as was the case previously.
-    This means that **LED1** in this documentation refers to **LED0** on the nRF54L15 PDK board, **LED2** refers to **LED1**, **Button 1** refers to **Button 0**, and so on.
+      LED 1:
+         .. include:: /includes/matter_sample_state_led.txt
 
-    For the nRF54L15 PDK revision v0.2.1, the numbering of buttons and LEDs is the same as on the nRF52840 DK and nRF5340 DK boards.
+      Button 1:
+         .. include:: /includes/matter_sample_button.txt
 
-.. matter_template_nrf54l15_0_3_0_interface_end
+      .. include:: /includes/matter_segger_usb.txt
 
-.. include:: ../lock/README.rst
-    :start-after: matter_door_lock_sample_led1_start
-    :end-before: matter_door_lock_sample_led1_end
+   .. group-tab:: nRF54 DKs
 
-.. include:: ../lock/README.rst
-    :start-after: matter_door_lock_sample_button1_start
-    :end-before: matter_door_lock_sample_button1_end
+      LED 0:
+         .. include:: /includes/matter_sample_state_led.txt
 
-.. include:: ../lock/README.rst
-    :start-after: matter_door_lock_sample_jlink_start
-    :end-before: matter_door_lock_sample_jlink_end
+      Button 0:
+         .. include:: /includes/matter_sample_button.txt
+
+      .. include:: /includes/matter_segger_usb.txt
+
 
 Building and running
 ********************
@@ -191,17 +172,36 @@ Building and running
 
 .. include:: /includes/build_and_run.txt
 
-Selecting a build type
-======================
+.. matter_template_build_wifi_nrf54h20_start
 
-Before you start testing the application, you can select one of the `Matter template build types`_.
-See :ref:`cmake_options` for information about how to select a build type.
+To use nrf54H20 DK with the ``nrf7002ek`` shield attached (2.4 GHz or 5 GHz), follow the :ref:`ug_nrf7002eb_nrf54h20dk_gs` user guide to connect all required pins and then use the following command to build the sample:
+
+.. matter_template_build_wifi_nrf54h20_end
+
+.. code-block:: console
+
+    west build -b nrf54h20dk/nrf54h20/cpuapp -p -- -DSB_CONFIG_WIFI_NRF700X=y -DCONFIG_CHIP_WIFI=y -Dtemplate_SHIELD=nrf700x_nrf54h20dk
+
+Selecting a configuration
+=========================
+
+Before you start testing the application, you can select one of the :ref:`matter_template_custom_configs`.
+See :ref:`app_build_file_suffixes` and :ref:`cmake_options` for more information how to select a configuration.
 
 Testing
 =======
 
-When you have built the sample and programmed it to your development kit, it automatically starts the Bluetooth LE advertising and the **LED1** starts flashing (Short Flash On).
-At this point, you can press **Button 1** for six seconds to initiate the factory reset of the device.
+.. tabs::
+
+   .. group-tab:: nRF52, nRF53 and nRF70 DKs
+
+      When you have built the sample and programmed it to your development kit, it automatically starts the Bluetooth LE advertising and the **LED 1** starts flashing (Short Flash On).
+      At this point, you can press **Button 1** for six seconds to initiate the factory reset of the device.
+
+   .. group-tab:: nRF54 DKs
+
+      When you have built the sample and programmed it to your development kit, it automatically starts the Bluetooth LE advertising and the **LED 0** starts flashing (Short Flash On).
+      At this point, you can press **Button 0** for six seconds to initiate the factory reset of the device.
 
 .. _matter_template_network_testing:
 
@@ -210,22 +210,45 @@ Testing in a network
 
 To test the sample in a Matter-enabled Thread network, complete the following steps:
 
-.. matter_template_sample_testing_start
+.. tabs::
 
-1. |connect_kit|
-#. |connect_terminal_ANSI|
-#. Commission the device into a Matter network by following the guides linked on the :ref:`ug_matter_configuring` page for the Matter controller you want to use.
-   The guides walk you through the following steps:
+   .. group-tab:: nRF52, nRF53 and nRF70 DKs
 
-   * Only if you are configuring Matter over Thread: Configure the Thread Border Router.
-   * Build and install the Matter controller.
-   * Commission the device.
-     You can use the :ref:`matter_template_network_mode_onboarding` listed earlier on this page.
-   * Send Matter commands.
+      1. |connect_kit|
+      #. |connect_terminal_ANSI|
+      #. Commission the device into a Matter network by following the guides linked on the :ref:`ug_matter_configuring` page for the Matter controller you want to use.
+         The guides walk you through the following steps:
 
-   At the end of this procedure, **LED 1** of the Matter device programmed with the sample starts flashing in the Short Flash Off state.
-   This indicates that the device is fully provisioned, but does not yet have full IPv6 network connectivity.
-#. Keep the **Button 1** pressed for more than six seconds to initiate factory reset of the device.
+         * Only if you are configuring Matter over Thread: Configure the Thread Border Router.
+         * Build and install the Matter controller.
+         * Commission the device.
+           You can use the :ref:`matter_template_network_mode_onboarding` listed earlier on this page.
+         * Send Matter commands.
+
+         At the end of this procedure, **LED 1** of the Matter device programmed with the sample starts flashing in the Short Flash Off state.
+         This indicates that the device is fully provisioned, but does not yet have full IPv6 network connectivity.
+      #. Keep the **Button 1** pressed for more than six seconds to initiate factory reset of the device.
+
+         The device reboots after all its settings are erased.
+
+   .. group-tab:: nRF54 DKs
+
+      1. |connect_kit|
+      #. |connect_terminal_ANSI|
+      #. Commission the device into a Matter network by following the guides linked on the :ref:`ug_matter_configuring` page for the Matter controller you want to use.
+         The guides walk you through the following steps:
+
+         * Only if you are configuring Matter over Thread: Configure the Thread Border Router.
+         * Build and install the Matter controller.
+         * Commission the device.
+           You can use the :ref:`matter_template_network_mode_onboarding` listed earlier on this page.
+         * Send Matter commands.
+
+         At the end of this procedure, **LED 0** of the Matter device programmed with the sample starts flashing in the Short Flash Off state.
+         This indicates that the device is fully provisioned, but does not yet have full IPv6 network connectivity.
+      #. Keep the **Button 0** pressed for more than six seconds to initiate factory reset of the device.
+
+         The device reboots after all its settings are erased.
 
 The device reboots after all its settings are erased.
 

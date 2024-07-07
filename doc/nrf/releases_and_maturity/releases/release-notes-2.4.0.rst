@@ -535,10 +535,10 @@ Matter samples
 Multicore samples
 -----------------
 
-* :ref:`multicore_hello_world` sample:
+* ``multicore_hello_world`` sample:
 
   * Added :ref:`zephyr:sysbuild` support to the sample.
-  * Updated the sample documentation by renaming it as :ref:`multicore_hello_world` from nRF5340: Multicore application and moved it from :ref:`nrf5340_samples` to Multicore samples.
+  * Updated the sample documentation by renaming it as ``multicore_hello_world`` from nRF5340: Multicore application and moved it from :ref:`nrf5340_samples` to Multicore samples.
 
 nRF9160 samples
 ---------------
@@ -818,7 +818,7 @@ Libraries for networking
 
   * Updated:
 
-    * The :c:func:`download_client_connect` function has been refactored to :c:func:`download_client_set_host` and made it non-blocking.
+    * The ``download_client_connect`` function has been refactored to :c:func:`download_client_set_host` and made it non-blocking.
     * The configuration from one security tag to a list of security tags.
     * The library reports error ``ERANGE`` when HTTP range is requested but not supported by server.
 
@@ -943,7 +943,7 @@ Documentation
 * Added:
 
   * A page on :ref:`ug_nrf70_developing_regulatory_support` in the :ref:`ug_nrf70_developing` user guide.
-  * New sample categories :ref:`pmic_samples`, :ref:`debug_samples`, :ref:`multicore_samples`, and :ref:`networking_samples`.
+  * New sample categories :ref:`pmic_samples`, :ref:`debug_samples`, Multicore samples, and :ref:`networking_samples`.
 
 * Updated:
 

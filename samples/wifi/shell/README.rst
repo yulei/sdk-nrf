@@ -37,21 +37,21 @@ Currently, the following configurations are supported:
 * nRF91 Series DK + SPIM
 
 
-To build for the nRF7002 DK, use the ``nrf7002dk/nrf5340/cpuapp`` build target.
+To build for the nRF7002 DK, use the ``nrf7002dk/nrf5340/cpuapp`` board target.
 The following is an example of the CLI command:
 
 .. code-block:: console
 
    west build -b nrf7002dk/nrf5340/cpuapp
 
-To build for the nRF7002 EK with nRF5340 DK, use the ``nrf5340dk/nrf5340/cpuapp`` build target with the ``SHIELD`` CMake option set to ``nrf7002ek``.
+To build for the nRF7002 EK with nRF5340 DK, use the ``nrf5340dk/nrf5340/cpuapp`` board target with the ``SHIELD`` CMake option set to ``nrf7002ek``.
 The following is an example of the CLI command:
 
 .. code-block:: console
 
    west build -b nrf5340dk/nrf5340/cpuapp -- -DSHIELD=nrf7002ek
 
-To build with ``raw_tx`` shell support for the nRF7002 DK, use the ``nrf7002dk/nrf5340/cpuapp`` build target and raw TX overlay configuration.
+To build with ``raw_tx`` shell support for the nRF7002 DK, use the ``nrf7002dk/nrf5340/cpuapp`` board target and raw TX overlay configuration.
 The following is an example of the CLI command:
 
 .. code-block:: console
@@ -62,7 +62,7 @@ The following is an example of the CLI command:
 
    .. group-tab:: nRF9161 DK
 
-      To build for the nRF9161 DK, use the ``nrf9161dk/nrf9161/ns`` build target with the ``SHIELD`` CMake option set to ``nrf7002ek`` and a scan-only overlay configuration.
+      To build for the nRF9161 DK, use the ``nrf9161dk/nrf9161/ns`` board target with the ``SHIELD`` CMake option set to ``nrf7002ek`` and a scan-only overlay configuration.
       The following is an example of the CLI command:
 
       .. code-block:: console
@@ -71,7 +71,7 @@ The following is an example of the CLI command:
 
    .. group-tab:: nRF9160 DK
 
-      To build for the nRF9160 DK, use the ``nrf9160dk/nrf9160/ns`` build target with the ``SHIELD`` CMake option set to ``nrf7002ek`` and a scan-only overlay configuration.
+      To build for the nRF9160 DK, use the ``nrf9160dk/nrf9160/ns`` board target with the ``SHIELD`` CMake option set to ``nrf7002ek`` and a scan-only overlay configuration.
       The following is an example of the CLI command:
 
     .. code-block:: console
@@ -125,6 +125,7 @@ Supported CLI commands
        | [-w, --ieee-80211w]: MFP (optional: needs security type to be specified)
        | : 0:Disable, 1:Optional, 2:Required.
        | [-m, --bssid]: MAC address of the AP (BSSID).
+       | [-t, --timeout]: Duration after which connection attempt needs to fail.
        | [-h, --help]: Print out the help for the connect command.
    * - disconnect
      - Disconnect from the Wi-Fi AP
@@ -214,7 +215,7 @@ Supported CLI commands
        | management, data and enable all filters
        | [-i, --if-index <idx>] : Interface index
        | [-a, --all] : Enable all packet filter modes
-       | [-m, --mgmt] : Enable management packets to allowed up
+       | [-m, --mgmt] : Enable management packets to be allowed up
        | the stack
        | [-c, --ctrl] : Enable control packets to be allowed up
        | the stack
@@ -361,9 +362,9 @@ Testing STA mode
 
    .. code-block:: console
 
-      wifi connect <SSID> <passphrase>
+      wifi connect -s <SSID> -k <key_management> -p <passphrase>
 
-   ``<SSID>`` is the SSID of the network you want to connect to, and ``<passphrase>`` is its passphrase.
+   ``<SSID>`` is the SSID of the network you want to connect to, ``<passphrase>`` is its passphrase, and the ``<key_management>`` is the security type used by the network.
 
 #. Check the connection status after a while, using the following command:
 
@@ -441,9 +442,9 @@ To test the SAP mode, the sample must be built using the configuration overlay :
 
    .. code-block:: console
 
-      wifi ap enable <SSID> <channel> <psk>
+      wifi ap enable -s <SSID> -c <channel> -k <key_management> -p <psk>
 
-   ``<SSID>`` is the SSID of the network you want to connect to, and ``<psk>`` is its passphrase.
+   ``<SSID>`` is the SSID of the network you want to connect to, ``<psk>`` is its passphrase, and the ``<key_management>`` is the security type used by the network.
 
 #. Check the SAP status after a while, using the following command:
 

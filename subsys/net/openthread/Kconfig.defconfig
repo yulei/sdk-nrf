@@ -19,29 +19,18 @@ config OPENTHREAD_LIBRARY_AVAILABLE
 	# Switch:
 	# - To `y` when libraries for the current OpenThread revision are provided
 	# - To `n` on the next OpenThread upmerge
-	default n
+	default y
 	depends on OPENTHREAD_THREAD_VERSION_1_3
 	depends on (OPENTHREAD_NORDIC_LIBRARY_MASTER && SOC_NRF52840) || \
 		    OPENTHREAD_NORDIC_LIBRARY_FTD || OPENTHREAD_NORDIC_LIBRARY_MTD
 	depends on !OPENTHREAD_COPROCESSOR
 	depends on SOC_NRF52840 || SOC_NRF5340_CPUAPP
-	depends on FPU
 
 choice OPENTHREAD_IMPLEMENTATION
 	default OPENTHREAD_LIBRARY if OPENTHREAD_LIBRARY_AVAILABLE
 endchoice
 
 if SOC_NRF54H20_CPUAPP
-
-#To be removed
-config ENTROPY_TEST_PRNG
-	bool
-	default y
-
-#To be removed
-config IPC_SERVICE_BACKEND_RPMSG_SHMEM_RESET
-	bool
-	   default y
 
 #To be removed
 config MBOX
@@ -69,10 +58,12 @@ config NUM_METAIRQ_PRIORITIES
 
 config SYSTEM_WORKQUEUE_STACK_SIZE
 	int
+	default 320 if OPENTHREAD_COPROCESSOR_RCP
 	default 1120
 
 config MAIN_STACK_SIZE
 	int
+	default 1024 if OPENTHREAD_COPROCESSOR_RCP
 	default 2560
 
 config LOG_BUFFER_SIZE
@@ -93,10 +84,12 @@ config NET_IPV6_MLD
 
 config NET_PKT_RX_COUNT
 	int
+	default 4 if OPENTHREAD_COPROCESSOR_RCP
 	default 10
 
 config NET_PKT_TX_COUNT
 	int
+	default 4 if OPENTHREAD_COPROCESSOR_RCP
 	default 16
 
 config OPENTHREAD_MANUAL_START
@@ -104,7 +97,8 @@ config OPENTHREAD_MANUAL_START
 	default y
 
 choice OPENTHREAD_SECURITY
-	default OPENTHREAD_NRF_SECURITY_PSA_CHOICE if SOC_FAMILY_NORDIC_NRF
+	default OPENTHREAD_NRF_SECURITY_PSA_CHOICE if (SOC_FAMILY_NORDIC_NRF && !SOC_NRF54H20_CPUAPP)
+	default OPENTHREAD_NRF_SECURITY_CHOICE if SOC_NRF54H20_CPUAPP
 endchoice
 
 config MBEDTLS_SSL_PROTO_DTLS
@@ -259,6 +253,34 @@ config OPENTHREAD_CSL_RECEIVER_LOCAL_TIME_SYNC
 endif # OPENTHREAD_CSL_RECEIVER
 
 endif # !OPENTHREAD_THREAD_VERSION_1_1
+
+if OPENTHREAD_COPROCESSOR_RCP
+
+config MBEDTLS_PSA_KEY_SLOT_COUNT
+	int
+	default 1
+
+config ISR_STACK_SIZE
+	int
+	default 640
+
+config IDLE_STACK_SIZE
+	int
+	default 128
+
+config MPSL_WORK_STACK_SIZE
+	int
+	default 512
+
+config NET_RX_STACK_SIZE
+	int
+	default 300
+
+config NET_TX_STACK_SIZE
+	int
+	default 300
+
+endif # OPENTHREAD_COPROCESSOR_RCP
 
 config OPENTHREAD_TCP_ENABLE
 	select EXPERIMENTAL

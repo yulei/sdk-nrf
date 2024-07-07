@@ -20,7 +20,7 @@ project("Machine learning"
 # NORDIC SDK APP START
 target_sources(app PRIVATE
   src/main.c
-  )
+)
 # NORDIC SDK APP END
 
 # Include application events and configuration headers
@@ -35,10 +35,11 @@ zephyr_include_directories(
 )
 
 # Application sources
+add_subdirectory(common/src/modules)
 add_subdirectory(src/events)
 add_subdirectory(src/modules)
 add_subdirectory(src/util)
 
-if(CONFIG_BT_HCI_IPC)
+if(CONFIG_BT_HCI_IPC AND NOT SYSBUILD)
   assert_exists(hci_ipc_CONF_FILE)
 endif()

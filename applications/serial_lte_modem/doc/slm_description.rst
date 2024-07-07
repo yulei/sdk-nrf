@@ -117,7 +117,7 @@ CONFIG_SLM_POWER_PIN - Interface GPIO pin to power off the SiP and exit from sle
      * **P0.6** (Button 1 on the nRF9160 DK) is used when UART_0 is used.
      * **P0.31** is used when UART_1 is used.
 
-   * On Thingy:91, **P0.26** (Multi-function button on Thingy:91) is used.
+   * On Thingy:91 and Thingy:91 X, **P0.26** (Multi-function button) is used.
 
    .. note::
       This pin is configured with a pull up, so it is active low.
@@ -139,7 +139,7 @@ CONFIG_SLM_INDICATE_PIN - Interface GPIO pin to indicate data available or unsol
      * **P0.2** (LED 1 on the nRF9160 DK) is used when UART_0 is selected.
      * **P0.30** is used when UART_2 is selected.
 
-   * It is not defined when the target is Thingy:91.
+   * It is not defined when the targets are Thingy:91 and Thingy:91 X.
 
    .. note::
       This pin is configured to be active low, so it will be high when inactive.
@@ -288,7 +288,7 @@ You can find the configuration files in the :file:`applications/serial_lte_modem
 
 In general, they have an ``overlay-`` prefix, and a :file:`.conf` or :file:`.overlay` extension for Kconfig or devicetree overlays, respectively.
 Board-specific configuration files are named :file:`<BOARD>` with a :file:`.conf` or :file:`.overlay` extension and are located in the :file:`boards` directory.
-When the name of the board-specific configuration file matches the build target, the overlay is automatically included by the build system.
+When the name of the board-specific configuration file matches the board target, the overlay is automatically included by the build system.
 
 See :ref:`app_build_system`: for more information on the |NCS| configuration system.
 
@@ -330,13 +330,16 @@ The following configuration files are provided:
   See :ref:`slm_as_zephyr_modem` for more information.
 
 * :file:`boards/nrf9160dk_nrf9160_ns.conf` - Configuration file specific for the nRF9160 DK.
-  This file is automatically merged with the :file:`prj.conf` file when you build for the ``nrf9160dk/nrf9160/ns`` build target.
+  This file is automatically merged with the :file:`prj.conf` file when you build for the ``nrf9160dk/nrf9160/ns`` board target.
 
 * :file:`boards/nrf9161dk_nrf9161_ns.conf` - Configuration file specific for the nRF9161 DK.
-  This file is automatically merged with the :file:`prj.conf` file when you build for the ``nrf9161dk/nrf9161/ns`` build target.
+  This file is automatically merged with the :file:`prj.conf` file when you build for the ``nrf9161dk/nrf9161/ns`` board target.
 
 * :file:`boards/thingy91_nrf9160_ns.conf` - Configuration file specific for Thingy:91.
-  This file is automatically merged with the :file:`prj.conf` file when you build for the ``thingy91/nrf9160/ns`` build target.
+  This file is automatically merged with the :file:`prj.conf` file when you build for the ``thingy91/nrf9160/ns`` board target.
+
+* :file:`boards/thingy91x_nrf9151_ns.conf` - Configuration file specific for Thingy:91 X.
+  This file is automatically merged with the :file:`prj.conf` file when you build for the ``thingy91x/nrf9151/ns`` board target.
 
 .. _slm_native_tls:
 
@@ -421,7 +424,7 @@ Connecting with an external MCU
 
 .. note::
 
-   This section does not apply to Thingy:91 as it does not have UART2.
+   This section does not apply to Thingy:91 or Thingy:91 X.
 
 If you run your user application on an external MCU (for example, an nRF52 Series development kit), you can control the modem on an nRF91 Series device directly from the application.
 See the :ref:`slm_shell_sample` for a sample implementation of such an application.

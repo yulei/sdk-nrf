@@ -424,7 +424,9 @@ static void get_location_callback(int16_t result_code,
 		struct nrf_cloud_location_result *result = user;
 
 		loc_err = 0;
-		result->type = LOCATION_TYPE__INVALID;
+		if (result) {
+			result->type = LOCATION_TYPE__INVALID;
+		}
 	}
 }
 
@@ -440,16 +442,12 @@ int nrf_cloud_coap_location_get(struct nrf_cloud_rest_location_request const *co
 	static uint8_t buffer[LOCATION_GET_CBOR_MAX_SIZE];
 	size_t len = sizeof(buffer);
 	int err;
-	const struct nrf_cloud_location_config *conf = IS_ENABLED(CONFIG_NRF_CLOUD_COAP_GF_CONF) ?
-						       request->config : NULL;
+	const struct nrf_cloud_location_config *conf = request->config;
 	size_t url_size = nrf_cloud_ground_fix_url_encode(NULL, 0, COAP_GND_FIX_RSC, conf);
 
 	__ASSERT_NO_MSG(url_size > 0);
 	char url[url_size + 1];
 
-	if (!IS_ENABLED(CONFIG_NRF_CLOUD_COAP_GF_CONF) && (request->config != NULL)) {
-		LOG_WRN("Use of location configuration parameters not enabled; ignored.");
-	}
 	(void)nrf_cloud_ground_fix_url_encode(url, url_size, COAP_GND_FIX_RSC, conf);
 
 	err = coap_codec_ground_fix_req_encode(request->cell_info,
@@ -585,6 +583,7 @@ static void get_shadow_callback(int16_t result_code,
 				size_t offset, const uint8_t *payload, size_t len,
 				bool last_block, void *user)
 {
+	__ASSERT_NO_MSG(user != NULL);
 	struct get_shadow_data *data = (struct get_shadow_data *)user;
 
 	if (result_code != COAP_RESPONSE_CODE_CONTENT) {
@@ -604,23 +603,31 @@ static void get_shadow_callback(int16_t result_code,
 			memcpy(data->buf, payload, cpy_len);
 		}
 		data->buf[cpy_len] = '\0';
+		data->buf_len = cpy_len;
 	}
 }
 
-int nrf_cloud_coap_shadow_get(char *buf, size_t buf_len, bool delta)
+int nrf_cloud_coap_shadow_get(char *buf, size_t *buf_len, bool delta,
+			      enum coap_content_format format)
 {
 	__ASSERT_NO_MSG(buf != NULL);
-	__ASSERT_NO_MSG(buf_len != 0);
+	__ASSERT_NO_MSG(*buf_len != 0);
 	if (!nrf_cloud_coap_is_connected()) {
 		return -EACCES;
 	}
 
+	if ((format != COAP_CONTENT_FORMAT_APP_JSON) &&
+	    (format != COAP_CONTENT_FORMAT_APP_CBOR) &&
+	    (format != COAP_CONTENT_FORMAT_APP_OCTET_STREAM)) {
+		return -EINVAL;
+	}
+
 	get_shadow_data.buf = buf;
-	get_shadow_data.buf_len = buf_len;
+	get_shadow_data.buf_len = *buf_len;
 	int err;
 
 	err = nrf_cloud_coap_get(COAP_SHDW_RSC, delta ? NULL : "delta=false", NULL, 0,
-				  0, COAP_CONTENT_FORMAT_APP_JSON, true, get_shadow_callback,
+				  0, format, true, get_shadow_callback,
 				  &get_shadow_data);
 	if (err) {
 		LOG_ERR("Failed to send get request: %d", err);
@@ -628,6 +635,8 @@ int nrf_cloud_coap_shadow_get(char *buf, size_t buf_len, bool delta)
 		LOG_RESULT_CODE_ERR("Unexpected result code:", shadow_err);
 		err = shadow_err;
 	}
+
+	*buf_len = get_shadow_data.buf_len;
 	return err;
 }
 

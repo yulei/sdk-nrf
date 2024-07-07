@@ -229,8 +229,6 @@ To enable key derivation function (KDF) support, set one or more of the Kconfig 
 | TLS 1.2 EC J-PAKE to PMS | :kconfig:option:`CONFIG_PSA_WANT_ALG_TLS12_ECJPAKE_TO_PMS`    |
 +--------------------------+---------------------------------------------------------------+
 
-.. note::
-   PBKDF2 algorithms are not supported with TF-M.
 
 Key derivation function support
 ===============================
@@ -631,7 +629,7 @@ The PSA drivers using the Arm CryptoCell peripheral is enabled by default for nR
 For devices without a hardware-accelerated cryptographic engine, entropy is provided by the nRF RNG peripheral. PRNG support is provided by the Oberon PSA driver, which is implemented using software.
 
 .. note::
-   * When using CryptoCell only 1024 bytes can be requested at a time.
+   When using CryptoCell, only 1024 bytes can be requested at a time.
 
 Hash configurations
 *******************

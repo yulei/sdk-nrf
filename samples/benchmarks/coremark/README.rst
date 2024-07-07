@@ -35,23 +35,35 @@ User interface
 
 Each target CPU has an assigned button responsible for starting the benchmark and LED that indicates the ``test in progress`` state:
 
-Button 1:
-   Start the benchmark run on the application core.
+.. tabs::
 
-Button 2:
-   Start the benchmark run on the network or radio core.
+   .. group-tab:: nRF52 and nRF53 DKs
 
-Button 3:
-   Start the benchmark run on the PPR core.
+      Button 1:
+         Start the benchmark run on the application core.
 
-LED 1:
-   Indicates ``test in progress`` on the application core.
+      Button 2:
+         Start the benchmark run on the network or radio core.
 
-LED 2:
-   Indicates ``test in progress`` on the network or radio core.
+      LED 1:
+         Indicates ``test in progress`` on the application core.
 
-LED 3:
-   Indicates ``test in progress`` on the PPR core.
+      LED 2:
+         Indicates ``test in progress`` on the network or radio core.
+
+   .. group-tab:: nRF54 DKs
+
+      Button 0:
+         Start the benchmark run on the application core.
+
+      Button 1:
+         Start the benchmark run on the network or radio core.
+
+      LED 0:
+         Indicates ``test in progress`` on the application core.
+
+      LED 1:
+         Indicates ``test in progress`` on the network or radio core.
 
 .. _coremark_configuration:
 
@@ -116,12 +128,31 @@ Check and configure the following Kconfig options:
 CONFIG_APP_MODE_FLASH_AND_RUN - Start CoreMark sample automatically after flashing
    If enabled, CoreMark starts execution immediately after the CPU starts up.
    It also disables LEDs and buttons.
-   Otherwise, it will wait for the button to be pressed.
+   Otherwise, it will wait for the button press.
+
+.. note::
+   The :kconfig:option:`CONFIG_APP_MODE_FLASH_AND_RUN` Kconfig option is always enabled for the PPR core.
+   This core does not use buttons.
 
 .. _SB_CONFIG_APP_CPUNET_RUN:
 
-SB_CONFIG_APP_CPUNET_RUN - Enable execution for the network core
-   Enable the benchmark execution also for the network core for targets with the nRF53 Series SoCs.
+SB_CONFIG_APP_CPUNET_RUN - Enable execution for the network core or the radio core
+   Enable the benchmark execution for the network core for targets with the nRF53 Series SoCs, and for the radio core on targets with the nRF54H20 SoCs.
+
+.. _SB_CONFIG_APP_CPUPPR_RUN:
+
+SB_CONFIG_APP_CPUPPR_RUN - Enable execution for the PPR core
+   Enable the benchmark execution also for the PPR core for targets with the nRF54H20 SoCs.
+
+.. note::
+   PPR code is run from RAM.
+   You must use the ``nordic-ppr`` snippet for the application core to be able to boot the PPR core.
+   Use the build argument ``coremark_SNIPPET=nordic-ppr``.
+   To build the sample with the execution for the PPR core enabled, run the following command:
+
+   .. code-block:: console
+
+      west build -b nrf54h20dk/nrf54h20/cpuapp -- -DSB_CONFIG_APP_CPUNET_RUN=n -DSB_CONFIG_APP_CPUPPR_RUN=y -Dcoremark_SNIPPET=nordic-ppr
 
 Building and running
 ********************
@@ -130,9 +161,11 @@ When running the benchmark, an extra build flag (:kconfig:option:`CONFIG_COMPILE
 
 .. |sample path| replace:: :file:`samples/benchmarks/coremark`
 
-.. include:: /includes/build_and_run_sb.txt
+.. include:: /includes/build_and_run.txt
 
 After flashing, messages describing the benchmark state will appear in the console.
+
+.. include:: /includes/nRF54H20_erase_UICR.txt
 
 Testing
 =======

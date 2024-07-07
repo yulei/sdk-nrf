@@ -23,6 +23,18 @@ extern "C" {
 #include <net/nrf_cloud_pgps.h>
 #endif
 #include <net/nrf_cloud_codec.h>
+#if defined(CONFIG_NRF_CLOUD_COAP)
+#include <zephyr/net/coap.h>
+#include <zephyr/net/coap_client.h>
+#else
+/* Work around missing Kconfigs upstream in coap_client.h */
+#define coap_client_response_cb_t void *
+enum coap_content_format {
+	dummy
+};
+struct coap_client {};
+struct coap_client_option {};
+#endif
 
 /**
  * @defgroup nrf_cloud_coap nRF CoAP API
@@ -59,6 +71,7 @@ int nrf_cloud_coap_init(void);
  *           Negative values are device-side errors defined in errno.h.
  *           Positive values are cloud-side errors (CoAP result codes)
  *           defined in zephyr/net/coap.h.
+ * @retval -EACCES if @ref nrf_cloud_coap_init has not been called.
  */
 int nrf_cloud_coap_connect(const char * const app_ver);
 
@@ -92,6 +105,15 @@ int nrf_cloud_coap_pause(void);
  * @retval 0 If successful.
  */
 int nrf_cloud_coap_resume(void);
+
+/**@brief Check if you can pause and resume safely.
+ *
+ * Check if the device can avoid performing a full handshake after a temporary network outage ends.
+ *
+ * @retval false if SO_KEEPOPEN is not supported.
+ * @retval true if it is supported.
+ */
+bool nrf_cloud_coap_keepopen_is_supported(void);
 
 /**
  * @brief Disconnect the nRF Cloud CoAP connection.
@@ -285,16 +307,20 @@ int nrf_cloud_coap_fota_job_update(const char *const job_id,
  * in buf will be 0.
  *
  * @param[in,out] buf     Pointer to memory in which to receive the delta.
- * @param[in]     buf_len Size of buffer.
+ * @param[in,out] buf_len Size of buffer, will be set to the incoming length.
  * @param[in]     delta   True to request only changes in the shadow, if any; otherwise,
  *                        all of desired part.
+ * @param[in]     format  Content format of the returned data. Supported values are
+ *			  COAP_CONTENT_FORMAT_APP_OCTET_STREAM, COAP_CONTENT_FORMAT_APP_JSON,
+ *			  and COAP_CONTENT_FORMAT_APP_CBOR.
  *
  * @return 0 If successful, nonzero if failed.
  *           Negative values are device-side errors defined in errno.h.
  *           Positive values are cloud-side errors (CoAP result codes)
  *           defined in zephyr/net/coap.h.
  */
-int nrf_cloud_coap_shadow_get(char *buf, size_t buf_len, bool delta);
+int nrf_cloud_coap_shadow_get(char *buf, size_t *buf_len, bool delta,
+			      enum coap_content_format format);
 
 /**
  * @brief Update the device's "reported state" in the shadow through the state/update CoAP resource.
